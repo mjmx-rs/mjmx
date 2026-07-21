@@ -123,6 +123,7 @@ dependencies = [
  "mrml-allocator",
  "mrml-codegen",
  "mrml-diagnostics",
+ "mrml-html-compare",
  "mrml-linter",
  "mrml-parser",
 ]
@@ -170,6 +171,10 @@ version = "0.1.0"
 dependencies = [
  "mrml-span",
 ]
+
+[[package]]
+name = "mrml-html-compare"
+version = "0.1.0"
 
 [[package]]
 name = "mrml-index"

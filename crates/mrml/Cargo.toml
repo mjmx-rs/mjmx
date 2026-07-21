@@ -15,5 +15,8 @@ mrml-codegen.workspace = true
 mrml-linter.workspace = true
 mrml-diagnostics.workspace = true
 
+[dev-dependencies]
+mrml-html-compare.workspace = true
+
 [lints]
 workspace = true

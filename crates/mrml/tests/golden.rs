@@ -1,6 +1,7 @@
 //! End-to-end golden tests: each `fixtures/<name>.mjml` must render to
-//! `fixtures/<name>.html` (the vendored mjml 4.18.0 reference) under
-//! whitespace-normalized comparison.
+//! `fixtures/<name>.html` (the vendored mjml 4.18.0 reference), compared
+//! semantically via the [`mrml_html_compare`] crate (structure/attribute/CSS
+//! aware, tolerant of insignificant layout differences).
 
 /// Absolute path to a fixture file under `fixtures/`.
 macro_rules! fixture {
@@ -13,71 +14,15 @@ macro_rules! fixture {
     };
 }
 
-/// Normalize HTML for semantic comparison.
-///
-/// This is deliberately tolerant of pure indentation / newline differences but
-/// strict on everything else (tags, attributes, text, CSS tokens): a whitespace run
-/// that sits directly between a `>` and a `<` is *insignificant* inter-tag layout and
-/// is dropped; every other whitespace run collapses to a single space. Text content,
-/// attribute values, CSS tokens and their separators are all preserved, so a wrong
-/// tag, attribute, or text still fails the comparison.
-fn normalize(html: &str) -> String {
-    let chars: Vec<char> = html.chars().collect();
-    let mut out = String::with_capacity(html.len());
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i].is_whitespace() {
-            while i < chars.len() && chars[i].is_whitespace() {
-                i += 1;
-            }
-            let prev = out.chars().last();
-            let next = chars.get(i).copied();
-            // Drop whitespace that is purely between two tags (`>` ... `<`); every
-            // other run collapses to a single space.
-            if prev == Some('>') && next == Some('<') {
-                // insignificant inter-tag whitespace — drop it
-            } else {
-                out.push(' ');
-            }
-        } else {
-            out.push(chars[i]);
-            i += 1;
-        }
-    }
-    out.trim().to_string()
-}
-
-/// Render `mjml` and assert it matches `golden` under [`normalize`], surfacing the
-/// first divergence to make failures debuggable.
+/// Render `mjml` and assert it is semantically equivalent to `golden`, surfacing
+/// the first divergence (with a tag-path breadcrumb) to make failures debuggable.
 fn assert_golden(name: &str, mjml: &str, golden: &str) {
     let rendered =
         mrml::render_default(mjml).unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
 
-    let got = normalize(&rendered);
-    let want = normalize(golden);
-
-    if got != want {
-        let first_diff = got
-            .char_indices()
-            .zip(want.char_indices())
-            .find(|((_, a), (_, b))| a != b)
-            .map(|((gi, _), _)| gi)
-            .unwrap_or(got.len().min(want.len()));
-        let ctx_start = first_diff.saturating_sub(80);
-        panic!(
-            "{name}: rendered HTML does not match golden reference.\n\
-             first divergence near byte {first_diff}:\n\
-             GOT : ...{}\n\
-             WANT: ...{}\n",
-            &got[ctx_start..(first_diff + 120).min(got.len())],
-            &want[ctx_start..(first_diff + 120).min(want.len())],
-        );
+    if let Err(mismatch) = mrml_html_compare::compare(golden, &rendered) {
+        panic!("{name}: rendered HTML does not match golden reference.\n{mismatch}");
     }
-
-    assert_eq!(
-        got, want,
-        "{name}: normalized HTML must match the mjml reference"
-    );
 }
 
 #[test]
@@ -385,22 +330,26 @@ fn accordion_attrs_matches_mjml_reference() {
 }
 
 #[test]
-fn normalize_is_strict_about_content() {
-    // The comparator must NOT be so tolerant that wrong content passes.
-    assert_ne!(
-        normalize("<div>Hello world</div>"),
-        normalize("<div>Goodbye world</div>"),
-        "text differences must be detected"
+fn comparator_rejects_tampered_golden() {
+    // The real golden must compare equal to itself (sanity), but the comparator
+    // must NOT be so tolerant that a tampered golden slips through: flipping a
+    // single style declaration on a real reference must be detected.
+    let golden = fixture!("slice.html");
+    assert!(
+        mrml_html_compare::compare(golden, golden).is_ok(),
+        "an untouched golden must compare equal to itself"
     );
-    assert_ne!(
-        normalize("<td style=\"padding:10px 25px;\">x</td>"),
-        normalize("<td style=\"padding:20px 25px;\">x</td>"),
-        "attribute differences must be detected"
+
+    let tampered = golden.replace("padding:10px 25px;", "padding:20px 25px;");
+    assert_ne!(golden, tampered, "tamper string must exist in the golden");
+    assert!(
+        mrml_html_compare::compare(golden, &tampered).is_err(),
+        "a wrong style declaration in the golden must be detected"
     );
-    // ...but tolerant of indentation / newlines.
-    assert_eq!(
-        normalize("<a>\n  <b>x</b>\n</a>"),
-        normalize("<a><b>x</b></a>"),
+
+    // ...yet the comparator stays tolerant of pure inter-tag whitespace.
+    assert!(
+        mrml_html_compare::compare("<a>\n  <b>x</b>\n</a>", "<a><b>x</b></a>").is_ok(),
         "pure inter-tag whitespace must be ignored"
     );
 }
