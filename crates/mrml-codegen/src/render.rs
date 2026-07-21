@@ -13,8 +13,8 @@ use mrml_syntax::MjmlTag;
 
 use crate::components::social_element::SocialInherited;
 use crate::components::{
-    Body, Button, Column, Divider, Group, Image, Navbar, NavbarLink, Raw, Section, Social,
-    SocialElement, Spacer, Table, Text, Wrapper,
+    Accordion, Body, Button, Carousel, Column, Divider, Group, Hero, Image, Navbar, NavbarLink,
+    Raw, Section, Social, SocialElement, Spacer, Table, Text, Wrapper,
 };
 use crate::context::RenderContext;
 
@@ -60,6 +60,9 @@ pub fn render_element<'a>(
         }
         MjmlTag::MjNavbar => Navbar::new(element).render(ctx, buf),
         MjmlTag::MjNavbarLink => NavbarLink::new(element, None).render(ctx, buf),
+        MjmlTag::MjHero => Hero::new(element).render(ctx, buf),
+        MjmlTag::MjCarousel => Carousel::new(element).render(ctx, buf),
+        MjmlTag::MjAccordion => Accordion::new(element).render(ctx, buf),
         _ => Err(unsupported(element)),
     }
 }
@@ -72,6 +75,6 @@ pub(crate) fn unsupported(element: &Element<'_>) -> Diagnostic {
     ))
     .with_label(element.span(), "unsupported component in this build")
     .with_help(
-        "this build renders mj-body, mj-wrapper, mj-section, mj-group, mj-column, mj-text, mj-image, mj-divider, mj-spacer, mj-button, mj-raw, mj-table, mj-social, mj-social-element, mj-navbar and mj-navbar-link",
+        "this build renders mj-body, mj-wrapper, mj-section, mj-group, mj-column, mj-text, mj-image, mj-divider, mj-spacer, mj-button, mj-raw, mj-table, mj-social, mj-social-element, mj-navbar, mj-navbar-link, mj-hero, mj-carousel and mj-accordion (with their child elements)",
     )
 }

@@ -73,6 +73,7 @@ pub struct RenderContext<'a> {
     media_queries: Vec<MediaQuery>,
     styles: Vec<String>,
     hamburger_seq: u32,
+    carousel_seq: u32,
 }
 
 impl<'a> RenderContext<'a> {
@@ -92,6 +93,7 @@ impl<'a> RenderContext<'a> {
             media_queries: Vec::new(),
             styles: Vec::new(),
             hamburger_seq: 0,
+            carousel_seq: 0,
         }
     }
 
@@ -104,6 +106,17 @@ impl<'a> RenderContext<'a> {
     pub fn next_hamburger_id(&mut self) -> String {
         let id = format!("{:016x}", self.hamburger_seq);
         self.hamburger_seq += 1;
+        id
+    }
+
+    /// Mint a deterministic 16-hex id for an `<mj-carousel>` radio group. mjml uses a
+    /// per-carousel random token (`genRandomHexString(16)`) woven through both the head
+    /// stylesheet and the radio/label markup; that value is non-reproducible, so we emit
+    /// a stable counter-derived id instead. The vendored carousel golden has its random
+    /// token pinned to the first value produced here.
+    pub fn next_carousel_id(&mut self) -> String {
+        let id = format!("{:016x}", self.carousel_seq);
+        self.carousel_seq += 1;
         id
     }
 

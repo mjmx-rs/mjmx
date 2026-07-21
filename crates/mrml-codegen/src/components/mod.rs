@@ -6,11 +6,14 @@
 //! actual mjml 4.18.0 defaults; they are marked with `// mjml default:` comments so
 //! they read as component defaults rather than fixture-specific magic.
 
+mod accordion;
 mod body;
 mod button;
+mod carousel;
 mod column;
 mod divider;
 mod group;
+mod hero;
 mod image;
 mod navbar;
 mod navbar_link;
@@ -23,11 +26,14 @@ mod table;
 mod text;
 mod wrapper;
 
+pub use accordion::Accordion;
 pub use body::Body;
 pub use button::Button;
+pub use carousel::Carousel;
 pub use column::Column;
 pub use divider::Divider;
 pub use group::Group;
+pub use hero::Hero;
 pub use image::Image;
 pub use navbar::Navbar;
 pub use navbar_link::NavbarLink;

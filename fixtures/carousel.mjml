@@ -1,0 +1,13 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-carousel>
+          <mj-carousel-image src="https://picsum.photos/300/200?a" />
+          <mj-carousel-image src="https://picsum.photos/300/200?b" />
+          <mj-carousel-image src="https://picsum.photos/300/200?c" />
+        </mj-carousel>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

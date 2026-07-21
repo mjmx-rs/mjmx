@@ -233,6 +233,32 @@ fn navbar_hamburger_matches_mjml_reference() {
 }
 
 #[test]
+fn hero_matches_mjml_reference() {
+    assert_golden("hero", fixture!("hero.mjml"), fixture!("hero.html"));
+}
+
+#[test]
+fn carousel_matches_mjml_reference() {
+    // mjml stamps the carousel radio group with a per-carousel random 16-hex token
+    // (`genRandomHexString(16)`); the vendored golden's token is pinned to the
+    // deterministic value our renderer emits (see RenderContext::next_carousel_id).
+    assert_golden(
+        "carousel",
+        fixture!("carousel.mjml"),
+        fixture!("carousel.html"),
+    );
+}
+
+#[test]
+fn accordion_matches_mjml_reference() {
+    assert_golden(
+        "accordion",
+        fixture!("accordion.mjml"),
+        fixture!("accordion.html"),
+    );
+}
+
+#[test]
 fn normalize_is_strict_about_content() {
     // The comparator must NOT be so tolerant that wrong content passes.
     assert_ne!(

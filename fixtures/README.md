@@ -40,6 +40,9 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `social_vertical` | `<mj-social mode="vertical">`: the same two elements stacked as rows in one `margin:0px` table. |
 | `navbar` | `<mj-navbar>` with two `<mj-navbar-link>`s (no hamburger): `mj-inline-links` div + merged mso ghost table; still registers the `.mj-menu-*` head stylesheet. |
 | `navbar_hamburger` | `<mj-navbar hamburger="hamburger">`: adds the CSS-checkbox mobile-menu toggle (input/label/trigger) plus the `.mj-menu-*` head stylesheet. |
+| `hero` | `<mj-hero mode="fixed-height">` at body level: centered container + the `<v:image>`/mso ghost background, the `background` shorthand cell, and a nested `mj-hero-content` table holding an `mj-text` and `mj-button`. |
+| `carousel` | `<mj-carousel>` with three `<mj-carousel-image>`s: the radio-button markup (hidden inputs, thumbnails, prev/next controls, per-slide divs), the mso first-image fallback, and the large `.mj-carousel-*` `:checked` head stylesheet. |
+| `accordion` | `<mj-accordion>` with two `<mj-accordion-element>`s (title + text each): the `<label>`/checkbox collapsible markup, the `+`/`-` icon cells, and the static `.mj-accordion*` head stylesheet. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.
@@ -50,3 +53,11 @@ vendored golden's id is pinned to `0000000000000000` — the deterministic value
 renderer emits (`RenderContext::next_hamburger_id`); every other byte is mjml's own
 output. The id is a purely internal anchor (`<input id>` must equal `<label for>`), so
 pinning it changes nothing observable.
+
+**Note on `carousel`:** mjml stamps each `<mj-carousel>` with a per-carousel *random*
+16-hex-digit token (`genRandomHexString(16)`) woven through both the radio/label markup
+and the `.mj-carousel-*` head stylesheet. The vendored golden's token is pinned to
+`0000000000000000` — the deterministic value our renderer emits
+(`RenderContext::next_carousel_id`); every other byte is mjml's own output. The token is
+a purely internal anchor (radio `id`/`name` must agree with the `<label for>` and the
+stylesheet selectors), so pinning it changes nothing observable.

@@ -1,0 +1,8 @@
+<mjml>
+  <mj-body>
+    <mj-hero mode="fixed-height" height="200px" background-color="#2a3448" background-url="https://picsum.photos/600/200" background-width="600px" background-height="200px" padding="20px 0">
+      <mj-text>Hello Hero</mj-text>
+      <mj-button href="https://example.com">Click me</mj-button>
+    </mj-hero>
+  </mj-body>
+</mjml>
