@@ -117,110 +117,110 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
-name = "mrml"
+name = "mjmx"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-codegen",
- "mrml-diagnostics",
- "mrml-html-compare",
- "mrml-linter",
- "mrml-parser",
+ "mjmx-allocator",
+ "mjmx-codegen",
+ "mjmx-diagnostics",
+ "mjmx-html-compare",
+ "mjmx-linter",
+ "mjmx-parser",
 ]
 
 [[package]]
-name = "mrml-allocator"
+name = "mjmx-allocator"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
 ]
 
 [[package]]
-name = "mrml-ast"
+name = "mjmx-ast"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-span",
- "mrml-syntax",
+ "mjmx-allocator",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]
-name = "mrml-cli"
+name = "mjmx-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "mrml",
+ "mjmx",
 ]
 
 [[package]]
-name = "mrml-codegen"
+name = "mjmx-codegen"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-ast",
- "mrml-diagnostics",
- "mrml-parser",
- "mrml-semantic",
- "mrml-span",
- "mrml-syntax",
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-diagnostics",
+ "mjmx-parser",
+ "mjmx-semantic",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]
-name = "mrml-diagnostics"
+name = "mjmx-diagnostics"
 version = "0.1.0"
 dependencies = [
- "mrml-span",
+ "mjmx-span",
 ]
 
 [[package]]
-name = "mrml-html-compare"
+name = "mjmx-html-compare"
 version = "0.1.0"
 
 [[package]]
-name = "mrml-index"
+name = "mjmx-index"
 version = "0.1.0"
 
 [[package]]
-name = "mrml-linter"
+name = "mjmx-linter"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-ast",
- "mrml-diagnostics",
- "mrml-parser",
- "mrml-span",
- "mrml-syntax",
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-diagnostics",
+ "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]
-name = "mrml-parser"
+name = "mjmx-parser"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-ast",
- "mrml-diagnostics",
- "mrml-span",
- "mrml-syntax",
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-diagnostics",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]
-name = "mrml-semantic"
+name = "mjmx-semantic"
 version = "0.1.0"
 dependencies = [
- "mrml-allocator",
- "mrml-ast",
- "mrml-diagnostics",
- "mrml-parser",
- "mrml-span",
- "mrml-syntax",
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-diagnostics",
+ "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]
-name = "mrml-span"
+name = "mjmx-span"
 version = "0.1.0"
 
 [[package]]
-name = "mrml-syntax"
+name = "mjmx-syntax"
 version = "0.1.0"
 
 [[package]]

@@ -1,0 +1,17 @@
+[package]
+name = "mjmx-ast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Arena-allocated, spanned AST node model and oxc-style builder for mjmx."
+
+[dependencies]
+mjmx-allocator.workspace = true
+mjmx-span.workspace = true
+mjmx-syntax.workspace = true
+
+[lints]
+workspace = true

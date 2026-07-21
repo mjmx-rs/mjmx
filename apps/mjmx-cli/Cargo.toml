@@ -1,0 +1,20 @@
+[package]
+name = "mjmx-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Command-line interface for the mjmx MJML-to-HTML compiler."
+
+[[bin]]
+name = "mjmx"
+path = "src/main.rs"
+
+[dependencies]
+mjmx.workspace = true
+clap.workspace = true
+
+[lints]
+workspace = true

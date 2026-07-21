@@ -1,0 +1,22 @@
+[package]
+name = "mjmx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "MJML-to-HTML compiler toolchain: parse and render MJML into responsive HTML."
+
+[dependencies]
+mjmx-allocator.workspace = true
+mjmx-parser.workspace = true
+mjmx-codegen.workspace = true
+mjmx-linter.workspace = true
+mjmx-diagnostics.workspace = true
+
+[dev-dependencies]
+mjmx-html-compare.workspace = true
+
+[lints]
+workspace = true

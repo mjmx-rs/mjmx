@@ -59,7 +59,7 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `group_attrs` | `<mj-group>` with `background-color` (div + ghost `bgcolor`), `vertical-align` (div + section ghost cell), `direction`. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
-vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.
+vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs`.
 
 **Note on `navbar_hamburger`:** mjml stamps the checkbox/label pair with a per-navbar
 *random* 16-hex-digit id (`genRandomHexString(16)`), which is non-reproducible. The

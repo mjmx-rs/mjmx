@@ -7,22 +7,22 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
-repository = "https://github.com/ryeasin03/mrml"
+repository = "https://github.com/ryeasin03/mjmx"
 authors = ["ryeasin03 <ryeasin03@gmail.com>"]
 
 [workspace.dependencies]
-mrml-allocator = { version = "0.1.0", path = "crates/mrml-allocator" }
-mrml-span = { version = "0.1.0", path = "crates/mrml-span" }
-mrml-diagnostics = { version = "0.1.0", path = "crates/mrml-diagnostics" }
-mrml-syntax = { version = "0.1.0", path = "crates/mrml-syntax" }
-mrml-index = { version = "0.1.0", path = "crates/mrml-index" }
-mrml-ast = { version = "0.1.0", path = "crates/mrml-ast" }
-mrml-parser = { version = "0.1.0", path = "crates/mrml-parser" }
-mrml-semantic = { version = "0.1.0", path = "crates/mrml-semantic" }
-mrml-codegen = { version = "0.1.0", path = "crates/mrml-codegen" }
-mrml-linter = { version = "0.1.0", path = "crates/mrml-linter" }
-mrml-html-compare = { version = "0.1.0", path = "crates/mrml-html-compare" }
-mrml = { version = "0.1.0", path = "crates/mrml" }
+mjmx-allocator = { version = "0.1.0", path = "crates/mjmx-allocator" }
+mjmx-span = { version = "0.1.0", path = "crates/mjmx-span" }
+mjmx-diagnostics = { version = "0.1.0", path = "crates/mjmx-diagnostics" }
+mjmx-syntax = { version = "0.1.0", path = "crates/mjmx-syntax" }
+mjmx-index = { version = "0.1.0", path = "crates/mjmx-index" }
+mjmx-ast = { version = "0.1.0", path = "crates/mjmx-ast" }
+mjmx-parser = { version = "0.1.0", path = "crates/mjmx-parser" }
+mjmx-semantic = { version = "0.1.0", path = "crates/mjmx-semantic" }
+mjmx-codegen = { version = "0.1.0", path = "crates/mjmx-codegen" }
+mjmx-linter = { version = "0.1.0", path = "crates/mjmx-linter" }
+mjmx-html-compare = { version = "0.1.0", path = "crates/mjmx-html-compare" }
+mjmx = { version = "0.1.0", path = "crates/mjmx" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 clap = { version = "4", features = ["derive"] }
 

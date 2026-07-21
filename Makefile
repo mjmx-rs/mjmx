@@ -12,8 +12,8 @@ build: ## Build the workspace
 release: ## Build the workspace in release mode
 	$(CARGO) build --workspace --release
 
-run: ## Run the mrml CLI (ARGS=...)
-	$(CARGO) run -p mrml-cli -- $(ARGS)
+run: ## Run the mjmx CLI (ARGS=...)
+	$(CARGO) run -p mjmx-cli -- $(ARGS)
 
 test: ## Run all workspace tests
 	$(CARGO) test --workspace

@@ -1,7 +1,7 @@
-# mrml — project context
+# mjmx — project context
 
-Rust port of [MJML](https://github.com/mjmlio/mjml). Working name `mrml` (a published
-`mrml` crate already exists — see Prior art; rename before publishing).
+Rust port of [MJML](https://github.com/mjmlio/mjml). Project name **mjmx**. (Note: `mrml`,
+a separate and unrelated published Rust MJML port, is discussed under Prior art — not us.)
 
 ## Mental model
 
@@ -20,38 +20,38 @@ per node), never separate crates.
 - **Architecture:** oxc-style, many focused crates.
 - **AST:** arena-allocated (bumpalo), nodes carry lifetime `'a`, strings interned as `Atom`. Every node spanned.
 - **Diagnostics:** thin custom (span-labeled), no heavy dep. Not just thiserror strings.
-- **Crate names:** hyphens (`mrml-parser`); underscores in `use`.
+- **Crate names:** hyphens (`mjmx-parser`); underscores in `use`.
 - **Scaffolding:** grow per-milestone — a crate is born when its milestone arrives, workspace always compiles.
 - **Testing oracle:** golden snapshots from mjml's own `.mjml`→`.html` fixtures, compared **semantically** (HTML/CSS-aware), not byte-exact — steal this from jdrouet/mrml's `html-compare`/`css-compare`.
-- **Binary layout:** `apps/mrml-cli` (oxc puts apps under `apps/`).
+- **Binary layout:** `apps/mjmx-cli` (oxc puts apps under `apps/`).
 
 ## Crate map (north star, ~22 crates)
 
-Core pipeline: `mrml-allocator` · `mrml-span` · `mrml-diagnostics` · `mrml-syntax`
-· `mrml-index` · `mrml-ast` (+ `mrml-ast-macros`) · `mrml-parser` · `mrml-semantic`
-· `mrml-codegen` (renderer) · `mrml-linter` · `mrml` (umbrella) · `apps/mrml-cli`.
+Core pipeline: `mjmx-allocator` · `mjmx-span` · `mjmx-diagnostics` · `mjmx-syntax`
+· `mjmx-index` · `mjmx-ast` (+ `mjmx-ast-macros`) · `mjmx-parser` · `mjmx-semantic`
+· `mjmx-codegen` (renderer) · `mjmx-linter` · `mjmx` (umbrella) · `apps/mjmx-cli`.
 
-Tools: `mrml-traverse` · `mrml-transformer` (mj-include, v3→v4 migrate) · `mrml-minifier`
-· `mrml-formatter` (`mrml fmt`).
+Tools: `mjmx-traverse` · `mjmx-transformer` (mj-include, v3→v4 migrate) · `mjmx-minifier`
+· `mjmx-formatter` (`mjmx fmt`).
 
-Surfaces: `mrml-sourcemap` · `mrml-language-server` (LSP) · `mrml-wasm` + `mrml-napi`
-(wasm = drop-in for JS mjml) · `mrml-dev-server` (`mrml dev`, hot-reload preview,
+Surfaces: `mjmx-sourcemap` · `mjmx-language-server` (LSP) · `mjmx-wasm` + `mjmx-napi`
+(wasm = drop-in for JS mjml) · `mjmx-dev-server` (`mjmx dev`, hot-reload preview,
 axum + tokio-tungstenite + notify).
 
 CSS inlining (`mj-style inline`) lives in semantic/codegen. `mj-include` resolution via
-`mrml-transformer` (+ a loader abstraction: local + http).
+`mjmx-transformer` (+ a loader abstraction: local + http).
 
 ## Roadmap (milestones)
 
 Phase 1 — core pipeline:
-- M0 workspace + Makefile + `mrml-allocator`, `mrml-span`, `mrml-diagnostics`
-- M1 `mrml-syntax`, `mrml-index`
-- M2 `mrml-ast` (+ macros)
-- M3 `mrml-parser`
-- M4 `mrml-codegen` slice (`mj-body/section/column/text`) + umbrella + cli → `mrml file.mjml` runs
-- M5 `mrml-semantic` (mj-attributes / mj-class / defaults / mj-head)
+- M0 workspace + Makefile + `mjmx-allocator`, `mjmx-span`, `mjmx-diagnostics`
+- M1 `mjmx-syntax`, `mjmx-index`
+- M2 `mjmx-ast` (+ macros)
+- M3 `mjmx-parser`
+- M4 `mjmx-codegen` slice (`mj-body/section/column/text`) + umbrella + cli → `mjmx file.mjml` runs
+- M5 `mjmx-semantic` (mj-attributes / mj-class / defaults / mj-head)
 - M6 fan out all components
-- M7 `mrml-linter` + golden fixtures (parity gate)
+- M7 `mjmx-linter` + golden fixtures (parity gate)
 
 Phase 2 — toolchain: M8 traverse + transformer · M9 minifier + formatter · M10 sourcemap.
 Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
@@ -65,10 +65,11 @@ Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 
 ## Prior art — jdrouet/mrml (the existing `mrml` crate, v6)
 
-A mature Rust MJML renderer. **Different philosophy: renderer library, not a compiler
-toolchain.** Key contrasts vs this project:
+A mature Rust MJML renderer (published as `mrml` — the name this project deliberately moved
+off of). **Different philosophy: renderer library, not a compiler toolchain.** Key contrasts
+vs this project:
 
-| Aspect | jdrouet/mrml | this project |
+| Aspect | jdrouet/mrml | this project (mjmx) |
 | --- | --- | --- |
 | Crate split | one mega-crate `mrml-core` (components = modules) | many focused oxc-style crates |
 | AST | owned + serde-serializable (`json` feature) | arena (bumpalo) + spans + `Atom` |

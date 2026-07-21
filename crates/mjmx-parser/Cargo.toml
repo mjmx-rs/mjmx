@@ -1,0 +1,19 @@
+[package]
+name = "mjmx-parser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Hand-rolled recursive-descent MJML parser producing an arena AST for mjmx."
+
+[dependencies]
+mjmx-allocator.workspace = true
+mjmx-ast.workspace = true
+mjmx-span.workspace = true
+mjmx-syntax.workspace = true
+mjmx-diagnostics.workspace = true
+
+[lints]
+workspace = true
