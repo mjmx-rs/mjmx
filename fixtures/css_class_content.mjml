@@ -1,0 +1,21 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="my-text">a text block</mj-text>
+        <mj-button css-class="my-button" href="https://example.com">click</mj-button>
+        <mj-image css-class="my-image" src="https://example.com/a.png" alt="a" />
+        <mj-divider css-class="my-divider" />
+        <mj-spacer css-class="my-spacer" height="30px" />
+        <mj-table css-class="my-table">
+          <tr>
+            <td>cell</td>
+          </tr>
+        </mj-table>
+      </mj-column>
+      <mj-column>
+        <mj-text css-class="multi-a multi-b">two classes</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

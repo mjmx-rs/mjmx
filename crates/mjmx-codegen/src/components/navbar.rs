@@ -9,6 +9,7 @@
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
+use crate::components::css_class::{class_attr, css_class};
 use crate::components::navbar_link::NavbarLink;
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
@@ -63,7 +64,12 @@ impl<'a> Render<'a> for Navbar<'a> {
 
         // Outer cell: navbar has no padding default, so it is omitted unless set.
         let padding = self.element.attr("padding");
-        buf.push_str(&format!("<td align=\"{align}\" style=\"font-size:0px;"));
+        // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
+        // mj-hero `renderChildren`), between `align` and `style`.
+        let class = class_attr(css_class(ctx, self.element));
+        buf.push_str(&format!(
+            "<td align=\"{align}\" {class}style=\"font-size:0px;"
+        ));
         if let Some(p) = padding {
             buf.push_str(&format!("padding:{p};"));
         }
@@ -107,13 +113,13 @@ impl<'a> Render<'a> for Navbar<'a> {
                 buf.push_str(&format!(
                     "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" align=\"{align}\"><tr><td style=\"{}\" class=\"{}\" ><![endif]-->",
                     link.td_style(ctx),
-                    link.outlook_class()
+                    link.outlook_class(ctx)
                 ));
             } else {
                 buf.push_str(&format!(
                     "<!--[if mso | IE]></td><td style=\"{}\" class=\"{}\" ><![endif]-->",
                     link.td_style(ctx),
-                    link.outlook_class()
+                    link.outlook_class(ctx)
                 ));
             }
             link.render_anchor(ctx, buf);

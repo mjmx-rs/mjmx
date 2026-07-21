@@ -1,0 +1,12 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-carousel css-class="my-carousel">
+          <mj-carousel-image src="https://example.com/1.png" css-class="slide-one" />
+          <mj-carousel-image src="https://example.com/2.png" />
+        </mj-carousel>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

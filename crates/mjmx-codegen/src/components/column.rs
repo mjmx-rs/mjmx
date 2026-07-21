@@ -2,6 +2,7 @@
 
 use mjmx_ast::Element;
 
+use crate::components::css_class::{append_css_class, css_class};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult, render_element};
 
@@ -232,11 +233,18 @@ fn horizontal_padding(shorthand: Option<&str>, left: Option<&str>, right: Option
 
 impl<'a> Render<'a> for Column<'a> {
     fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
-        let class = self.width.class();
+        let column_class = self.width.class();
 
         // Register the responsive rule so the head emits both the @media block and
         // the .moz-text-html <style media> block for this class.
-        ctx.add_media_query(&class, self.width.media_query_body());
+        ctx.add_media_query(&column_class, self.width.media_query_body());
+
+        // mjml's `render`: `${getColumnClass()} mj-outlook-group-fix`, then `css-class`
+        // appended when set.
+        let class = append_css_class(
+            &format!("{column_class} mj-outlook-group-fix"),
+            css_class(ctx, self.element),
+        );
 
         // Themeable attributes. `vertical-align` / `direction` have mjml defaults; the
         // others have none and only appear when set.
@@ -253,7 +261,7 @@ impl<'a> Render<'a> for Column<'a> {
         let container = f64::from(ctx.container_width);
         let mobile_width = self.mobile_width(container);
         buf.push_str(&format!(
-            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0px;text-align:left;direction:{direction};display:inline-block;vertical-align:{vertical_align};width:{mobile_width};\">"
+            "<div class=\"{class}\" style=\"font-size:0px;text-align:left;direction:{direction};display:inline-block;vertical-align:{vertical_align};width:{mobile_width};\">"
         ));
 
         // mjml's `tableStyle`: the box declarations shared by the no-gutter table and

@@ -1,0 +1,25 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-social css-class="my-social">
+          <mj-social-element name="facebook" css-class="my-social-element">fb</mj-social-element>
+          <mj-social-element name="twitter">tw</mj-social-element>
+        </mj-social>
+        <mj-navbar css-class="my-navbar">
+          <mj-navbar-link href="/a" css-class="my-link">A</mj-navbar-link>
+          <mj-navbar-link href="/b">B</mj-navbar-link>
+        </mj-navbar>
+        <mj-accordion css-class="my-accordion">
+          <mj-accordion-element css-class="my-acc-element">
+            <mj-accordion-title css-class="my-acc-title">title</mj-accordion-title>
+            <mj-accordion-text css-class="my-acc-text">text</mj-accordion-text>
+          </mj-accordion-element>
+        </mj-accordion>
+      </mj-column>
+    </mj-section>
+    <mj-hero mode="fixed-height" height="200px" background-color="#2a3448" css-class="my-hero">
+      <mj-text css-class="hero-text">hero body</mj-text>
+    </mj-hero>
+  </mj-body>
+</mjml>

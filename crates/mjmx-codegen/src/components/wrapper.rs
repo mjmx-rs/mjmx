@@ -17,6 +17,7 @@ use mjmx_syntax::MjmlTag;
 
 use crate::components::Section;
 use crate::components::background::Background;
+use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -76,8 +77,15 @@ impl<'a> Wrapper<'a> {
         let radius_div = border_radius
             .map(|br| format!("border-radius:{br};overflow:hidden;"))
             .unwrap_or_default();
+        // A wrapper reuses mj-section's `renderSection`: `css-class` on the centered
+        // div, unless full-width (where it moved to the outer 100% table).
+        let div_class = if full_width {
+            String::new()
+        } else {
+            class_attr(css_class(ctx, self.element))
+        };
         buf.push_str(&format!(
-            "<div style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
+            "<div {div_class}style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
         ));
         if bg.has_url() {
             buf.push_str("<div style=\"line-height:0;font-size:0;\">");
@@ -115,8 +123,11 @@ impl<'a> Wrapper<'a> {
             .element_children()
             .filter(|el| el.tag == MjmlTag::MjSection)
         {
+            // mjml's `renderWrappedChildren`: the ghost cell carries the *section*
+            // child's `css-class`, suffixed with `-outlook`.
+            let ghost_class = suffix_css_classes(css_class(ctx, child), "outlook");
             buf.push_str(&format!(
-                "<!--[if mso | IE]><tr><td class=\"\" width=\"{width}px\" ><![endif]-->"
+                "<!--[if mso | IE]><tr><td class=\"{ghost_class}\" width=\"{width}px\" ><![endif]-->"
             ));
             Section::new(child).render(ctx, buf)?;
             buf.push_str("<!--[if mso | IE]></td></tr><![endif]-->");
@@ -139,8 +150,9 @@ impl<'a> Wrapper<'a> {
             .color()
             .map(|c| format!("bgcolor=\"{c}\" "))
             .unwrap_or_default();
+        let ghost_class = suffix_css_classes(css_class(ctx, self.element), "outlook");
         buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
+            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"{ghost_class}\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
         ));
     }
 
@@ -198,8 +210,9 @@ impl<'a> Render<'a> for Wrapper<'a> {
                 .url()
                 .map(|url| format!("background=\"{url}\" "))
                 .unwrap_or_default();
+            let class = class_attr(css_class(ctx, self.element));
             buf.push_str(&format!(
-                "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
+                "<table align=\"center\" {class}{bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
                 bg.css()
             ));
             bg.vml_open(buf, true, width);

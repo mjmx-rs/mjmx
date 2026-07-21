@@ -8,6 +8,7 @@
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
+use crate::components::css_class::{append_css_class, css_class};
 use crate::components::{Column, ColumnWidth};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
@@ -64,8 +65,13 @@ impl<'a> Render<'a> for Group<'a> {
         if let Some(bg) = background_color {
             div_style.push_str(&format!("background-color:{bg};"));
         }
+        // mjml's `render`: `${getColumnClass()} mj-outlook-group-fix` + `css-class`.
+        let div_class = append_css_class(
+            &format!("{class} mj-outlook-group-fix"),
+            css_class(ctx, self.element),
+        );
         buf.push_str(&format!(
-            "<div class=\"{class} mj-outlook-group-fix\" style=\"{div_style}\">"
+            "<div class=\"{div_class}\" style=\"{div_style}\">"
         ));
 
         // The group's own Outlook ghost table holding one cell per column; it carries

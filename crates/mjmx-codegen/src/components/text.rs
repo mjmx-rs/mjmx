@@ -2,6 +2,7 @@
 
 use mjmx_ast::{Element, Node};
 
+use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -95,7 +96,12 @@ impl<'a> Render<'a> for Text<'a> {
             "font-size:0px;padding:{padding};word-break:break-word;"
         ));
 
-        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
+        // mjml's `mj-column` / `mj-hero` wrap each child in `<td align class style>`,
+        // taking the class from the *child's* `css-class`.
+        let class = class_attr(css_class(ctx, self.element));
+        buf.push_str(&format!(
+            "<td align=\"{align}\" {class}style=\"{td_style}\">"
+        ));
         // A fixed height wraps the div in an Outlook ghost cell.
         if let Some(h) = height {
             buf.push_str(&format!(

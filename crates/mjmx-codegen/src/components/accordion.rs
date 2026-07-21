@@ -11,6 +11,7 @@
 use mjmx_ast::{Element, Node};
 use mjmx_syntax::MjmlTag;
 
+use crate::components::css_class::{class_attr, css_class, leading_class_attr};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -94,8 +95,11 @@ impl<'a> Render<'a> for Accordion<'a> {
 
         // Outer content cell (the column's generic wrapper, baked in as for other
         // components): accordion has no align, padding default 10px 25px.
+        // mj-accordion has no `align`, so the column's wrapping `<td>` is `class`
+        // (from `css-class`) then `style`.
+        let class = class_attr(css_class(ctx, self.element));
         buf.push_str(&format!(
-            "<td style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
+            "<td {class}style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
         ));
         buf.push_str(&format!(
             "<table cellspacing=\"0\" cellpadding=\"0\" class=\"mj-accordion\" style=\"width:100%;border-collapse:collapse;border:{border};border-bottom:none;font-family:{font_family};\">"
@@ -120,7 +124,9 @@ fn render_element_row<'a>(
     ctx: &RenderContext<'a>,
     buf: &mut String,
 ) {
-    buf.push_str("<tr><td style=\"padding:0px;\">");
+    // mjml's `MjAccordionElement.render`: `css-class` lands on the element's `<tr>`.
+    let class = leading_class_attr(css_class(ctx, element));
+    buf.push_str(&format!("<tr{class}><td style=\"padding:0px;\">"));
     buf.push_str("<label class=\"mj-accordion-element\" style=\"font-size:13px;\">");
     buf.push_str(
         "<!--[if !mso | IE]><!--><input class=\"mj-accordion-checkbox\" type=\"checkbox\" style=\"display:none;\" /><!--<![endif]-->",
@@ -175,7 +181,9 @@ fn render_title<'a>(
     title_style.push_str(&format!(
         "font-size:{font_size};font-family:{font_family};padding:{padding};"
     ));
-    let title_td = format!("<td style=\"{title_style}\"> {content} </td>");
+    // mjml's `MjAccordionTitle.renderTitle`: `class` then `style` on the title cell.
+    let title_class = class_attr(css_class(ctx, element));
+    let title_td = format!("<td {title_class}style=\"{title_style}\"> {content} </td>");
 
     // Icon cell carries the title's background-color as a `background:` declaration.
     let mut icon_style = String::from("padding:16px;");
@@ -246,7 +254,11 @@ fn render_text<'a>(
         text_style.push_str(&format!("color:{c};"));
     }
     text_style.push_str(&format!("padding:{padding};"));
-    buf.push_str(&format!("<td style=\"{text_style}\"> {content} </td>"));
+    // mjml's `MjAccordionText.renderContent`: `class` then `style` on the text cell.
+    let text_class = class_attr(css_class(ctx, element));
+    buf.push_str(&format!(
+        "<td {text_class}style=\"{text_style}\"> {content} </td>"
+    ));
     buf.push_str("</tr></tbody></table></div>");
 }
 

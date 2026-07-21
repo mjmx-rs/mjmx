@@ -1,0 +1,41 @@
+<mjml>
+  <mj-body css-class="body-class">
+    <mj-section css-class="hero-section extra">
+      <mj-column css-class="left-col">
+        <mj-text>plain section, plain column</mj-text>
+      </mj-column>
+      <mj-column>
+        <mj-text>no class on this column</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section full-width="full-width" css-class="fw-section">
+      <mj-column css-class="fw-col">
+        <mj-text>full width section</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section css-class="grouped-section">
+      <mj-group css-class="my-group">
+        <mj-column css-class="g1">
+          <mj-text>group column one</mj-text>
+        </mj-column>
+        <mj-column css-class="g2">
+          <mj-text>group column two</mj-text>
+        </mj-column>
+      </mj-group>
+    </mj-section>
+    <mj-wrapper css-class="my-wrapper">
+      <mj-section css-class="inner-section">
+        <mj-column css-class="inner-col">
+          <mj-text>wrapped</mj-text>
+        </mj-column>
+      </mj-section>
+    </mj-wrapper>
+    <mj-wrapper full-width="full-width" css-class="fw-wrapper" background-color="#eeeeee">
+      <mj-section css-class="fw-inner-section">
+        <mj-column>
+          <mj-text>full width wrapper</mj-text>
+        </mj-column>
+      </mj-section>
+    </mj-wrapper>
+  </mj-body>
+</mjml>

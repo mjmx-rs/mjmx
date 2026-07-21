@@ -11,6 +11,7 @@
 
 use mjmx_ast::{Element, Node};
 
+use crate::components::css_class::{css_class, leading_class_attr};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -237,7 +238,9 @@ impl<'a> SocialElement<'a> {
 
         let content = self.content();
 
-        buf.push_str("<tr>");
+        // mjml puts `css-class` on the element's own `<tr>`.
+        let class = leading_class_attr(css_class(ctx, self.element));
+        buf.push_str(&format!("<tr{class}>"));
         // Icon cell.
         buf.push_str(&format!(
             "<td style=\"padding:{padding};vertical-align:{vertical_align};\">"

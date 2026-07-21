@@ -447,6 +447,42 @@ fn accordion_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn css_class_layout_matches_mjml_reference() {
+    assert_golden(
+        "css_class_layout",
+        fixture!("css_class_layout.mjml"),
+        fixture!("css_class_layout.html"),
+    );
+}
+
+#[test]
+fn css_class_content_matches_mjml_reference() {
+    assert_golden(
+        "css_class_content",
+        fixture!("css_class_content.mjml"),
+        fixture!("css_class_content.html"),
+    );
+}
+
+#[test]
+fn css_class_composite_matches_mjml_reference() {
+    assert_golden(
+        "css_class_composite",
+        fixture!("css_class_composite.mjml"),
+        fixture!("css_class_composite.html"),
+    );
+}
+
+#[test]
+fn css_class_carousel_matches_mjml_reference() {
+    assert_golden(
+        "css_class_carousel",
+        fixture!("css_class_carousel.mjml"),
+        fixture!("css_class_carousel.html"),
+    );
+}
+
+#[test]
 fn include_matches_mjml_reference() {
     // `render_file` resolves the `<mj-include>` in main.mjml against the file's own
     // directory (via the LocalLoader), exactly as the mjml CLI did when generating the

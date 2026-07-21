@@ -70,6 +70,10 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `section_bg_full_width` | `<mj-section full-width="full-width">` with a background: declarations move to the outer 100% table, the rect stretches with `mso-width-percent:1000`, and `background-position-x`/`-y` override the shorthand. |
 | `wrapper_bg_url` | `<mj-wrapper background-url background-color>`: the section background path applied to a wrapper (its ghost row still wraps each nested section). |
 | `wrapper_bg_full_width` | `<mj-wrapper full-width="full-width">` with `background-position="25% 75%"`, `background-size="50% 30%"`, `no-repeat`: percentage VML math (`origin="-0.25, 0.25"`) and two-length `size="50%,30%"`. |
+| `css_class_layout` | The universal `css-class` on layout components: `mj-body`, `mj-section` (centered div + `-outlook`-suffixed ghost table), a `full-width` section (class moves to the outer 100% table), `mj-column` / `mj-group` (appended after `mj-column-per-N mj-outlook-group-fix`, and `-outlook`-suffixed in the section's ghost cells), and `mj-wrapper` in both variants (its ghost row cell carries the nested *section's* suffixed class). |
+| `css_class_content` | `css-class` on content components — `mj-text`, `mj-button`, `mj-image`, `mj-divider`, `mj-spacer`, `mj-table` — which lands on the `<td>` each renders itself into, between `align` and `style`; plus a two-class value (`"multi-a multi-b"`). |
+| `css_class_composite` | `css-class` on composite components: `mj-social` (+ `mj-social-element`, whose class goes on its `<tr>`), `mj-navbar` (+ `mj-navbar-link`: appended to `mj-link` on the `<a>`, `-outlook`-suffixed on the mso `<td>`), `mj-accordion` (+ element `<tr>`, title `<td>`, text `<td>`), and `mj-hero` (its centered div). |
+| `css_class_carousel` | `css-class` on `mj-carousel` and `mj-carousel-image`: `-thumbnail`-suffixed on the thumbnail `<a>`, raw on each `mj-carousel-image` div (and the mso first-image fallback). |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs`.

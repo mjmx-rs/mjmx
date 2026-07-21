@@ -153,18 +153,26 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
         h.push_str("</style>");
     }
 
-    // Component <style>s (none in the M4 slice, but wired for extensibility).
-    for style in ctx.styles() {
+    // Component <style>s. mjml's `buildStyleFromComponents` concatenates *every*
+    // registered component style into a single `<style type="text/css">` block, so two
+    // components that both register head CSS (e.g. mj-navbar + mj-accordion) share one
+    // tag rather than getting one each.
+    if !ctx.styles().is_empty() {
         h.push_str("<style type=\"text/css\">");
-        h.push_str(style);
+        for style in ctx.styles() {
+            h.push_str(style);
+        }
         h.push_str("</style>");
     }
 
-    // Document <mj-style> CSS, emitted verbatim. (Inline `<mj-style inline>` injection
-    // is deferred to the css-inline milestone; here the CSS is emitted as-is.)
-    for style in &ctx.semantic.head().styles {
+    // Document <mj-style> CSS, emitted verbatim (mjml's `buildStyleFromTags`, likewise
+    // a single block). Inline `<mj-style inline>` injection is deferred to the
+    // css-inline milestone; here the CSS is emitted as-is.
+    if !ctx.semantic.head().styles.is_empty() {
         h.push_str("<style type=\"text/css\">");
-        h.push_str(style);
+        for style in &ctx.semantic.head().styles {
+            h.push_str(style);
+        }
         h.push_str("</style>");
     }
 

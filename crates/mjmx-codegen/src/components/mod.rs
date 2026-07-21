@@ -12,6 +12,7 @@ mod body;
 mod button;
 mod carousel;
 mod column;
+pub(crate) mod css_class;
 mod divider;
 mod group;
 mod hero;

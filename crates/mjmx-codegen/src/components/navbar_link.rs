@@ -8,6 +8,7 @@
 
 use mjmx_ast::{Element, Node};
 
+use crate::components::css_class::{css_class, suffix_css_classes};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -58,16 +59,10 @@ impl<'a> NavbarLink<'a> {
         s
     }
 
-    /// The outlook-suffixed class list for the ghost `<td>` (empty without `css-class`).
-    pub fn outlook_class(&self) -> String {
-        match self.element.attr("css-class") {
-            Some(cls) => cls
-                .split_whitespace()
-                .map(|c| format!("{c}-outlook"))
-                .collect::<Vec<_>>()
-                .join(" "),
-            None => String::new(),
-        }
+    /// The outlook-suffixed class list for the ghost `<td>` (empty without `css-class`),
+    /// mjml's `suffixCssClasses(this.getAttribute('css-class'), 'outlook')`.
+    pub fn outlook_class(&self, ctx: &RenderContext<'a>) -> String {
+        suffix_css_classes(css_class(ctx, self.element), "outlook")
     }
 
     /// Render the `<a class="mj-link" …>` anchor.
@@ -91,8 +86,8 @@ impl<'a> NavbarLink<'a> {
             Some(base) => format!("{base}{href}"),
             None => href.to_string(),
         };
-        let css_class = self.element.attr("css-class");
-        let a_class = match css_class {
+        // mjml's `renderContent`: `class="mj-link${css-class ? ` ${css-class}` : ''}"`.
+        let a_class = match css_class(ctx, self.element) {
             Some(c) => format!("mj-link {c}"),
             None => "mj-link".to_string(),
         };
@@ -146,7 +141,7 @@ impl<'a> Render<'a> for NavbarLink<'a> {
         buf.push_str(&format!(
             "<!--[if mso | IE]><td style=\"{}\" class=\"{}\" ><![endif]-->",
             self.td_style(ctx),
-            self.outlook_class()
+            self.outlook_class(ctx)
         ));
         self.render_anchor(ctx, buf);
         buf.push_str("<!--[if mso | IE]></td><![endif]-->");

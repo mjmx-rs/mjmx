@@ -11,6 +11,7 @@
 
 use mjmx_ast::Element;
 
+use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult, render_element};
 
@@ -87,9 +88,11 @@ impl<'a> Render<'a> for Hero<'a> {
         }
         buf.push_str(" xmlns:v=\"urn:schemas-microsoft-com:vml\" /><![endif]-->");
 
-        // Centered container.
+        // Centered container. mjml's key order is align, class, style — `mj-hero` has
+        // no `align` default, so `class` (from `css-class`) leads.
+        let class = class_attr(css_class(ctx, self.element));
         buf.push_str(&format!(
-            "<div style=\"margin:0 auto;max-width:{container_width}px;\">"
+            "<div {class}style=\"margin:0 auto;max-width:{container_width}px;\">"
         ));
         buf.push_str(
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:100%;\">",

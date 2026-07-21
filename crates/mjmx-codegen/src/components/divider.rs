@@ -2,6 +2,7 @@
 
 use mjmx_ast::Element;
 
+use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -67,7 +68,12 @@ impl<'a> Render<'a> for Divider<'a> {
             "font-size:0px;padding:{padding};word-break:break-word;"
         ));
 
-        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
+        // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
+        // mj-hero `renderChildren`), between `align` and `style`.
+        let class = class_attr(css_class(ctx, self.element));
+        buf.push_str(&format!(
+            "<td align=\"{align}\" {class}style=\"{td_style}\">"
+        ));
         buf.push_str(&format!(
             "<p style=\"border-top:{border_top};font-size:1px;margin:{margin};width:{width};\"></p>"
         ));

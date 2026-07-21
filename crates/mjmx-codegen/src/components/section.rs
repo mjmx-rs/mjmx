@@ -4,6 +4,7 @@ use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
 use crate::components::background::Background;
+use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::components::{Column, ColumnWidth, Group};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
@@ -81,8 +82,15 @@ impl<'a> Section<'a> {
         let radius_div = border_radius
             .map(|br| format!("border-radius:{br};overflow:hidden;"))
             .unwrap_or_default();
+        // mjml's `renderSection`: the centered div carries `css-class` — but only when
+        // the section is not full-width, where the class moved out to the 100% table.
+        let div_class = if full_width {
+            String::new()
+        } else {
+            class_attr(css_class(ctx, self.element))
+        };
         buf.push_str(&format!(
-            "<div style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
+            "<div {div_class}style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
         ));
         if bg.has_url() {
             buf.push_str("<div style=\"line-height:0;font-size:0;\">");
@@ -121,6 +129,10 @@ impl<'a> Section<'a> {
             "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>",
         );
         for child in &children {
+            // mjml's `renderWrappedChildren`: the ghost cell's class is the *child's*
+            // `css-class`, suffixed with `-outlook` (empty string when unset, which is
+            // why the bare `class=""` is always emitted).
+            let ghost_class = suffix_css_classes(css_class(ctx, child), "outlook");
             match child.tag {
                 MjmlTag::MjGroup => {
                     let raw = ctx.semantic.attribute(child, "width", None);
@@ -131,7 +143,7 @@ impl<'a> Section<'a> {
                         style.push_str(&format!("vertical-align:{va};"));
                     }
                     buf.push_str(&format!(
-                        "<td class=\"\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
+                        "<td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
                     ));
                     Group::new(child, count).render(ctx, buf)?;
                 }
@@ -147,7 +159,7 @@ impl<'a> Section<'a> {
                         .attribute(child, "vertical-align", Some("top"))
                         .unwrap_or("top");
                     buf.push_str(&format!(
-                        "<td class=\"\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
+                        "<td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
                     ));
                     Column::new(child, width, raw, count).render(ctx, buf)?;
                 }
@@ -174,8 +186,10 @@ impl<'a> Section<'a> {
             .color()
             .map(|c| format!("bgcolor=\"{c}\" "))
             .unwrap_or_default();
+        // mjml's `renderBefore`: `suffixCssClasses(css-class, 'outlook')`.
+        let ghost_class = suffix_css_classes(css_class(ctx, self.element), "outlook");
         buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
+            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"{ghost_class}\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
         ));
     }
 
@@ -199,8 +213,10 @@ impl<'a> Render<'a> for Section<'a> {
                 .url()
                 .map(|url| format!("background=\"{url}\" "))
                 .unwrap_or_default();
+            // mjml's `renderFullWidth` key order: align, class, background, border, …
+            let class = class_attr(css_class(ctx, self.element));
             buf.push_str(&format!(
-                "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
+                "<table align=\"center\" {class}{bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
                 bg.css()
             ));
             bg.vml_open(buf, true, width);

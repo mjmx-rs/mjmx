@@ -2,6 +2,7 @@
 
 use mjmx_ast::Element;
 
+use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -43,7 +44,9 @@ impl<'a> Render<'a> for Spacer<'a> {
             td_style.push_str(&format!("padding:{padding};"));
         }
         td_style.push_str("word-break:break-word;");
-        buf.push_str(&format!("<td style=\"{td_style}\">"));
+        // mj-spacer has no `align`, so the wrapping `<td>` is `class` then `style`.
+        let class = class_attr(css_class(ctx, self.element));
+        buf.push_str(&format!("<td {class}style=\"{td_style}\">"));
         buf.push_str(&format!(
             "<div style=\"height:{height};line-height:{height};\">&#8202;</div>"
         ));
