@@ -16,6 +16,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrml-ast"
+version = "0.1.0"
+dependencies = [
+ "mrml-allocator",
+ "mrml-span",
+ "mrml-syntax",
+]
+
+[[package]]
 name = "mrml-diagnostics"
 version = "0.1.0"
 dependencies = [
