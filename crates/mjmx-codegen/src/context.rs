@@ -19,11 +19,14 @@ pub struct RenderOptions {
     /// The responsive breakpoint, in pixels. Columns collapse to full width below
     /// this width. `// mjml default: 480px`. A document `<mj-breakpoint>` overrides it.
     pub breakpoint: u32,
-    /// Pretty-print the output. **Not yet honored** — accepted for forward
-    /// compatibility with the CLI. Output is currently always compact-ish.
+    /// Pretty-print the output. Honored by the umbrella crate as a whitespace
+    /// post-process (`mjmx_minifier::beautify`) after codegen produces the HTML;
+    /// the codegen stage itself always emits the same compact-ish markup. If both
+    /// `beautify` and `minify` are set, `minify` takes precedence.
     pub beautify: bool,
-    /// Minify the output. **Not yet honored** — accepted for forward compatibility
-    /// with the CLI.
+    /// Minify the output. Honored by the umbrella crate as a whitespace
+    /// post-process (`mjmx_minifier::minify`) after codegen produces the HTML.
+    /// Takes precedence over `beautify` when both are set.
     pub minify: bool,
 }
 

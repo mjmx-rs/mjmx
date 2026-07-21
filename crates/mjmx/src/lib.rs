@@ -32,7 +32,24 @@ pub fn render(source: &str, options: &RenderOptions) -> Result<String, Vec<Diagn
     if !parsed.errors.is_empty() {
         return Err(parsed.errors);
     }
-    mjmx_codegen::render_document(&parsed.document, options)
+    let html = mjmx_codegen::render_document(&parsed.document, options)?;
+    Ok(post_process(html, options))
+}
+
+/// Apply the whitespace post-processors selected by `options`.
+///
+/// `minify` and `beautify` are mutually exclusive whitespace transforms; if a
+/// caller sets both, **`minify` wins** (the more destructive, size-oriented
+/// transform is assumed to be the intent). When neither is set the rendered HTML
+/// is returned untouched — the default render path is unchanged.
+fn post_process(html: String, options: &RenderOptions) -> String {
+    if options.minify {
+        mjmx_minifier::minify(&html)
+    } else if options.beautify {
+        mjmx_minifier::beautify(&html)
+    } else {
+        html
+    }
 }
 
 /// Render MJML `source` to HTML with [`RenderOptions::default`].
@@ -86,7 +103,8 @@ pub fn render_file(
         return Err(include_diags);
     }
 
-    mjmx_codegen::render_document(&document, options)
+    let html = mjmx_codegen::render_document(&document, options)?;
+    Ok(post_process(html, options))
 }
 
 /// Validate MJML `source` structurally, returning every diagnostic.

@@ -1,0 +1,17 @@
+[package]
+name = "mjmx-minifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Whitespace minifier and beautifier for mjmx's rendered HTML output."
+
+[dependencies]
+
+[dev-dependencies]
+mjmx-html-compare.workspace = true
+
+[lints]
+workspace = true

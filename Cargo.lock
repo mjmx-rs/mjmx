@@ -126,6 +126,7 @@ dependencies = [
  "mjmx-diagnostics",
  "mjmx-html-compare",
  "mjmx-linter",
+ "mjmx-minifier",
  "mjmx-parser",
  "mjmx-transformer",
 ]
@@ -192,6 +193,13 @@ dependencies = [
  "mjmx-parser",
  "mjmx-span",
  "mjmx-syntax",
+]
+
+[[package]]
+name = "mjmx-minifier"
+version = "0.1.0"
+dependencies = [
+ "mjmx-html-compare",
 ]
 
 [[package]]

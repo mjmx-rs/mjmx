@@ -53,11 +53,13 @@ struct RenderArgs {
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    /// Pretty-print the output. Accepted but not yet honored.
+    /// Pretty-print (re-indent) the output. If combined with `--minify`,
+    /// `--minify` wins.
     #[arg(long)]
     beautify: bool,
 
-    /// Minify the output. Accepted but not yet honored.
+    /// Minify the output (strip insignificant whitespace). Takes precedence over
+    /// `--beautify`.
     #[arg(long)]
     minify: bool,
 
