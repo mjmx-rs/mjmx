@@ -1,0 +1,14 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-accordion border="1px solid #cccccc" font-family="Georgia, serif" icon-position="left" icon-width="24px" icon-height="24px" padding="8px 12px">
+          <mj-accordion-element>
+            <mj-accordion-title font-size="18px" padding="20px" color="#ff0000" background-color="#eeeeee">Title A</mj-accordion-title>
+            <mj-accordion-text font-size="15px" line-height="20px" padding="12px" color="#0000ff" background-color="#fafafa">Body A</mj-accordion-text>
+          </mj-accordion-element>
+        </mj-accordion>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

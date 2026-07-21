@@ -40,26 +40,64 @@ impl<'a> Wrapper<'a> {
     /// container + the wrapped section children + renderAfter).
     fn render_inner(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
         let width = ctx.container_width;
-        // mjml default: wrapper padding 20px 0 — horizontal padding 0, so the content
-        // box handed to nested sections equals the wrapper width.
-        let box_width = width;
+
+        // Themeable attributes (a wrapper shares mj-section's styling).
+        let attr = |name: &str, default: &'a str| {
+            ctx.semantic
+                .attribute(self.element, name, Some(default))
+                .unwrap_or(default)
+        };
+        let opt = |name: &str| ctx.semantic.attribute(self.element, name, None);
+        let padding = attr("padding", "20px 0");
+        let direction = attr("direction", "ltr");
+        let text_align = attr("text-align", "center");
+        let background_color = opt("background-color");
+        let border = opt("border");
+        let border_radius = opt("border-radius");
+
+        // Content box handed to nested sections: wrapper width minus horizontal padding
+        // and borders.
+        let box_width = width - horizontal_padding(padding) - border.map_or(0, horizontal_border);
+
+        let bg_prefix = background_color
+            .map(|bg| format!("background:{bg};background-color:{bg};"))
+            .unwrap_or_default();
+        let mso_bgcolor = background_color
+            .map(|bg| format!("bgcolor=\"{bg}\" "))
+            .unwrap_or_default();
 
         // renderBefore: the section-shaped ghost table.
         buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" ><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
+            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
         ));
 
         // The centered container.
+        let radius_div = border_radius
+            .map(|br| format!("border-radius:{br};overflow:hidden;"))
+            .unwrap_or_default();
         buf.push_str(&format!(
-            "<div style=\"margin:0px auto;max-width:{width}px;\">"
+            "<div style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
         ));
-        buf.push_str(
-            "<table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:100%;\">",
-        );
+        let table_suffix = if border_radius.is_some() {
+            "border-collapse:separate;"
+        } else {
+            ""
+        };
+        buf.push_str(&format!(
+            "<table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
+        ));
         buf.push_str("<tbody><tr>");
-        buf.push_str(
-            "<td style=\"direction:ltr;font-size:0px;padding:20px 0;text-align:center;\">",
-        );
+        let mut td_style = String::new();
+        if let Some(b) = border {
+            td_style.push_str(&format!("border:{b};"));
+        }
+        if let Some(br) = border_radius {
+            td_style.push_str(&format!("border-radius:{br};"));
+        }
+        td_style.push_str(&format!(
+            "direction:{direction};font-size:0px;padding:{padding};text-align:{text_align};"
+        ));
+        buf.push_str(&format!("<td style=\"{td_style}\">"));
 
         // Presentation ghost table wrapping each section child in its own <tr><td>.
         buf.push_str(
@@ -87,6 +125,42 @@ impl<'a> Wrapper<'a> {
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
         Ok(())
     }
+}
+
+/// Total left + right padding, in pixels, from a CSS padding shorthand.
+fn horizontal_padding(padding: &str) -> u32 {
+    let parts: Vec<u32> = padding
+        .split_whitespace()
+        .map(|v| {
+            v.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse()
+                .unwrap_or(0)
+        })
+        .collect();
+    match parts.as_slice() {
+        [all] => all * 2,
+        [_tb, lr] => lr * 2,
+        [_t, lr, _b] => lr * 2,
+        [_t, r, _b, l] => r + l,
+        _ => 0,
+    }
+}
+
+/// Combined left + right border width from a `border` shorthand (`"2px solid #000"`).
+fn horizontal_border(border: &str) -> u32 {
+    let one = border
+        .split_whitespace()
+        .find_map(|v| {
+            v.chars()
+                .take_while(char::is_ascii_digit)
+                .collect::<String>()
+                .parse::<u32>()
+                .ok()
+        })
+        .unwrap_or(0);
+    one * 2
 }
 
 impl<'a> Render<'a> for Wrapper<'a> {

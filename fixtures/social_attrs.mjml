@@ -1,0 +1,12 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-social icon-size="30px" border-radius="8px" color="#222222" font-size="15px" align="left" padding="6px 18px" inner-padding="7px" container-background-color="#f5f5f5">
+          <mj-social-element name="facebook" href="https://example.com">Fb</mj-social-element>
+          <mj-social-element name="twitter" href="https://example.com">Tw</mj-social-element>
+        </mj-social>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

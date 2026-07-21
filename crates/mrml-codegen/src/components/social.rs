@@ -50,6 +50,7 @@ impl<'a> Render<'a> for Social<'a> {
         let align = some("align", ALIGN);
         let padding = some("padding", PADDING);
         let mode = some("mode", MODE);
+        let container_background_color = opt("container-background-color");
 
         // Attributes forwarded to the elements as their defaults (mjml's
         // `getSocialElementAttributes`): the defaulted ones plus any explicitly-set
@@ -76,9 +77,14 @@ impl<'a> Render<'a> for Social<'a> {
             .filter(|el| el.tag == MjmlTag::MjSocialElement)
             .collect();
 
-        buf.push_str(&format!(
-            "<td align=\"{align}\" style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
+        let mut td_style = String::new();
+        if let Some(cbg) = container_background_color {
+            td_style.push_str(&format!("background:{cbg};"));
+        }
+        td_style.push_str(&format!(
+            "font-size:0px;padding:{padding};word-break:break-word;"
         ));
+        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
 
         if mode == "vertical" {
             buf.push_str(

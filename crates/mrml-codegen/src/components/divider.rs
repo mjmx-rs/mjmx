@@ -13,9 +13,6 @@ const WIDTH: &str = "100%";
 const PADDING: &str = "10px 25px";
 const ALIGN: &str = "center";
 
-// mjml default: the section/body container is 600px wide in this slice.
-const CONTAINER_WIDTH: u32 = 600;
-
 /// Renderer for `<mj-divider>`.
 pub struct Divider<'a> {
     element: &'a Element<'a>,
@@ -43,22 +40,39 @@ impl<'a> Render<'a> for Divider<'a> {
         let width = attr("width", WIDTH);
         let padding = attr("padding", PADDING);
         let align = attr("align", ALIGN);
+        let container_background_color =
+            ctx.semantic
+                .attribute(self.element, "container-background-color", None);
 
         let border_top = format!("{border_style} {border_width} {border_color}");
 
+        // The rule's horizontal margin follows the alignment.
+        let margin = match align {
+            "left" => "0px",
+            "right" => "0px 0px 0px auto",
+            _ => "0px auto",
+        };
+
         // Ghost-table width: the fluid width resolved against the content box
         // (container minus horizontal padding).
-        let content_width = CONTAINER_WIDTH - horizontal_padding(padding);
+        let content_width = ctx.container_width - horizontal_padding(padding);
         let outlook_width = resolve_width(width, content_width);
 
+        // Outer <td>: container-background-color prepends a `background:` declaration.
+        let mut td_style = String::new();
+        if let Some(cbg) = container_background_color {
+            td_style.push_str(&format!("background:{cbg};"));
+        }
+        td_style.push_str(&format!(
+            "font-size:0px;padding:{padding};word-break:break-word;"
+        ));
+
+        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
         buf.push_str(&format!(
-            "<td align=\"{align}\" style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
+            "<p style=\"border-top:{border_top};font-size:1px;margin:{margin};width:{width};\"></p>"
         ));
         buf.push_str(&format!(
-            "<p style=\"border-top:{border_top};font-size:1px;margin:0px auto;width:{width};\"></p>"
-        ));
-        buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:{border_top};font-size:1px;margin:0px auto;width:{outlook_width}px;\" role=\"presentation\" width=\"{outlook_width}px\" ><tr><td style=\"height:0;line-height:0;\"> &nbsp;\n</td></tr></table><![endif]-->"
+            "<!--[if mso | IE]><table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:{border_top};font-size:1px;margin:{margin};width:{outlook_width}px;\" role=\"presentation\" width=\"{outlook_width}px\" ><tr><td style=\"height:0;line-height:0;\"> &nbsp;\n</td></tr></table><![endif]-->"
         ));
         buf.push_str("</td>");
         Ok(())

@@ -43,6 +43,20 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `hero` | `<mj-hero mode="fixed-height">` at body level: centered container + the `<v:image>`/mso ghost background, the `background` shorthand cell, and a nested `mj-hero-content` table holding an `mj-text` and `mj-button`. |
 | `carousel` | `<mj-carousel>` with three `<mj-carousel-image>`s: the radio-button markup (hidden inputs, thumbnails, prev/next controls, per-slide divs), the mso first-image fallback, and the large `.mj-carousel-*` `:checked` head stylesheet. |
 | `accordion` | `<mj-accordion>` with two `<mj-accordion-element>`s (title + text each): the `<label>`/checkbox collapsible markup, the `+`/`-` icon cells, and the static `.mj-accordion*` head stylesheet. |
+| `text_attrs` | `<mj-text>` with non-default `align`, `color`, `font-size/style/weight`, `line-height`, `letter-spacing`, `text-decoration/transform`, `height` (Outlook ghost cell), `padding`, `container-background-color`. Locks the align/text-align + font resolution and the conditional div declarations. |
+| `button_attrs` | `<mj-button>` with non-default box/typography attrs incl. `width`/`inner-padding`/`border` driving the computed `<a>` width (`calculateAWidth`), `height`, `letter-spacing`, `font-style`, and `container-background-color`. |
+| `image_attrs` | `<mj-image>` with `align`, `width`/`height`, `border`, `border-radius`, `padding`, `container-background-color`: themed `<img>` style + parsed `height` attribute. |
+| `section_attrs` | `<mj-section>` with `background-color`, `border`, `border-radius`, `padding`, `direction`, `text-align`: bg on ghost/div/table, rounded-clip, and the content-box (`600 − padding − border`) handed to columns. |
+| `column_attrs` | `<mj-column>` gutter mode (`background-color`, `border`, `border-radius`, `padding`, `vertical-align`): the extra gutter cell + the section ghost cell's mirrored vertical-align. |
+| `divider_attrs` | `<mj-divider>` with `border-*`, `width` (px), `align` (margin per alignment), `padding`, `container-background-color`. |
+| `spacer_attrs` | `<mj-spacer>` with `height`, `padding`, `container-background-color`. |
+| `table_attrs` | `<mj-table>` with `align`, `color`, `font-size`, `line-height`, `width`, `border`, `cellpadding/cellspacing` (cellspacing>0 → `border-collapse:separate`), `table-layout`, `padding`, `container-background-color`. |
+| `social_attrs` | `<mj-social>` forwarding `icon-size`, `border-radius`, `color`, `font-size`, `inner-padding`, plus `align`, `padding`, `container-background-color`. |
+| `hero_attrs` | `<mj-hero>` with non-default `background-position`, `vertical-align`, `height`, `padding` (fixed-height cell math). |
+| `navbar_attrs` | `<mj-navbar base-url align>` with links setting `color`, `font-size/weight/style`, `line-height`, `letter-spacing`, `text-decoration/transform`, `padding`. |
+| `accordion_attrs` | `<mj-accordion>` with `border`, `font-family`, `icon-position/width/height`, `padding`, and title/text `font-size`, `line-height`, `padding`, `color`, `background-color` resolved per child. |
+| `wrapper_attrs` | `<mj-wrapper>` with section-style `background-color`, `border`, `border-radius`, `padding`, `direction`, `text-align`; box width threaded to nested sections. |
+| `group_attrs` | `<mj-group>` with `background-color` (div + ghost `bgcolor`), `vertical-align` (div + section ghost cell), `direction`. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.

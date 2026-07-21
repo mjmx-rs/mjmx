@@ -1,0 +1,12 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-table align="center" color="#0000ff" font-size="16px" line-height="28px" width="80%" border="1px solid #999999" cellpadding="4" cellspacing="2" table-layout="fixed" padding="12px 8px" container-background-color="#eeeeff">
+          <tr><th>H</th></tr>
+          <tr><td>V</td></tr>
+        </mj-table>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

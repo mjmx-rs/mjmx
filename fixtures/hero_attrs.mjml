@@ -1,0 +1,7 @@
+<mjml>
+  <mj-body>
+    <mj-hero mode="fixed-height" height="250px" background-color="#334455" background-position="left top" padding="30px 10px" vertical-align="middle">
+      <mj-text>Hero attrs</mj-text>
+    </mj-hero>
+  </mj-body>
+</mjml>

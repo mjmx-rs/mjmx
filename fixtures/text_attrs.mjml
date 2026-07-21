@@ -1,0 +1,9 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text align="right" color="#ff0000" font-size="20px" font-style="italic" font-weight="bold" line-height="24px" letter-spacing="2px" text-decoration="underline" text-transform="uppercase" height="40px" padding="15px 30px" container-background-color="#eeeeee">Hello world</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

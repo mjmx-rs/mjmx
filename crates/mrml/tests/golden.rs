@@ -131,8 +131,26 @@ fn head_font_matches_mjml_reference() {
 }
 
 #[test]
+fn text_attrs_matches_mjml_reference() {
+    assert_golden(
+        "text_attrs",
+        fixture!("text_attrs.mjml"),
+        fixture!("text_attrs.html"),
+    );
+}
+
+#[test]
 fn img_matches_mjml_reference() {
     assert_golden("img", fixture!("img.mjml"), fixture!("img.html"));
+}
+
+#[test]
+fn image_attrs_matches_mjml_reference() {
+    assert_golden(
+        "image_attrs",
+        fixture!("image_attrs.mjml"),
+        fixture!("image_attrs.html"),
+    );
 }
 
 #[test]
@@ -154,8 +172,26 @@ fn divider_matches_mjml_reference() {
 }
 
 #[test]
+fn divider_attrs_matches_mjml_reference() {
+    assert_golden(
+        "divider_attrs",
+        fixture!("divider_attrs.mjml"),
+        fixture!("divider_attrs.html"),
+    );
+}
+
+#[test]
 fn spacer_matches_mjml_reference() {
     assert_golden("spacer", fixture!("spacer.mjml"), fixture!("spacer.html"));
+}
+
+#[test]
+fn spacer_attrs_matches_mjml_reference() {
+    assert_golden(
+        "spacer_attrs",
+        fixture!("spacer_attrs.mjml"),
+        fixture!("spacer_attrs.html"),
+    );
 }
 
 #[test]
@@ -164,8 +200,35 @@ fn button_matches_mjml_reference() {
 }
 
 #[test]
+fn button_attrs_matches_mjml_reference() {
+    assert_golden(
+        "button_attrs",
+        fixture!("button_attrs.mjml"),
+        fixture!("button_attrs.html"),
+    );
+}
+
+#[test]
+fn section_attrs_matches_mjml_reference() {
+    assert_golden(
+        "section_attrs",
+        fixture!("section_attrs.mjml"),
+        fixture!("section_attrs.html"),
+    );
+}
+
+#[test]
 fn twocol_matches_mjml_reference() {
     assert_golden("twocol", fixture!("twocol.mjml"), fixture!("twocol.html"));
+}
+
+#[test]
+fn column_attrs_matches_mjml_reference() {
+    assert_golden(
+        "column_attrs",
+        fixture!("column_attrs.mjml"),
+        fixture!("column_attrs.html"),
+    );
 }
 
 #[test]
@@ -176,6 +239,15 @@ fn raw_matches_mjml_reference() {
 #[test]
 fn group_matches_mjml_reference() {
     assert_golden("group", fixture!("group.mjml"), fixture!("group.html"));
+}
+
+#[test]
+fn group_attrs_matches_mjml_reference() {
+    assert_golden(
+        "group_attrs",
+        fixture!("group_attrs.mjml"),
+        fixture!("group_attrs.html"),
+    );
 }
 
 #[test]
@@ -197,13 +269,40 @@ fn wrapper_full_width_matches_mjml_reference() {
 }
 
 #[test]
+fn wrapper_attrs_matches_mjml_reference() {
+    assert_golden(
+        "wrapper_attrs",
+        fixture!("wrapper_attrs.mjml"),
+        fixture!("wrapper_attrs.html"),
+    );
+}
+
+#[test]
 fn table_matches_mjml_reference() {
     assert_golden("table", fixture!("table.mjml"), fixture!("table.html"));
 }
 
 #[test]
+fn table_attrs_matches_mjml_reference() {
+    assert_golden(
+        "table_attrs",
+        fixture!("table_attrs.mjml"),
+        fixture!("table_attrs.html"),
+    );
+}
+
+#[test]
 fn social_matches_mjml_reference() {
     assert_golden("social", fixture!("social.mjml"), fixture!("social.html"));
+}
+
+#[test]
+fn social_attrs_matches_mjml_reference() {
+    assert_golden(
+        "social_attrs",
+        fixture!("social_attrs.mjml"),
+        fixture!("social_attrs.html"),
+    );
 }
 
 #[test]
@@ -233,8 +332,26 @@ fn navbar_hamburger_matches_mjml_reference() {
 }
 
 #[test]
+fn navbar_attrs_matches_mjml_reference() {
+    assert_golden(
+        "navbar_attrs",
+        fixture!("navbar_attrs.mjml"),
+        fixture!("navbar_attrs.html"),
+    );
+}
+
+#[test]
 fn hero_matches_mjml_reference() {
     assert_golden("hero", fixture!("hero.mjml"), fixture!("hero.html"));
+}
+
+#[test]
+fn hero_attrs_matches_mjml_reference() {
+    assert_golden(
+        "hero_attrs",
+        fixture!("hero_attrs.mjml"),
+        fixture!("hero_attrs.html"),
+    );
 }
 
 #[test]
@@ -255,6 +372,15 @@ fn accordion_matches_mjml_reference() {
         "accordion",
         fixture!("accordion.mjml"),
         fixture!("accordion.html"),
+    );
+}
+
+#[test]
+fn accordion_attrs_matches_mjml_reference() {
+    assert_golden(
+        "accordion_attrs",
+        fixture!("accordion_attrs.mjml"),
+        fixture!("accordion_attrs.html"),
     );
 }
 

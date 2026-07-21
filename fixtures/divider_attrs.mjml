@@ -1,0 +1,9 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-divider border-color="#ff0000" border-style="dashed" border-width="3px" width="200px" align="left" padding="5px 40px" container-background-color="#f0f0f0" />
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

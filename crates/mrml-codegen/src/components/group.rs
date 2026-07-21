@@ -47,17 +47,35 @@ impl<'a> Render<'a> for Group<'a> {
             .semantic
             .attribute(self.element, "direction", Some("ltr"))
             .unwrap_or("ltr");
+        // vertical-align and background-color have no default: emitted only when set.
+        let vertical_align = ctx.semantic.attribute(self.element, "vertical-align", None);
+        let background_color = ctx
+            .semantic
+            .attribute(self.element, "background-color", None);
 
         // The group div is always inline-block at 100% (its outer ghost cell sizes it);
         // note `font-size:0`/`line-height:0` (not `0px`), unlike a column.
+        let mut div_style = format!(
+            "font-size:0;line-height:0;text-align:left;display:inline-block;width:100%;direction:{direction};"
+        );
+        if let Some(va) = vertical_align {
+            div_style.push_str(&format!("vertical-align:{va};"));
+        }
+        if let Some(bg) = background_color {
+            div_style.push_str(&format!("background-color:{bg};"));
+        }
         buf.push_str(&format!(
-            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0;line-height:0;text-align:left;display:inline-block;width:100%;direction:{direction};\">"
+            "<div class=\"{class} mj-outlook-group-fix\" style=\"{div_style}\">"
         ));
 
-        // The group's own Outlook ghost table holding one cell per column.
-        buf.push_str(
-            "<!--[if mso | IE]><table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><![endif]-->",
-        );
+        // The group's own Outlook ghost table holding one cell per column; it carries
+        // the group background as a `bgcolor`.
+        let mso_bgcolor = background_color
+            .map(|bg| format!("bgcolor=\"{bg}\" "))
+            .unwrap_or_default();
+        buf.push_str(&format!(
+            "<!--[if mso | IE]><table {mso_bgcolor}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><![endif]-->"
+        ));
 
         let columns: Vec<&Element> = self
             .element

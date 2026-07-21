@@ -55,8 +55,23 @@ impl<'a> Render<'a> for Table<'a> {
         let border = attr("border", BORDER);
         let cellpadding = attr("cellpadding", CELLPADDING);
         let cellspacing = attr("cellspacing", CELLSPACING);
+        let container_background_color =
+            ctx.semantic
+                .attribute(self.element, "container-background-color", None);
         // mjml only emits `role` when set (no default); it is omitted otherwise.
         let role = self.element.attr("role");
+
+        // Non-zero cellspacing forces `border-collapse:separate` on the table.
+        let border_collapse = if cellspacing
+            .trim_end_matches("px")
+            .parse::<u32>()
+            .unwrap_or(0)
+            > 0
+        {
+            "border-collapse:separate;"
+        } else {
+            ""
+        };
 
         // The inner rows: captured verbatim as one text run, emitted as-is.
         let mut content = String::new();
@@ -66,9 +81,14 @@ impl<'a> Render<'a> for Table<'a> {
             }
         }
 
-        buf.push_str(&format!(
-            "<td align=\"{align}\" style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
+        let mut td_style = String::new();
+        if let Some(cbg) = container_background_color {
+            td_style.push_str(&format!("background:{cbg};"));
+        }
+        td_style.push_str(&format!(
+            "font-size:0px;padding:{padding};word-break:break-word;"
         ));
+        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
         buf.push_str(&format!(
             "<table cellpadding=\"{cellpadding}\" cellspacing=\"{cellspacing}\""
         ));
@@ -76,7 +96,7 @@ impl<'a> Render<'a> for Table<'a> {
             buf.push_str(&format!(" role=\"{role}\""));
         }
         buf.push_str(&format!(
-            " width=\"{width}\" border=\"0\" style=\"color:{color};font-family:{font_family};font-size:{font_size};line-height:{line_height};table-layout:{table_layout};width:{width};border:{border};\">"
+            " width=\"{width}\" border=\"0\" style=\"color:{color};font-family:{font_family};font-size:{font_size};line-height:{line_height};table-layout:{table_layout};width:{width};border:{border};{border_collapse}\">"
         ));
         buf.push_str(&content);
         buf.push_str("</table></td>");

@@ -1,0 +1,11 @@
+<mjml>
+  <mj-body>
+    <mj-wrapper background-color="#101820" border="2px solid #ffcc00" border-radius="10px" padding="25px 20px" text-align="left" direction="rtl">
+      <mj-section>
+        <mj-column>
+          <mj-text>Wrapped</mj-text>
+        </mj-column>
+      </mj-section>
+    </mj-wrapper>
+  </mj-body>
+</mjml>

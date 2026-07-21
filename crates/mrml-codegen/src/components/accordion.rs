@@ -106,7 +106,7 @@ impl<'a> Render<'a> for Accordion<'a> {
             .element_children()
             .filter(|el| el.tag == MjmlTag::MjAccordionElement)
         {
-            render_element_row(el, inherited, buf);
+            render_element_row(el, inherited, ctx, buf);
         }
         buf.push_str("</tbody></table></td>");
         Ok(())
@@ -114,7 +114,12 @@ impl<'a> Render<'a> for Accordion<'a> {
 }
 
 /// Render one `<mj-accordion-element>` row (the `<tr><td><label>…` block).
-fn render_element_row(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &mut String) {
+fn render_element_row<'a>(
+    element: &'a Element<'a>,
+    inh: AccordionInherited<'a>,
+    ctx: &RenderContext<'a>,
+    buf: &mut String,
+) {
     buf.push_str("<tr><td style=\"padding:0px;\">");
     buf.push_str("<label class=\"mj-accordion-element\" style=\"font-size:13px;\">");
     buf.push_str(
@@ -123,8 +128,8 @@ fn render_element_row(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &
     buf.push_str("<div>");
     for child in element.element_children() {
         match child.tag {
-            MjmlTag::MjAccordionTitle => render_title(child, inh, buf),
-            MjmlTag::MjAccordionText => render_text(child, inh, buf),
+            MjmlTag::MjAccordionTitle => render_title(child, inh, ctx, buf),
+            MjmlTag::MjAccordionText => render_text(child, inh, ctx, buf),
             _ => {}
         }
     }
@@ -132,8 +137,26 @@ fn render_element_row(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &
 }
 
 /// Render a `<mj-accordion-title>`.
-fn render_title(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &mut String) {
+fn render_title<'a>(
+    element: &'a Element<'a>,
+    inh: AccordionInherited<'a>,
+    ctx: &RenderContext<'a>,
+    buf: &mut String,
+) {
+    let get = |name: &str, default: &'a str| {
+        ctx.semantic
+            .attribute(element, name, Some(default))
+            .unwrap_or(default)
+    };
+    let opt = |name: &str| ctx.semantic.attribute(element, name, None);
+
     let content = ending_content(element);
+    let font_size = get("font-size", TITLE_FONT_SIZE);
+    let font_family = get("font-family", inh.font_family);
+    let padding = get("padding", TITLE_PADDING);
+    let color = opt("color");
+    let background_color = opt("background-color");
+
     buf.push_str("<div class=\"mj-accordion-title\">");
     buf.push_str(&format!(
         "<table cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;border-bottom:{};\">",
@@ -141,13 +164,27 @@ fn render_title(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &mut St
     ));
     buf.push_str("<tbody><tr>");
 
-    let title_td = format!(
-        "<td style=\"width:100%;font-size:{TITLE_FONT_SIZE};font-family:{};padding:{TITLE_PADDING};\"> {content} </td>",
-        inh.font_family
-    );
+    // Title cell: width, [background-color], [color], font-size, font-family, padding.
+    let mut title_style = String::from("width:100%;");
+    if let Some(bg) = background_color {
+        title_style.push_str(&format!("background-color:{bg};"));
+    }
+    if let Some(c) = color {
+        title_style.push_str(&format!("color:{c};"));
+    }
+    title_style.push_str(&format!(
+        "font-size:{font_size};font-family:{font_family};padding:{padding};"
+    ));
+    let title_td = format!("<td style=\"{title_style}\"> {content} </td>");
+
+    // Icon cell carries the title's background-color as a `background:` declaration.
+    let mut icon_style = String::from("padding:16px;");
+    if let Some(bg) = background_color {
+        icon_style.push_str(&format!("background:{bg};"));
+    }
+    icon_style.push_str(&format!("vertical-align:{};", inh.icon_align));
     let icon_td = format!(
-        "<!--[if !mso | IE]><!--><td class=\"mj-accordion-ico\" style=\"padding:16px;vertical-align:{};\"><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-more\" style=\"display:none;width:{};height:{};\" /><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-less\" style=\"display:none;width:{};height:{};\" /></td><!--<![endif]-->",
-        inh.icon_align,
+        "<!--[if !mso | IE]><!--><td class=\"mj-accordion-ico\" style=\"{icon_style}\"><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-more\" style=\"display:none;width:{};height:{};\" /><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-less\" style=\"display:none;width:{};height:{};\" /></td><!--<![endif]-->",
         inh.icon_wrapped_url,
         inh.icon_wrapped_alt,
         inh.icon_width,
@@ -170,18 +207,46 @@ fn render_title(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &mut St
 }
 
 /// Render a `<mj-accordion-text>`.
-fn render_text(element: &Element<'_>, inh: AccordionInherited<'_>, buf: &mut String) {
+fn render_text<'a>(
+    element: &'a Element<'a>,
+    inh: AccordionInherited<'a>,
+    ctx: &RenderContext<'a>,
+    buf: &mut String,
+) {
+    let get = |name: &str, default: &'a str| {
+        ctx.semantic
+            .attribute(element, name, Some(default))
+            .unwrap_or(default)
+    };
+    let opt = |name: &str| ctx.semantic.attribute(element, name, None);
+
     let content = ending_content(element);
+    let font_size = get("font-size", TEXT_FONT_SIZE);
+    let font_family = get("font-family", inh.font_family);
+    let line_height = get("line-height", TEXT_LINE_HEIGHT);
+    let padding = get("padding", TEXT_PADDING);
+    let color = opt("color");
+    let background_color = opt("background-color");
+
     buf.push_str("<div class=\"mj-accordion-content\">");
     buf.push_str(&format!(
         "<table cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;border-bottom:{};\">",
         inh.border
     ));
     buf.push_str("<tbody><tr>");
-    buf.push_str(&format!(
-        "<td style=\"font-size:{TEXT_FONT_SIZE};font-family:{};line-height:{TEXT_LINE_HEIGHT};padding:{TEXT_PADDING};\"> {content} </td>",
-        inh.font_family
+    // Text cell: [background], font-size, font-family, line-height, [color], padding.
+    let mut text_style = String::new();
+    if let Some(bg) = background_color {
+        text_style.push_str(&format!("background:{bg};"));
+    }
+    text_style.push_str(&format!(
+        "font-size:{font_size};font-family:{font_family};line-height:{line_height};"
     ));
+    if let Some(c) = color {
+        text_style.push_str(&format!("color:{c};"));
+    }
+    text_style.push_str(&format!("padding:{padding};"));
+    buf.push_str(&format!("<td style=\"{text_style}\"> {content} </td>"));
     buf.push_str("</tr></tbody></table></div>");
 }
 

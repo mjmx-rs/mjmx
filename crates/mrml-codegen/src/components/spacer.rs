@@ -27,16 +27,23 @@ impl<'a> Render<'a> for Spacer<'a> {
             .semantic
             .attribute(self.element, "height", Some(HEIGHT))
             .unwrap_or(HEIGHT);
-        // Padding is unset by default; a resolved value (inline / mj-attributes) is
-        // added to the cell.
+        // Padding and container-background-color are unset by default; a resolved value
+        // (inline / mj-attributes) is added to the cell.
         let padding = ctx.semantic.attribute(self.element, "padding", None);
+        let container_background_color =
+            ctx.semantic
+                .attribute(self.element, "container-background-color", None);
 
-        match padding {
-            Some(padding) => buf.push_str(&format!(
-                "<td style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
-            )),
-            None => buf.push_str("<td style=\"font-size:0px;word-break:break-word;\">"),
+        let mut td_style = String::new();
+        if let Some(cbg) = container_background_color {
+            td_style.push_str(&format!("background:{cbg};"));
         }
+        td_style.push_str("font-size:0px;");
+        if let Some(padding) = padding {
+            td_style.push_str(&format!("padding:{padding};"));
+        }
+        td_style.push_str("word-break:break-word;");
+        buf.push_str(&format!("<td style=\"{td_style}\">"));
         buf.push_str(&format!(
             "<div style=\"height:{height};line-height:{height};\">&#8202;</div>"
         ));

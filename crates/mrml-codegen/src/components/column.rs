@@ -53,25 +53,73 @@ impl<'a> Render<'a> for Column<'a> {
             format!("width: {pct}% !important;\n        max-width: {pct}%;"),
         );
 
+        // Themeable attributes. `vertical-align` defaults to `top`; the others have no
+        // default and only appear when set.
+        let opt = |name: &str| ctx.semantic.attribute(self.element, name, None);
+        let vertical_align = ctx
+            .semantic
+            .attribute(self.element, "vertical-align", Some("top"))
+            .unwrap_or("top");
+        let background_color = opt("background-color");
+        let border = opt("border");
+        let border_radius = opt("border-radius");
+        // Any padding turns the column into a "gutter" column: the content is wrapped
+        // in an extra cell that carries background/border/padding.
+        let padding = opt("padding");
+
         // Inline outlook-div width: a section column stacks on mobile (100%, share via
         // the media query); a group column holds its share inline (no stacking).
         let div_width = if self.in_group { pct } else { 100 };
         buf.push_str(&format!(
-            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:{div_width}%;\">"
+            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:{vertical_align};width:{div_width}%;\">"
         ));
-        buf.push_str(
-            "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"vertical-align:top;\" width=\"100%\">",
-        );
-        buf.push_str("<tbody>");
 
-        // Each content child sits in its own <tr>; the child renders its own <td>.
-        for child in self.element.element_children() {
-            buf.push_str("<tr>");
-            render_element(child, ctx, buf)?;
-            buf.push_str("</tr>");
+        // The box declarations shared by the no-gutter table and the gutter cell, in
+        // mjml's order: background-color, border, border-radius, vertical-align.
+        let mut box_style = String::new();
+        if let Some(bg) = background_color {
+            box_style.push_str(&format!("background-color:{bg};"));
         }
+        if let Some(b) = border {
+            box_style.push_str(&format!("border:{b};"));
+        }
+        if let Some(br) = border_radius {
+            box_style.push_str(&format!("border-radius:{br};"));
+        }
+        box_style.push_str(&format!("vertical-align:{vertical_align};"));
 
-        buf.push_str("</tbody></table></div>");
+        if let Some(padding) = padding {
+            // Gutter column: outer table wraps a cell that holds the box styles.
+            buf.push_str(
+                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" width=\"100%\" style=\"border-collapse:separate;\">",
+            );
+            buf.push_str("<tbody><tr>");
+            buf.push_str(&format!(
+                "<td style=\"{box_style}border-collapse:separate;padding:{padding};\">"
+            ));
+            buf.push_str(
+                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"\" width=\"100%\">",
+            );
+            buf.push_str("<tbody>");
+            for child in self.element.element_children() {
+                buf.push_str("<tr>");
+                render_element(child, ctx, buf)?;
+                buf.push_str("</tr>");
+            }
+            buf.push_str("</tbody></table></td></tr></tbody></table></div>");
+        } else {
+            // No gutter: the box styles sit directly on the single content table.
+            buf.push_str(&format!(
+                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{box_style}\" width=\"100%\">"
+            ));
+            buf.push_str("<tbody>");
+            for child in self.element.element_children() {
+                buf.push_str("<tr>");
+                render_element(child, ctx, buf)?;
+                buf.push_str("</tr>");
+            }
+            buf.push_str("</tbody></table></div>");
+        }
         Ok(())
     }
 }

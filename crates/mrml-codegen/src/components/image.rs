@@ -9,6 +9,8 @@ use crate::render::{Render, RenderResult};
 const ALIGN: &str = "center";
 const PADDING: &str = "10px 25px";
 const HEIGHT: &str = "auto";
+const BORDER: &str = "0";
+const FONT_SIZE: &str = "13px";
 const TARGET: &str = "_blank";
 const ALT: &str = "";
 
@@ -32,13 +34,18 @@ impl<'a> Render<'a> for Image<'a> {
                 .attribute(self.element, name, Some(default))
                 .unwrap_or(default)
         };
+        let opt = |name: &str| ctx.semantic.attribute(self.element, name, None);
 
         let align = attr("align", ALIGN);
         let padding = attr("padding", PADDING);
         let alt = attr("alt", ALT);
         let src = self.element.attr("src").unwrap_or("");
         let height = attr("height", HEIGHT);
-        let width = self.element.attr("width");
+        let border = attr("border", BORDER);
+        let border_radius = opt("border-radius");
+        let font_size = attr("font-size", FONT_SIZE);
+        let container_background_color = opt("container-background-color");
+        let width = opt("width");
         let href = self.element.attr("href");
         let target = attr("target", TARGET);
 
@@ -52,10 +59,23 @@ impl<'a> Render<'a> for Image<'a> {
         // Pixel width used to size the outer <td> (mjml renders the <img> at width:100%
         // of this cell). Falls back to the container content width when unset.
         let px = width.and_then(parse_px).unwrap_or(550);
+        // The <img> `height` HTML attribute: numeric px, or the literal `auto`.
+        let height_attr = if height == "auto" {
+            "auto".to_string()
+        } else {
+            parse_px(height).map_or_else(|| height.to_string(), |h| h.to_string())
+        };
 
-        buf.push_str(&format!(
-            "<td align=\"{align}\" style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
+        // Outer <td>: container-background-color prepends a `background:` declaration.
+        let mut td_style = String::new();
+        if let Some(cbg) = container_background_color {
+            td_style.push_str(&format!("background:{cbg};"));
+        }
+        td_style.push_str(&format!(
+            "font-size:0px;padding:{padding};word-break:break-word;"
         ));
+        buf.push_str(&format!("<td align=\"{align}\" style=\"{td_style}\">"));
+
         buf.push_str(
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"border-collapse:collapse;border-spacing:0px;\">",
         );
@@ -66,8 +86,16 @@ impl<'a> Render<'a> for Image<'a> {
             buf.push_str(&format!("<a href=\"{href}\" target=\"{target}\">"));
         }
 
+        // <img> style: border, optional border-radius, then the fixed run.
+        let mut img_style = format!("border:{border};");
+        if let Some(br) = border_radius {
+            img_style.push_str(&format!("border-radius:{br};"));
+        }
+        img_style.push_str(&format!(
+            "display:block;outline:none;text-decoration:none;height:{height};width:100%;font-size:{font_size};"
+        ));
         buf.push_str(&format!(
-            "<img alt=\"{alt}\" src=\"{src}\" style=\"border:0;display:block;outline:none;text-decoration:none;height:auto;width:100%;font-size:13px;\" width=\"{px}\" height=\"{height}\" />"
+            "<img alt=\"{alt}\" src=\"{src}\" style=\"{img_style}\" width=\"{px}\" height=\"{height_attr}\" />"
         ));
 
         if href.is_some() {
