@@ -131,6 +131,39 @@ fn head_font_matches_mjml_reference() {
 }
 
 #[test]
+fn img_matches_mjml_reference() {
+    assert_golden("img", fixture!("img.mjml"), fixture!("img.html"));
+}
+
+#[test]
+fn img_link_matches_mjml_reference() {
+    assert_golden(
+        "img_link",
+        fixture!("img_link.mjml"),
+        fixture!("img_link.html"),
+    );
+}
+
+#[test]
+fn divider_matches_mjml_reference() {
+    assert_golden(
+        "divider",
+        fixture!("divider.mjml"),
+        fixture!("divider.html"),
+    );
+}
+
+#[test]
+fn spacer_matches_mjml_reference() {
+    assert_golden("spacer", fixture!("spacer.mjml"), fixture!("spacer.html"));
+}
+
+#[test]
+fn button_matches_mjml_reference() {
+    assert_golden("button", fixture!("button.mjml"), fixture!("button.html"));
+}
+
+#[test]
 fn normalize_is_strict_about_content() {
     // The comparator must NOT be so tolerant that wrong content passes.
     assert_ne!(

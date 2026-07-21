@@ -25,6 +25,11 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `head_breakpoint` | `<mj-breakpoint width="320px">` driving the responsive media queries. |
 | `head_title_preview` | `<mj-title>` (`<title>` + `aria-label`) and `<mj-preview>` preheader. |
 | `head_font` | Custom `<mj-font>` imported because `<mj-text font-family>` references it. |
+| `img` | `<mj-image>` with a fixed `width`: aligned `<td>` + inner table + `<img>`, plus the `mj-full-width-mobile` head style. |
+| `img_link` | `<mj-image href>` wrapping the `<img>` in an `<a target="_blank">`. |
+| `divider` | `<mj-divider>` `<p>` rule + the `<!--[if mso | IE]>` ghost table sized to the content box. |
+| `spacer` | `<mj-spacer height>` div/table vertical whitespace. |
+| `button` | `<mj-button href>`: table + `<a>`, registering the default Ubuntu font in the head. |
 
-All six render byte-identical (under the whitespace-normalized comparator) to the
+All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.

@@ -11,7 +11,7 @@ use mrml_diagnostics::Diagnostic;
 use mrml_span::GetSpan;
 use mrml_syntax::MjmlTag;
 
-use crate::components::{Body, Column, Section, Text};
+use crate::components::{Body, Button, Column, Divider, Image, Section, Spacer, Text};
 use crate::context::RenderContext;
 
 /// The result of rendering: unit on success, a [`Diagnostic`] on failure.
@@ -42,6 +42,10 @@ pub fn render_element<'a>(
         // A bare column outside a section defaults to full width.
         MjmlTag::MjColumn => Column::new(element, 100).render(ctx, buf),
         MjmlTag::MjText => Text::new(element).render(ctx, buf),
+        MjmlTag::MjImage => Image::new(element).render(ctx, buf),
+        MjmlTag::MjDivider => Divider::new(element).render(ctx, buf),
+        MjmlTag::MjSpacer => Spacer::new(element).render(ctx, buf),
+        MjmlTag::MjButton => Button::new(element).render(ctx, buf),
         _ => Err(unsupported(element)),
     }
 }
@@ -53,5 +57,7 @@ pub(crate) fn unsupported(element: &Element<'_>) -> Diagnostic {
         element.raw_tag.as_str()
     ))
     .with_label(element.span(), "unsupported component in this build")
-    .with_help("the M4 slice renders only mj-body, mj-section, mj-column and mj-text")
+    .with_help(
+        "this build renders mj-body, mj-section, mj-column, mj-text, mj-image, mj-divider, mj-spacer and mj-button",
+    )
 }

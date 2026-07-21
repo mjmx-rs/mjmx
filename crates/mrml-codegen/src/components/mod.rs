@@ -7,11 +7,19 @@
 //! they read as component defaults rather than fixture-specific magic.
 
 mod body;
+mod button;
 mod column;
+mod divider;
+mod image;
 mod section;
+mod spacer;
 mod text;
 
 pub use body::Body;
+pub use button::Button;
 pub use column::Column;
+pub use divider::Divider;
+pub use image::Image;
 pub use section::Section;
+pub use spacer::Spacer;
 pub use text::Text;
