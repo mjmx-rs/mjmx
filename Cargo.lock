@@ -36,6 +36,17 @@ name = "mrml-index"
 version = "0.1.0"
 
 [[package]]
+name = "mrml-parser"
+version = "0.1.0"
+dependencies = [
+ "mrml-allocator",
+ "mrml-ast",
+ "mrml-diagnostics",
+ "mrml-span",
+ "mrml-syntax",
+]
+
+[[package]]
 name = "mrml-span"
 version = "0.1.0"
 

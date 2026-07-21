@@ -17,6 +17,7 @@ mrml-diagnostics = { version = "0.1.0", path = "crates/mrml-diagnostics" }
 mrml-syntax = { version = "0.1.0", path = "crates/mrml-syntax" }
 mrml-index = { version = "0.1.0", path = "crates/mrml-index" }
 mrml-ast = { version = "0.1.0", path = "crates/mrml-ast" }
+mrml-parser = { version = "0.1.0", path = "crates/mrml-parser" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 
 [workspace.lints.clippy]
