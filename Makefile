@@ -19,7 +19,7 @@ WASM_TARGET := wasm32-unknown-unknown
 WASM_LIB := target/$(WASM_TARGET)/release/mjmx_wasm.wasm
 WASM_OUT := $(WASM_DIR)/pkg
 
-.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-test
+.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-test lsp lsp-test
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -65,6 +65,13 @@ wasm: ## Build the WebAssembly package
 
 wasm-test: wasm ## Run the wasm smoke test
 	$(NODE) $(WASM_DIR)/test/smoke.mjs
+
+lsp: ## Build the language server
+	$(CARGO) build -p mjmx-language-server --release
+	@echo "built target/release/mjmx-language-server"
+
+lsp-test: ## Run the language server smoke test
+	$(CARGO) test -p mjmx-language-server --test lsp_smoke -- --nocapture
 
 doc: ## Build workspace documentation
 	$(CARGO) doc --workspace --no-deps
