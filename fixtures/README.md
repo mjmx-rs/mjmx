@@ -61,6 +61,16 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs`.
 
+**`include/` (mj-include).** `include/main.mjml` uses `<mj-include path="./_section.mjml" />`
+to splice a partial (`include/_section.mjml`, a bare `<mj-section>` fragment with no
+`<mjml>` root) between two inline sections. The golden `include/main.html` was generated
+the same way as every other fixture — `npx --yes mjml@4 fixtures/include/main.mjml -o
+fixtures/include/main.html` — because mjml resolves the include from the input file's
+directory. The `include_matches_mjml_reference` test drives it through
+`mjmx::render_file` (not `render_default`), which resolves `<mj-include>` against the
+file's parent directory via `mjmx-transformer`'s `LocalLoader`; a string passed to
+`render`/`render_default` has no base directory and cannot resolve relative includes.
+
 **Note on `navbar_hamburger`:** mjml stamps the checkbox/label pair with a per-navbar
 *random* 16-hex-digit id (`genRandomHexString(16)`), which is non-reproducible. The
 vendored golden's id is pinned to `0000000000000000` — the deterministic value our

@@ -121,11 +121,13 @@ name = "mjmx"
 version = "0.1.0"
 dependencies = [
  "mjmx-allocator",
+ "mjmx-ast",
  "mjmx-codegen",
  "mjmx-diagnostics",
  "mjmx-html-compare",
  "mjmx-linter",
  "mjmx-parser",
+ "mjmx-transformer",
 ]
 
 [[package]]
@@ -222,6 +224,30 @@ version = "0.1.0"
 [[package]]
 name = "mjmx-syntax"
 version = "0.1.0"
+
+[[package]]
+name = "mjmx-transformer"
+version = "0.1.0"
+dependencies = [
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-diagnostics",
+ "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
+ "mjmx-traverse",
+]
+
+[[package]]
+name = "mjmx-traverse"
+version = "0.1.0"
+dependencies = [
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
+]
 
 [[package]]
 name = "once_cell_polyfill"

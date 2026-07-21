@@ -13,6 +13,8 @@ mjmx-allocator.workspace = true
 mjmx-parser.workspace = true
 mjmx-codegen.workspace = true
 mjmx-linter.workspace = true
+mjmx-transformer.workspace = true
+mjmx-ast.workspace = true
 mjmx-diagnostics.workspace = true
 
 [dev-dependencies]

@@ -1,0 +1,21 @@
+[package]
+name = "mjmx-traverse"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Read-only AST visitor for mjmx: the shared traversal other tools (linter, formatter, LSP) adopt."
+
+[dependencies]
+mjmx-ast.workspace = true
+mjmx-span.workspace = true
+
+[dev-dependencies]
+mjmx-allocator.workspace = true
+mjmx-parser.workspace = true
+mjmx-syntax.workspace = true
+
+[lints]
+workspace = true

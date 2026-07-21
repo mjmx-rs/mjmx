@@ -330,6 +330,24 @@ fn accordion_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn include_matches_mjml_reference() {
+    // `render_file` resolves the `<mj-include>` in main.mjml against the file's own
+    // directory (via the LocalLoader), exactly as the mjml CLI did when generating the
+    // vendored golden.
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/include/main.mjml"
+    );
+    let rendered = mjmx::render_file(std::path::Path::new(path), &mjmx::RenderOptions::default())
+        .unwrap_or_else(|e| panic!("include/main.mjml should render: {e:?}"));
+
+    let golden = fixture!("include/main.html");
+    if let Err(mismatch) = mjmx_html_compare::compare(golden, &rendered) {
+        panic!("include: rendered HTML does not match golden reference.\n{mismatch}");
+    }
+}
+
+#[test]
 fn comparator_rejects_tampered_golden() {
     // The real golden must compare equal to itself (sanity), but the comparator
     // must NOT be so tolerant that a tampered golden slips through: flipping a

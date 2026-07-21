@@ -1,0 +1,5 @@
+<mj-section background-color="#f0f0f0">
+  <mj-column>
+    <mj-text font-size="14px" color="#333333">Included section content.</mj-text>
+  </mj-column>
+</mj-section>

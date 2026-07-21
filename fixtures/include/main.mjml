@@ -1,0 +1,15 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Before include.</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-include path="./_section.mjml" />
+    <mj-section>
+      <mj-column>
+        <mj-text>After include.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

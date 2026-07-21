@@ -21,6 +21,8 @@ mjmx-parser = { version = "0.1.0", path = "crates/mjmx-parser" }
 mjmx-semantic = { version = "0.1.0", path = "crates/mjmx-semantic" }
 mjmx-codegen = { version = "0.1.0", path = "crates/mjmx-codegen" }
 mjmx-linter = { version = "0.1.0", path = "crates/mjmx-linter" }
+mjmx-traverse = { version = "0.1.0", path = "crates/mjmx-traverse" }
+mjmx-transformer = { version = "0.1.0", path = "crates/mjmx-transformer" }
 mjmx-html-compare = { version = "0.1.0", path = "crates/mjmx-html-compare" }
 mjmx = { version = "0.1.0", path = "crates/mjmx" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }

@@ -133,7 +133,14 @@ fn run_render(args: &RenderArgs) -> ExitCode {
         minify: args.minify,
     };
 
-    let html = match mjmx::render(&source, &options) {
+    // A file input has a base directory, so `<mj-include>` resolves relative to it via
+    // `render_file`; stdin has no base directory and uses the plain string renderer.
+    let rendered = match args.input.as_ref() {
+        Some(path) => mjmx::render_file(path, &options),
+        None => mjmx::render(&source, &options),
+    };
+
+    let html = match rendered {
         Ok(html) => html,
         Err(diagnostics) => {
             print_diagnostics(&diagnostics);

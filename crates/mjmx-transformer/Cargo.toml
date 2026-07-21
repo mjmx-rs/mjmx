@@ -1,0 +1,21 @@
+[package]
+name = "mjmx-transformer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "MJML-to-MJML transform passes for mjmx: mj-include resolution with a pluggable loader."
+
+[dependencies]
+mjmx-ast.workspace = true
+mjmx-parser.workspace = true
+mjmx-allocator.workspace = true
+mjmx-span.workspace = true
+mjmx-syntax.workspace = true
+mjmx-diagnostics.workspace = true
+mjmx-traverse.workspace = true
+
+[lints]
+workspace = true
