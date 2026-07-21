@@ -72,7 +72,15 @@ pub fn render_document<'a>(
         dir = ctx.dir,
     ));
     out.push_str(&render_head(&ctx, &title, &body_buf));
-    out.push_str("<body style=\"word-spacing:normal;\">");
+    // mjml's `setBackgroundColor` from <mj-body background-color> lands here, appended
+    // after the always-present word-spacing declaration.
+    let body_background = match &ctx.body_background_color {
+        Some(color) => format!("background-color:{color};"),
+        None => String::new(),
+    };
+    out.push_str(&format!(
+        "<body style=\"word-spacing:normal;{body_background}\">"
+    ));
     out.push_str(&body_buf);
     out.push_str("</body></html>");
     Ok(merge_outlook_conditionals(&out))

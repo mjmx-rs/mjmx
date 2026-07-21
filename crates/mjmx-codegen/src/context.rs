@@ -71,6 +71,11 @@ pub struct RenderContext<'a> {
     /// 600px` (the `<mj-body>` width). Each layout container saves, narrows, and
     /// restores it around its children.
     pub container_width: u32,
+    /// The `<mj-body background-color>`, once resolved by the body renderer. mjml's
+    /// `setBackgroundColor` hands this to document assembly, which appends it to the
+    /// `<body style>` (`word-spacing:normal;background-color:…;`). `None` when unset,
+    /// which is mjml's default (no `background-color` default attribute on `mj-body`).
+    pub body_background_color: Option<String>,
     /// Aggregated head data and the attribute resolver.
     pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
@@ -92,6 +97,7 @@ impl<'a> RenderContext<'a> {
             dir: "auto".to_string(),
             // mjml default: <mj-body width> is 600px.
             container_width: 600,
+            body_background_color: None,
             semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),

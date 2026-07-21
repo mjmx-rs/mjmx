@@ -20,6 +20,8 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | Fixture | Exercises |
 | --- | --- |
 | `slice` | The M4 slice: `mj-body` / `mj-section` / `mj-column` / `mj-text`, no head. |
+| `body_attrs` | `<mj-body background-color width css-class>`: the colour on both `<body style>` and the ARIA wrapper `<div>`, the wrapper `class`, and the 500px container width threaded into the section/column. |
+| `body_attrs_head` | The same `<mj-body>` attributes supplied via `<mj-attributes><mj-body …>` instead of inline, proving they resolve through the semantic layer. |
 | `attrs_all` | `<mj-attributes>` with `<mj-all font-family>` + per-tag `<mj-text color>`. |
 | `attrs_class` | `<mj-class name="blue" color>` applied via `mj-class="blue"`. |
 | `head_breakpoint` | `<mj-breakpoint width="320px">` driving the responsive media queries. |

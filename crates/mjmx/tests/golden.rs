@@ -177,6 +177,24 @@ fn column_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn body_attrs_matches_mjml_reference() {
+    assert_golden(
+        "body_attrs",
+        fixture!("body_attrs.mjml"),
+        fixture!("body_attrs.html"),
+    );
+}
+
+#[test]
+fn body_attrs_head_matches_mjml_reference() {
+    assert_golden(
+        "body_attrs_head",
+        fixture!("body_attrs_head.mjml"),
+        fixture!("body_attrs_head.html"),
+    );
+}
+
+#[test]
 fn raw_matches_mjml_reference() {
     assert_golden("raw", fixture!("raw.mjml"), fixture!("raw.html"));
 }
