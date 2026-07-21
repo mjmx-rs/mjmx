@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/ryeasin03/mrml"
+authors = ["ryeasin03 <ryeasin03@gmail.com>"]
+
+[workspace.dependencies]
+mrml-allocator = { version = "0.1.0", path = "crates/mrml-allocator" }
+mrml-span = { version = "0.1.0", path = "crates/mrml-span" }
+mrml-diagnostics = { version = "0.1.0", path = "crates/mrml-diagnostics" }
+bumpalo = { version = "3", features = ["collections", "boxed"] }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
