@@ -21,7 +21,11 @@ path = "src/main.rs"
 [dependencies]
 mjmx.workspace = true
 mjmx-dev-server.workspace = true
+mjmx-language-server.workspace = true
 clap.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
 
 [lints]
 workspace = true

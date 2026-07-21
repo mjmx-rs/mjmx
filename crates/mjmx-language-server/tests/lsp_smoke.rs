@@ -158,7 +158,11 @@ fn a_real_session_over_stdio_publishes_diagnostics_for_a_bad_document() {
         initialize["result"]["serverInfo"]["name"],
         json!("mjmx-language-server")
     );
-    assert_eq!(capabilities["textDocumentSync"], json!(1), "full sync");
+    assert_eq!(
+        capabilities["textDocumentSync"],
+        json!(2),
+        "incremental sync"
+    );
     assert!(capabilities["completionProvider"].is_object());
     assert_eq!(capabilities["hoverProvider"], json!(true));
     assert_eq!(capabilities["documentFormattingProvider"], json!(true));

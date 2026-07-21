@@ -32,6 +32,13 @@
 //! // The `mjmx-language-server` binary is exactly this:
 //! mjmx_language_server::run();
 //! ```
+//!
+//! The same call backs the CLI's `mjmx lsp` subcommand, so editors can point at
+//! either `mjmx lsp` or the standalone `mjmx-language-server` binary and get an
+//! identical server.
+//!
+//! Document sync is **incremental**: `did_change` splices ranged edits into the
+//! stored text (and honours the full-replacement event shape clients also send).
 
 pub mod analysis;
 pub mod context;

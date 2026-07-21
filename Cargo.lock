@@ -853,6 +853,8 @@ dependencies = [
  "clap",
  "mjmx",
  "mjmx-dev-server",
+ "mjmx-language-server",
+ "serde_json",
 ]
 
 [[package]]

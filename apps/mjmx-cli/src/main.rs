@@ -21,6 +21,10 @@
 //!   renders the file, serves a browser preview, watches the file (and its
 //!   directory, for `<mj-include>` partials) for changes, and hot-reloads the
 //!   browser over a WebSocket on every save. Runs until Ctrl-C.
+//! - **lsp**: `mjmx lsp` speaks the Language Server Protocol over stdin/stdout, for
+//!   editors. It is the same server as the standalone `mjmx-language-server`
+//!   binary, exposed here so a single `mjmx` on `PATH` is enough. Takes no
+//!   arguments and runs until the client closes the connection.
 //!
 //! Diagnostics are always written to stderr; a non-zero exit code is returned on
 //! failure.
@@ -59,6 +63,8 @@ enum Command {
     Migrate(MigrateArgs),
     /// Serve a live browser preview with hot-reload on save.
     Dev(DevArgs),
+    /// Speak the Language Server Protocol over stdin/stdout (for editors).
+    Lsp,
 }
 
 /// Arguments for the default render path.
@@ -169,8 +175,18 @@ fn main() -> ExitCode {
         Some(Command::Fmt(args)) => run_fmt(&args),
         Some(Command::Migrate(args)) => run_migrate(&args),
         Some(Command::Dev(args)) => run_dev(args),
+        Some(Command::Lsp) => run_lsp(),
         None => run_render(&cli.render),
     }
+}
+
+/// The `lsp` subcommand: serve the protocol over stdio until the client hangs up.
+///
+/// Identical to running the standalone `mjmx-language-server` binary — both are a
+/// single call into the crate's synchronous front door, which owns its own runtime.
+fn run_lsp() -> ExitCode {
+    mjmx_language_server::run();
+    ExitCode::SUCCESS
 }
 
 /// The `dev` subcommand: start the live-preview server, blocking until Ctrl-C.

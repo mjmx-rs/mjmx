@@ -12,8 +12,9 @@ lives here.
 ## Build
 
 ```sh
-make wasm        # cargo build --target wasm32-unknown-unknown --release + wasm-bindgen
-make wasm-test   # build, then run the Node smoke test
+make wasm         # cargo build --target wasm32-unknown-unknown --release + wasm-bindgen + wasm-opt
+make wasm-test    # build, then run the Node smoke test against the built artifact
+make wasm-release # the same, but fail up-front if wasm-opt is missing
 ```
 
 Two toolchain pieces are required, and the CLI version **must** match the
@@ -25,13 +26,30 @@ rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.100 --locked
 ```
 
+A third, `wasm-opt` from [binaryen](https://github.com/WebAssembly/binaryen), is
+**optional**: `make wasm` runs it with `-Oz` when it is on `PATH` and prints a
+hint instead of failing when it is not, so the build never depends on it. It is
+worth having — it cuts the module by ~14%:
+
+```sh
+cargo install wasm-opt        # or: npm i -g binaryen, or a distro package
+```
+
+| | `mjmx_wasm_bg.wasm` |
+| --- | --- |
+| wasm-bindgen output | 326.3 KiB |
+| after `wasm-opt -Oz` | 279.3 KiB (-14.4%) |
+
+`make wasm-test` runs the smoke test against the **optimised** artifact, so the
+size win is always verified to still render byte-identically to the golden output.
+
 Output lands in `crates/mjmx-wasm/pkg/` (gitignored):
 
 | File | Purpose |
 | --- | --- |
 | `mjmx_wasm.js` | CommonJS glue (`--target nodejs`) |
 | `mjmx_wasm.d.ts` | TypeScript declarations |
-| `mjmx_wasm_bg.wasm` | the compiled module (~315 KiB release) |
+| `mjmx_wasm_bg.wasm` | the compiled module (~279 KiB release, `wasm-opt -Oz`) |
 
 For a browser bundle, re-run `wasm-bindgen` with `--target web` or `--target bundler`
 against the same `target/wasm32-unknown-unknown/release/mjmx_wasm.wasm`.
