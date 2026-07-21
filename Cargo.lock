@@ -23,5 +23,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrml-index"
+version = "0.1.0"
+
+[[package]]
 name = "mrml-span"
+version = "0.1.0"
+
+[[package]]
+name = "mrml-syntax"
 version = "0.1.0"

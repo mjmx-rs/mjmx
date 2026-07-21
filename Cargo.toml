@@ -14,6 +14,8 @@ authors = ["ryeasin03 <ryeasin03@gmail.com>"]
 mrml-allocator = { version = "0.1.0", path = "crates/mrml-allocator" }
 mrml-span = { version = "0.1.0", path = "crates/mrml-span" }
 mrml-diagnostics = { version = "0.1.0", path = "crates/mrml-diagnostics" }
+mrml-syntax = { version = "0.1.0", path = "crates/mrml-syntax" }
+mrml-index = { version = "0.1.0", path = "crates/mrml-index" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 
 [workspace.lints.clippy]
