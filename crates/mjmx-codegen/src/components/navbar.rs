@@ -122,7 +122,9 @@ impl<'a> Render<'a> for Navbar<'a> {
                     link.outlook_class(ctx)
                 ));
             }
-            link.render_anchor(ctx, buf);
+            // The mapped range is the link's `<a>` only: its Outlook ghost `<td>` is
+            // emitted by the navbar above and belongs to the navbar's own range.
+            crate::render::traced(el, ctx, buf, |ctx, buf| link.render_anchor(ctx, buf));
         }
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
         buf.push_str("</div>");

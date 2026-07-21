@@ -14,6 +14,7 @@ mjmx-span.workspace = true
 mjmx-syntax.workspace = true
 mjmx-diagnostics.workspace = true
 mjmx-semantic.workspace = true
+mjmx-sourcemap.workspace = true
 
 [dev-dependencies]
 mjmx-allocator.workspace = true

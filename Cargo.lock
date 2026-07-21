@@ -866,6 +866,7 @@ dependencies = [
  "mjmx-diagnostics",
  "mjmx-parser",
  "mjmx-semantic",
+ "mjmx-sourcemap",
  "mjmx-span",
  "mjmx-syntax",
 ]
@@ -879,6 +880,8 @@ dependencies = [
  "mjmx-diagnostics",
  "mjmx-span",
  "notify",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -974,6 +977,14 @@ dependencies = [
  "mjmx-ast",
  "mjmx-diagnostics",
  "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
+]
+
+[[package]]
+name = "mjmx-sourcemap"
+version = "0.1.0"
+dependencies = [
  "mjmx-span",
  "mjmx-syntax",
 ]

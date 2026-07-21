@@ -12,6 +12,7 @@
 //! read aggregated `<mj-head>` metadata (title, preview, fonts, breakpoint).
 
 use mjmx_semantic::Semantic;
+use mjmx_sourcemap::SourceMapBuilder;
 
 /// Global options controlling a render.
 #[derive(Debug, Clone)]
@@ -82,6 +83,12 @@ pub struct RenderContext<'a> {
     styles: Vec<String>,
     hamburger_seq: u32,
     carousel_seq: u32,
+    /// Source-mapping collector. `None` — the default — means no mapping is recorded and
+    /// the instrumentation in [`crate::render`] short-circuits to a plain call, so the
+    /// ordinary render path pays nothing but one `Option` check per element. Enabling it
+    /// never changes a byte of the produced HTML: mappings are read off `buf.len()`,
+    /// never written into `buf`.
+    pub(crate) sourcemap: Option<SourceMapBuilder>,
 }
 
 impl<'a> RenderContext<'a> {
@@ -103,7 +110,30 @@ impl<'a> RenderContext<'a> {
             styles: Vec::new(),
             hamburger_seq: 0,
             carousel_seq: 0,
+            sourcemap: None,
         }
+    }
+
+    /// Turn on source-map collection for this render pass.
+    ///
+    /// Off by default. Collection is observation-only — it records `buf.len()` before and
+    /// after each element writes — so the produced HTML is byte-identical either way.
+    pub fn enable_sourcemap(&mut self) {
+        self.sourcemap = Some(SourceMapBuilder::default());
+    }
+
+    /// Whether source-map collection is on.
+    #[must_use]
+    pub fn collects_sourcemap(&self) -> bool {
+        self.sourcemap.is_some()
+    }
+
+    /// Take the collected [`SourceMapBuilder`], if collection was enabled.
+    ///
+    /// Offsets are relative to the **body buffer** the pass wrote into; document assembly
+    /// rebases them onto the final HTML.
+    pub fn take_sourcemap(&mut self) -> Option<SourceMapBuilder> {
+        self.sourcemap.take()
     }
 
     /// Mint a deterministic anchor id for an `<mj-navbar hamburger>` checkbox/label

@@ -129,7 +129,9 @@ impl<'a> Wrapper<'a> {
             buf.push_str(&format!(
                 "<!--[if mso | IE]><tr><td class=\"{ghost_class}\" width=\"{width}px\" ><![endif]-->"
             ));
-            Section::new(child).render(ctx, buf)?;
+            crate::render::traced(child, ctx, buf, |ctx, buf| {
+                Section::new(child).render(ctx, buf)
+            })?;
             buf.push_str("<!--[if mso | IE]></td></tr><![endif]-->");
         }
         ctx.container_width = saved;

@@ -110,7 +110,9 @@ impl<'a> Render<'a> for Accordion<'a> {
             .element_children()
             .filter(|el| el.tag == MjmlTag::MjAccordionElement)
         {
-            render_element_row(el, inherited, ctx, buf);
+            crate::render::traced(el, ctx, buf, |ctx, buf| {
+                render_element_row(el, inherited, ctx, buf);
+            });
         }
         buf.push_str("</tbody></table></td>");
         Ok(())
@@ -121,7 +123,7 @@ impl<'a> Render<'a> for Accordion<'a> {
 fn render_element_row<'a>(
     element: &'a Element<'a>,
     inh: AccordionInherited<'a>,
-    ctx: &RenderContext<'a>,
+    ctx: &mut RenderContext<'a>,
     buf: &mut String,
 ) {
     // mjml's `MjAccordionElement.render`: `css-class` lands on the element's `<tr>`.
@@ -134,8 +136,16 @@ fn render_element_row<'a>(
     buf.push_str("<div>");
     for child in element.element_children() {
         match child.tag {
-            MjmlTag::MjAccordionTitle => render_title(child, inh, ctx, buf),
-            MjmlTag::MjAccordionText => render_text(child, inh, ctx, buf),
+            MjmlTag::MjAccordionTitle => {
+                crate::render::traced(child, ctx, buf, |ctx, buf| {
+                    render_title(child, inh, ctx, buf)
+                });
+            }
+            MjmlTag::MjAccordionText => {
+                crate::render::traced(child, ctx, buf, |ctx, buf| {
+                    render_text(child, inh, ctx, buf)
+                });
+            }
             _ => {}
         }
     }
@@ -146,7 +156,7 @@ fn render_element_row<'a>(
 fn render_title<'a>(
     element: &'a Element<'a>,
     inh: AccordionInherited<'a>,
-    ctx: &RenderContext<'a>,
+    ctx: &mut RenderContext<'a>,
     buf: &mut String,
 ) {
     let get = |name: &str, default: &'a str| {
@@ -218,7 +228,7 @@ fn render_title<'a>(
 fn render_text<'a>(
     element: &'a Element<'a>,
     inh: AccordionInherited<'a>,
-    ctx: &RenderContext<'a>,
+    ctx: &mut RenderContext<'a>,
     buf: &mut String,
 ) {
     let get = |name: &str, default: &'a str| {

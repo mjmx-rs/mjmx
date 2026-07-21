@@ -106,7 +106,9 @@ impl<'a> Render<'a> for Group<'a> {
             buf.push_str(&format!(
                 "<!--[if mso | IE]><td style=\"vertical-align:{va};width:{col_px}px;\" ><![endif]-->"
             ));
-            Column::new_grouped(col, width, raw, num).render(ctx, buf)?;
+            crate::render::traced(col, ctx, buf, |ctx, buf| {
+                Column::new_grouped(col, width, raw, num).render(ctx, buf)
+            })?;
             buf.push_str("<!--[if mso | IE]></td><![endif]-->");
         }
         ctx.container_width = saved;

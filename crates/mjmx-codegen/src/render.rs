@@ -40,6 +40,48 @@ pub fn render_element<'a>(
     ctx: &mut RenderContext<'a>,
     buf: &mut String,
 ) -> RenderResult {
+    traced(element, ctx, buf, |ctx, buf| dispatch(element, ctx, buf))
+}
+
+/// Record the output range an element writes, pairing it with the element's source span.
+///
+/// This is the single instrumentation point for source maps. It brackets a component's
+/// write with `buf.len()` before and after and hands the pair to the
+/// [`SourceMapBuilder`](mjmx_sourcemap::SourceMapBuilder) in the context — it never
+/// touches `buf`, so the produced HTML is byte-identical whether collection is on or off.
+///
+/// When collection is off (the default) this is a plain call behind one `Option` check.
+///
+/// Most components are reached through [`render_element`], which is wrapped here; the few
+/// parents that construct a child renderer directly (a wrapper's sections, a section's
+/// columns, a group's columns, a social element's row) call this themselves, so the map
+/// still has a mapping for every element that produced output.
+pub(crate) fn traced<'a, R>(
+    element: &Element<'_>,
+    ctx: &mut RenderContext<'a>,
+    buf: &mut String,
+    f: impl FnOnce(&mut RenderContext<'a>, &mut String) -> R,
+) -> R {
+    let Some(sm) = ctx.sourcemap.as_mut() else {
+        return f(ctx, buf);
+    };
+    let depth = sm.enter();
+    let (span, tag) = (element.span(), element.tag);
+    let start = buf.len();
+    let result = f(ctx, buf);
+    let end = buf.len();
+    if let Some(sm) = ctx.sourcemap.as_mut() {
+        sm.record(span, tag, start..end, depth);
+    }
+    result
+}
+
+/// The tag → component-renderer table, wrapped by [`render_element`].
+fn dispatch<'a>(
+    element: &'a Element<'a>,
+    ctx: &mut RenderContext<'a>,
+    buf: &mut String,
+) -> RenderResult {
     match element.tag {
         MjmlTag::MjBody => Body::new(element).render(ctx, buf),
         MjmlTag::MjWrapper => Wrapper::new(element).render(ctx, buf),

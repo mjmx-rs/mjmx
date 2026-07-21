@@ -145,7 +145,9 @@ impl<'a> Section<'a> {
                     buf.push_str(&format!(
                         "<td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
                     ));
-                    Group::new(child, count).render(ctx, buf)?;
+                    crate::render::traced(child, ctx, buf, |ctx, buf| {
+                        Group::new(child, count).render(ctx, buf)
+                    })?;
                 }
                 _ => {
                     // The ghost cell mirrors the column's own vertical-align and carries
@@ -161,7 +163,9 @@ impl<'a> Section<'a> {
                     buf.push_str(&format!(
                         "<td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
                     ));
-                    Column::new(child, width, raw, count).render(ctx, buf)?;
+                    crate::render::traced(child, ctx, buf, |ctx, buf| {
+                        Column::new(child, width, raw, count).render(ctx, buf)
+                    })?;
                 }
             }
             buf.push_str("<!--[if mso | IE]></td>");

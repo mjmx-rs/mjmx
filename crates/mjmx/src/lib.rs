@@ -16,7 +16,7 @@
 
 use mjmx_allocator::Allocator;
 
-pub use mjmx_codegen::{RenderContext, RenderOptions};
+pub use mjmx_codegen::{Mapping, RenderContext, RenderOptions, SourceMap, Span};
 pub use mjmx_diagnostics::{Diagnostic, Severity};
 pub use mjmx_formatter::FormatOptions;
 
@@ -51,6 +51,48 @@ fn post_process(html: String, options: &RenderOptions) -> String {
     } else {
         html
     }
+}
+
+/// Render MJML `source` to HTML **and** a [`SourceMap`] from output bytes back to the
+/// MJML elements that produced them.
+///
+/// The HTML is byte-identical to [`render`]'s for the same input — collection only
+/// observes buffer offsets, it never emits. Use [`SourceMap::lookup`] to answer "which
+/// MJML element produced this bit of HTML?" (click-to-source, go-to-output, debugging a
+/// surprising render) and [`SourceMap::mappings_for_source`] for the reverse.
+///
+/// ```
+/// let source = "<mjml><mj-body><mj-section><mj-column>\
+///               <mj-text>Hello world</mj-text></mj-column></mj-section></mj-body></mjml>";
+/// let (html, map) = mjmx::render_with_sourcemap(source, &mjmx::RenderOptions::default()).unwrap();
+/// let at = html.find("Hello world").unwrap();
+/// let m = map.lookup(at).unwrap();
+/// assert!(source[m.source.start as usize..m.source.end as usize].starts_with("<mj-text"));
+/// ```
+///
+/// # Errors
+///
+/// As [`render`], plus a diagnostic if `options` requests `minify` or `beautify`: those
+/// are whitespace rewrites applied *after* codegen, and they would silently invalidate
+/// every recorded offset. Render with a sourcemap first, then post-process if you must
+/// (and discard the map).
+pub fn render_with_sourcemap(
+    source: &str,
+    options: &RenderOptions,
+) -> Result<(String, SourceMap), Vec<Diagnostic>> {
+    if options.minify || options.beautify {
+        return Err(vec![
+            Diagnostic::error("sourcemap collection is incompatible with minify/beautify").with_help(
+                "minify and beautify rewrite whitespace after codegen, which shifts every mapped offset; render with a sourcemap using the default whitespace options",
+            ),
+        ]);
+    }
+    let allocator = Allocator::new();
+    let parsed = mjmx_parser::parse(source, &allocator);
+    if !parsed.errors.is_empty() {
+        return Err(parsed.errors);
+    }
+    mjmx_codegen::render_document_with_sourcemap(&parsed.document, options)
 }
 
 /// Render MJML `source` to HTML with [`RenderOptions::default`].

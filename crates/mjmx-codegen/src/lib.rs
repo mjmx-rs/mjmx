@@ -42,5 +42,6 @@ mod head;
 mod render;
 
 pub use context::{MediaQuery, RenderContext, RenderOptions};
-pub use document::render_document;
+pub use document::{render_document, render_document_with_sourcemap};
+pub use mjmx_sourcemap::{Mapping, SourceMap, Span};
 pub use render::{Render, RenderResult, render_element};

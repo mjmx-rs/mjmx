@@ -98,7 +98,9 @@ impl<'a> Render<'a> for Social<'a> {
             );
             buf.push_str("<tbody>");
             for el in &elements {
-                SocialElement::new(el, inherited).render_row(ctx, buf);
+                crate::render::traced(el, ctx, buf, |ctx, buf| {
+                    SocialElement::new(el, inherited).render_row(ctx, buf);
+                });
             }
             buf.push_str("</tbody></table>");
         } else {
@@ -116,7 +118,9 @@ impl<'a> Render<'a> for Social<'a> {
                     "<table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"float:none;display:inline-table;\">"
                 ));
                 buf.push_str("<tbody>");
-                SocialElement::new(el, inherited).render_row(ctx, buf);
+                crate::render::traced(el, ctx, buf, |ctx, buf| {
+                    SocialElement::new(el, inherited).render_row(ctx, buf);
+                });
                 buf.push_str("</tbody></table>");
             }
             buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");

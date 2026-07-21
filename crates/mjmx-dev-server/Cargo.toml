@@ -14,6 +14,8 @@ mjmx-diagnostics.workspace = true
 tokio.workspace = true
 axum.workspace = true
 notify.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 mjmx-span.workspace = true
