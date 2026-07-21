@@ -26,9 +26,13 @@ mjmx-transformer = { version = "0.1.0", path = "crates/mjmx-transformer" }
 mjmx-html-compare = { version = "0.1.0", path = "crates/mjmx-html-compare" }
 mjmx-minifier = { version = "0.1.0", path = "crates/mjmx-minifier" }
 mjmx-formatter = { version = "0.1.0", path = "crates/mjmx-formatter" }
+mjmx-dev-server = { version = "0.1.0", path = "crates/mjmx-dev-server" }
 mjmx = { version = "0.1.0", path = "crates/mjmx" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "signal"] }
+axum = { version = "0.8", features = ["ws"] }
+notify = "8"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

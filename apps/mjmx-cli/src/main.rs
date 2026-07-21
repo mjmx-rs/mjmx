@@ -14,6 +14,10 @@
 //!   with [`mjmx::format`]. By default it writes the formatted source to stdout;
 //!   `--write`/`-w` rewrites the file in place, and `--check` writes nothing but
 //!   exits non-zero when the file is not already formatted.
+//! - **dev**: `mjmx dev <file>` starts a local live-preview server for a file: it
+//!   renders the file, serves a browser preview, watches the file (and its
+//!   directory, for `<mj-include>` partials) for changes, and hot-reloads the
+//!   browser over a WebSocket on every save. Runs until Ctrl-C.
 //!
 //! Diagnostics are always written to stderr; a non-zero exit code is returned on
 //! failure.
@@ -25,6 +29,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
 use mjmx::{Diagnostic, FormatOptions, RenderOptions, Severity};
+use mjmx_dev_server::DevOptions;
 
 /// Compile or validate an MJML document.
 #[derive(Debug, Parser)]
@@ -47,6 +52,8 @@ enum Command {
     Lint(LintArgs),
     /// Format an MJML document into canonical MJML source.
     Fmt(FmtArgs),
+    /// Serve a live browser preview with hot-reload on save.
+    Dev(DevArgs),
 }
 
 /// Arguments for the default render path.
@@ -104,12 +111,57 @@ struct FmtArgs {
     check: bool,
 }
 
+/// Arguments for the `dev` subcommand.
+#[derive(Debug, Args)]
+struct DevArgs {
+    /// Input `.mjml` file to preview (required; there is nothing to watch on stdin).
+    input: PathBuf,
+
+    /// TCP port to bind on `127.0.0.1`.
+    #[arg(long, default_value_t = 3000)]
+    port: u16,
+
+    /// Open the preview URL in the default browser on startup.
+    #[arg(long)]
+    open: bool,
+
+    /// Pretty-print the previewed HTML. If combined with `--minify`, `--minify` wins.
+    #[arg(long)]
+    beautify: bool,
+
+    /// Minify the previewed HTML. Takes precedence over `--beautify`.
+    #[arg(long)]
+    minify: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Lint(args)) => run_lint(&args),
         Some(Command::Fmt(args)) => run_fmt(&args),
+        Some(Command::Dev(args)) => run_dev(args),
         None => run_render(&cli.render),
+    }
+}
+
+/// The `dev` subcommand: start the live-preview server, blocking until Ctrl-C.
+fn run_dev(args: DevArgs) -> ExitCode {
+    let options = DevOptions {
+        port: args.port,
+        open: args.open,
+        render: RenderOptions {
+            breakpoint: RenderOptions::default().breakpoint,
+            beautify: args.beautify,
+            minify: args.minify,
+        },
+    };
+
+    match mjmx_dev_server::run(args.input, options) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("mjmx: dev server error: {err}");
+            ExitCode::FAILURE
+        }
     }
 }
 

@@ -1,0 +1,22 @@
+[package]
+name = "mjmx-dev-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Local dev server for mjmx: live browser preview of an .mjml file with WebSocket hot-reload (the `mjmx dev` tool)."
+
+[dependencies]
+mjmx.workspace = true
+mjmx-diagnostics.workspace = true
+tokio.workspace = true
+axum.workspace = true
+notify.workspace = true
+
+[dev-dependencies]
+mjmx-span.workspace = true
+
+[lints]
+workspace = true
