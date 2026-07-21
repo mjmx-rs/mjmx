@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 CARGO ?= cargo
 
-.PHONY: help build release test check fmt fmt-check clippy lint doc clean ci
+.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -11,6 +11,9 @@ build: ## Build the workspace
 
 release: ## Build the workspace in release mode
 	$(CARGO) build --workspace --release
+
+run: ## Run the mrml CLI (ARGS=...)
+	$(CARGO) run -p mrml-cli -- $(ARGS)
 
 test: ## Run all workspace tests
 	$(CARGO) test --workspace
