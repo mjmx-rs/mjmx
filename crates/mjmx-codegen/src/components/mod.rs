@@ -31,7 +31,7 @@ pub use accordion::Accordion;
 pub use body::Body;
 pub use button::Button;
 pub use carousel::Carousel;
-pub use column::Column;
+pub use column::{Column, ColumnWidth};
 pub use divider::Divider;
 pub use group::Group;
 pub use hero::Hero;

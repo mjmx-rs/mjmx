@@ -34,6 +34,8 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `button` | `<mj-button href>`: table + `<a>`, registering the default Ubuntu font in the head. |
 | `twocol` | Two-column `<mj-section>`: each column stacks on mobile (inline `width:100%`), the `mj-column-per-50` class + media query carrying the desktop share. |
 | `raw` | `<mj-raw>` body passthrough: inner HTML emitted verbatim with no wrapping. |
+| `head_raw` | `<mj-raw>` inside `<mj-head>` (mjml's `headRaw`): the content is injected verbatim as the last thing in the document `<head>`, after the media-query/style blocks. |
+| `head_raw_file_start` | `<mj-raw position="file-start">` as a sibling of `<mj-head>`/`<mj-body>` (mjml's `mjOutsideRaws` → `beforeDoctype`): the content is emitted *before* `<!doctype html>`, alongside an ordinary head `<mj-raw>`. |
 | `group` | `<mj-section>` holding a 2-column `<mj-group>` — side-by-side columns, group-managed Outlook ghost table, `mj-column-per-100`/`-50` media queries. |
 | `wrapper` | `<mj-wrapper>` > `mj-section` > `mj-column` > `mj-text`: section-shaped container wrapping a whole section (fused Outlook conditionals). |
 | `wrapper_full_width` | `<mj-wrapper full-width="full-width">`: adds the outer 100%-width table around the same inner markup. |
@@ -50,11 +52,14 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `image_attrs` | `<mj-image>` with `align`, `width`/`height`, `border`, `border-radius`, `padding`, `container-background-color`: themed `<img>` style + parsed `height` attribute. |
 | `section_attrs` | `<mj-section>` with `background-color`, `border`, `border-radius`, `padding`, `direction`, `text-align`: bg on ghost/div/table, rounded-clip, and the content-box (`600 − padding − border`) handed to columns. |
 | `column_attrs` | `<mj-column>` gutter mode (`background-color`, `border`, `border-radius`, `padding`, `vertical-align`): the extra gutter cell + the section ghost cell's mirrored vertical-align. |
+| `column_px_width` | `<mj-column width="300px">` next to an implicitly-sized sibling, plus a `25%`/`75%` pair: the `mj-column-px-300` class with a px-based `@media` rule, the ghost `<td width>` taken from `getWidthAsPixel`, and per-column shares that are *not* redistributed. |
+| `column_inner_border` | `<mj-column>` gutter mode with `inner-background-color` / `inner-border` / `inner-border-radius` on the inner table, and `border-top`/`border-bottom` longhands + `padding-left` on the gutter cell. |
 | `divider_attrs` | `<mj-divider>` with `border-*`, `width` (px), `align` (margin per alignment), `padding`, `container-background-color`. |
 | `spacer_attrs` | `<mj-spacer>` with `height`, `padding`, `container-background-color`. |
 | `table_attrs` | `<mj-table>` with `align`, `color`, `font-size`, `line-height`, `width`, `border`, `cellpadding/cellspacing` (cellspacing>0 → `border-collapse:separate`), `table-layout`, `padding`, `container-background-color`. |
 | `social_attrs` | `<mj-social>` forwarding `icon-size`, `border-radius`, `color`, `font-size`, `inner-padding`, plus `align`, `padding`, `container-background-color`. |
 | `hero_attrs` | `<mj-hero>` with non-default `background-position`, `vertical-align`, `height`, `padding` (fixed-height cell math). |
+| `hero_fluid` | `<mj-hero mode="fluid-height">`: the two zero-width `td-fluid` "magic" cells whose `padding-bottom` percentage is `round(background-height / background-width × 100)`, and the background cell with no `height` style/attribute. |
 | `navbar_attrs` | `<mj-navbar base-url align>` with links setting `color`, `font-size/weight/style`, `line-height`, `letter-spacing`, `text-decoration/transform`, `padding`. |
 | `accordion_attrs` | `<mj-accordion>` with `border`, `font-family`, `icon-position/width/height`, `padding`, and title/text `font-size`, `line-height`, `padding`, `color`, `background-color` resolved per child. |
 | `wrapper_attrs` | `<mj-wrapper>` with section-style `background-color`, `border`, `border-radius`, `padding`, `direction`, `text-align`; box width threaded to nested sections. |

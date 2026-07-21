@@ -4,8 +4,10 @@
 //! cell carries the CSS `background` shorthand; Outlook gets a `<v:image>` painted
 //! behind an mso ghost table. The hero's body children (mj-text, mj-button, …) render
 //! inside a nested `mj-hero-content` table, each in its own `<tr>` exactly as a column
-//! lays out its children. Only `mode="fixed-height"` is implemented (the fixture mode);
-//! the cell height is `height` minus the vertical padding.
+//! lays out its children. Both modes are supported: `fixed-height` sizes the cell to
+//! `height` minus the vertical padding, while `fluid-height` drops the height entirely
+//! and brackets the cell with two zero-width `td-fluid` "magic" cells whose percentage
+//! `padding-bottom` reserves the background image's aspect ratio.
 
 use mjmx_ast::Element;
 
@@ -42,7 +44,7 @@ impl<'a> Render<'a> for Hero<'a> {
         };
         let opt = |name: &str| ctx.semantic.attribute(self.element, name, None);
 
-        let _mode = attr("mode", MODE);
+        let mode = attr("mode", MODE);
         let height = attr("height", HEIGHT);
         let background_color = attr("background-color", BACKGROUND_COLOR);
         let background_url = opt("background-url");
@@ -94,13 +96,47 @@ impl<'a> Render<'a> for Hero<'a> {
         );
         buf.push_str("<tbody><tr style=\"vertical-align:top;\">");
 
+        // mjml's `renderMode`. `fluid-height` brackets the background cell with two
+        // zero-width "magic" cells whose percentage `padding-bottom` reserves the
+        // background image's aspect ratio; `fixed-height` sizes the cell directly.
+        let fluid = mode == "fluid-height";
+        // `Math.round(background-height / background-width * 100)`; both attributes
+        // missing yields mjml's literal `NaN%`.
+        let magic_td = {
+            let ratio = match (
+                parse_px_opt(background_height),
+                parse_px_opt(opt("background-width")),
+            ) {
+                (Some(h), Some(w)) if w != 0 => {
+                    format!("{}", (f64::from(h) / f64::from(w) * 100.0).round())
+                }
+                _ => "NaN".to_string(),
+            };
+            format!(
+                "<td style=\"width:0.01%;padding-bottom:{ratio}%;mso-padding-bottom-alt:0;\" />"
+            )
+        };
+        if fluid {
+            buf.push_str(&magic_td);
+        }
+
         // The background cell.
         buf.push_str("<td");
         if let Some(url) = background_url {
             buf.push_str(&format!(" background=\"{url}\""));
         }
+        let sizing = if fluid {
+            String::new()
+        } else {
+            format!("height:{cell_height}px;")
+        };
+        let height_attr = if fluid {
+            String::new()
+        } else {
+            format!(" height=\"{cell_height}\"")
+        };
         buf.push_str(&format!(
-            " style=\"background:{background};background-position:{background_position};background-repeat:no-repeat;padding:{padding};vertical-align:{vertical_align};height:{cell_height}px;\" height=\"{cell_height}\">"
+            " style=\"background:{background};background-position:{background_position};background-repeat:no-repeat;padding:{padding};vertical-align:{vertical_align};{sizing}\"{height_attr}>"
         ));
 
         // Inner Outlook table sized to the container width.
@@ -127,7 +163,11 @@ impl<'a> Render<'a> for Hero<'a> {
 
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
 
-        buf.push_str("</td></tr></tbody></table></div>");
+        buf.push_str("</td>");
+        if fluid {
+            buf.push_str(&magic_td);
+        }
+        buf.push_str("</tr></tbody></table></div>");
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
         Ok(())
     }
@@ -138,6 +178,16 @@ impl<'a> Render<'a> for Hero<'a> {
 enum Side {
     Top,
     Bottom,
+}
+
+/// `parseInt` over an optional CSS length: `None` when absent or non-numeric.
+fn parse_px_opt(value: Option<&str>) -> Option<u32> {
+    let digits: String = value?
+        .trim()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
 }
 
 /// Parse a leading pixel count out of a CSS length like `"200px"` or `"200"`.

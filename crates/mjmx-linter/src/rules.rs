@@ -46,7 +46,9 @@ pub fn allowed_children(tag: MjmlTag) -> Option<&'static [MjmlTag]> {
     };
 
     Some(match tag {
-        Mjml => &[MjHead, MjBody],
+        // `<mj-raw>` is legal directly under `<mjml>`: mjml collects those as
+        // `mjOutsideRaws` and emits the `position="file-start"` ones before the doctype.
+        Mjml => &[MjHead, MjBody, MjRaw],
         MjBody => &[MjSection, MjWrapper, MjHero, MjRaw],
         MjWrapper => &[MjSection, MjRaw],
         MjSection => &[MjColumn, MjGroup, MjRaw],

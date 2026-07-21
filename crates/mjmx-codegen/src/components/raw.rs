@@ -1,9 +1,12 @@
 //! `<mj-raw>` — a passthrough that emits its inner HTML verbatim.
 //!
 //! `mj-raw` is an "ending" tag, so the parser captured its inner markup as raw text
-//! children; rendering simply concatenates them with no wrapping element. Only the body
-//! case is handled here — a `<mj-raw>` inside `<mj-head>` (a head passthrough,
-//! typically `position="file-start"`) is not yet emitted and is deferred.
+//! children; rendering simply concatenates them with no wrapping element. This covers
+//! the *body* case. The two other placements are handled outside this renderer, from
+//! data collected by `mjmx-semantic`: a `<mj-raw>` under `<mj-head>` is injected at the
+//! end of the document `<head>` (`head::render_head`), and a
+//! `<mj-raw position="file-start">` sibling of `<mj-body>` is emitted before the doctype
+//! (`document::render_document`).
 
 use mjmx_ast::{Element, Node};
 

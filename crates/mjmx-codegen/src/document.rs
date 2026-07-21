@@ -65,6 +65,14 @@ pub fn render_document<'a>(
 
     // Pass 2: assemble the document around the collected context.
     let mut out = String::new();
+    // mjml's `beforeDoctype`: `<mj-raw position="file-start">` siblings of `<mj-body>`
+    // are emitted ahead of the doctype (joined by a newline), for XML prologs and the
+    // like.
+    let file_start = &ctx.semantic.head().file_start_raws;
+    if !file_start.is_empty() {
+        out.push_str(&file_start.join("\n"));
+        out.push('\n');
+    }
     out.push_str("<!doctype html>\n");
     out.push_str(&format!(
         "<html lang=\"{lang}\" dir=\"{dir}\" xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\">",

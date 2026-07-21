@@ -1,0 +1,8 @@
+<mjml>
+  <mj-body>
+    <mj-hero mode="fluid-height" background-width="600px" background-height="400px" background-url="https://example.com/hero.png" background-color="#2a3448" padding="40px 20px" vertical-align="middle">
+      <mj-text color="#ffffff" font-size="20px" align="center">Fluid hero</mj-text>
+      <mj-button href="https://example.com" background-color="#ffffff" color="#2a3448">Go</mj-button>
+    </mj-hero>
+  </mj-body>
+</mjml>

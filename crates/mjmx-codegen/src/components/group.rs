@@ -8,7 +8,7 @@
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
-use crate::components::Column;
+use crate::components::{Column, ColumnWidth};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -83,17 +83,24 @@ impl<'a> Render<'a> for Group<'a> {
             .filter(|el| el.tag == MjmlTag::MjColumn)
             .collect();
         let num = columns.len().max(1) as u32;
-        let cpct = 100 / num;
 
         // Columns size against the group width, not the section.
         let saved = ctx.container_width;
         ctx.container_width = group_width;
         for col in &columns {
-            let col_px = group_width * cpct / 100;
+            // mjml's `getElementWidth(component.getWidthAsPixel())`: the column's own
+            // width resolved against the *group* box.
+            let raw = ctx.semantic.attribute(col, "width", None);
+            let width = ColumnWidth::resolve(raw, num);
+            let col_px = width.as_pixel(f64::from(group_width));
+            let va = ctx
+                .semantic
+                .attribute(col, "vertical-align", Some("top"))
+                .unwrap_or("top");
             buf.push_str(&format!(
-                "<!--[if mso | IE]><td style=\"vertical-align:top;width:{col_px}px;\" ><![endif]-->"
+                "<!--[if mso | IE]><td style=\"vertical-align:{va};width:{col_px}px;\" ><![endif]-->"
             ));
-            Column::new_grouped(col, cpct).render(ctx, buf)?;
+            Column::new_grouped(col, width, raw, num).render(ctx, buf)?;
             buf.push_str("<!--[if mso | IE]></td><![endif]-->");
         }
         ctx.container_width = saved;

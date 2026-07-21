@@ -1,0 +1,16 @@
+<mjml>
+  <mj-head>
+    <mj-title>Raw head</mj-title>
+    <mj-raw>
+      <meta name="color-scheme" content="light dark" />
+      <link rel="preload" href="https://example.com/hero.png" as="image" />
+    </mj-raw>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Body</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

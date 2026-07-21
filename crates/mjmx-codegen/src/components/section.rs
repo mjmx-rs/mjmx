@@ -4,7 +4,7 @@ use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
 use crate::components::background::Background;
-use crate::components::{Column, Group};
+use crate::components::{Column, ColumnWidth, Group};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -64,7 +64,6 @@ impl<'a> Section<'a> {
             .filter(|el| matches!(el.tag, MjmlTag::MjColumn | MjmlTag::MjGroup))
             .collect();
         let count = children.len().max(1) as u32;
-        let pct = 100 / count;
 
         // The background declarations ride on the div and the inner table — unless the
         // section is full-width, in which case they moved out to the outer 100% table.
@@ -122,9 +121,10 @@ impl<'a> Section<'a> {
             "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>",
         );
         for child in &children {
-            let child_px = box_width * pct / 100;
             match child.tag {
                 MjmlTag::MjGroup => {
+                    let raw = ctx.semantic.attribute(child, "width", None);
+                    let child_px = ColumnWidth::resolve(raw, count).as_pixel(f64::from(box_width));
                     // The ghost cell carries the group's vertical-align when it is set.
                     let mut style = String::new();
                     if let Some(va) = ctx.semantic.attribute(child, "vertical-align", None) {
@@ -136,7 +136,12 @@ impl<'a> Section<'a> {
                     Group::new(child, count).render(ctx, buf)?;
                 }
                 _ => {
-                    // The ghost cell mirrors the column's own vertical-align.
+                    // The ghost cell mirrors the column's own vertical-align and carries
+                    // mjml's `getWidthAsPixel` — the column's own width (explicit `width`
+                    // attribute, or its equal share) resolved against the content box.
+                    let raw = ctx.semantic.attribute(child, "width", None);
+                    let width = ColumnWidth::resolve(raw, count);
+                    let child_px = width.as_pixel(f64::from(box_width));
                     let va = ctx
                         .semantic
                         .attribute(child, "vertical-align", Some("top"))
@@ -144,7 +149,7 @@ impl<'a> Section<'a> {
                     buf.push_str(&format!(
                         "<td class=\"\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
                     ));
-                    Column::new(child, pct).render(ctx, buf)?;
+                    Column::new(child, width, raw, count).render(ctx, buf)?;
                 }
             }
             buf.push_str("<!--[if mso | IE]></td>");

@@ -46,7 +46,16 @@ pub fn render_element<'a>(
         MjmlTag::MjSection => Section::new(element).render(ctx, buf),
         MjmlTag::MjGroup => Group::new(element, 1).render(ctx, buf),
         // A bare column outside a section defaults to full width.
-        MjmlTag::MjColumn => Column::new(element, 100).render(ctx, buf),
+        MjmlTag::MjColumn => {
+            let raw = element.attr("width");
+            Column::new(
+                element,
+                crate::components::ColumnWidth::resolve(raw, 1),
+                raw,
+                1,
+            )
+            .render(ctx, buf)
+        }
         MjmlTag::MjText => Text::new(element).render(ctx, buf),
         MjmlTag::MjImage => Image::new(element).render(ctx, buf),
         MjmlTag::MjDivider => Divider::new(element).render(ctx, buf),

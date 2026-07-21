@@ -1,0 +1,20 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column width="300px">
+        <mj-text>Fixed</mj-text>
+      </mj-column>
+      <mj-column>
+        <mj-text>Rest</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section>
+      <mj-column width="25%">
+        <mj-text>Quarter</mj-text>
+      </mj-column>
+      <mj-column width="75%">
+        <mj-text>Three quarters</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

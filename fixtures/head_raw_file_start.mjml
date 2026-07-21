@@ -1,0 +1,15 @@
+<mjml>
+  <mj-raw position="file-start"><?xml version="1.0" encoding="UTF-8"?></mj-raw>
+  <mj-head>
+    <mj-raw>
+      <meta name="color-scheme" content="light dark" />
+    </mj-raw>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Body</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

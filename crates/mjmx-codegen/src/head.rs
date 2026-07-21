@@ -168,6 +168,16 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
         h.push_str("</style>");
     }
 
+    // mjml's `headRaw`: `<mj-raw>` bodies collected from `<mj-head>`, emitted verbatim
+    // as the last thing in the `<head>` (joined by a newline, as mjml's skeleton does).
+    let raws = &ctx.semantic.head().raws;
+    for (i, raw) in raws.iter().enumerate() {
+        if i > 0 {
+            h.push('\n');
+        }
+        h.push_str(raw);
+    }
+
     h.push_str("</head>");
     h
 }

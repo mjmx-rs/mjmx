@@ -1,0 +1,14 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column padding="10px 20px" inner-background-color="#eeeeee" inner-border="2px dashed #333333" inner-border-radius="8px">
+        <mj-text>Inner</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section>
+      <mj-column padding-left="12px" border-top="3px solid #ff0000" border-bottom="1px solid #00ff00" inner-border-top="1px dotted #0000ff">
+        <mj-text>Sides</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

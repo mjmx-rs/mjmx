@@ -63,6 +63,12 @@ pub struct HeadData<'a> {
     pub fonts: Vec<FontFace<'a>>,
     /// Raw `<mj-style>` CSS bodies, in source order, for verbatim head emission.
     pub styles: Vec<String>,
+    /// `<mj-raw>` bodies found under `<mj-head>`, in source order. mjml's `headRaw`:
+    /// they are injected verbatim at the very end of the document `<head>`.
+    pub raws: Vec<String>,
+    /// `<mj-raw position="file-start">` bodies found as *direct children of `<mjml>`*
+    /// (mjml's `mjOutsideRaws`). They are emitted before the doctype.
+    pub file_start_raws: Vec<String>,
     /// Whether any `<mj-style inline>` was seen. Injection is deferred to the
     /// css-inline milestone; this only records that inlining was requested.
     pub has_inline_styles: bool,
@@ -82,6 +88,8 @@ impl<'a> HeadData<'a> {
             preview: None,
             fonts,
             styles: Vec::new(),
+            raws: Vec::new(),
+            file_start_raws: Vec::new(),
             has_inline_styles: false,
         }
     }

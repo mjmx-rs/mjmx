@@ -63,6 +63,14 @@ impl<'a> Semantic<'a> {
                     Self::ingest_head_child(child, &mut head, &mut attributes, &mut diagnostics);
                 }
             }
+            // mjml's `mjOutsideRaws`: `<mj-raw>` siblings of `<mj-head>`/`<mj-body>`.
+            // Only those carrying `position="file-start"` are emitted — before the
+            // doctype; the rest are silently dropped.
+            for child in root.element_children() {
+                if child.tag == MjmlTag::MjRaw && child.attr("position") == Some("file-start") {
+                    head.file_start_raws.push(inner_text(child));
+                }
+            }
         }
 
         (Self { head, attributes }, diagnostics)
@@ -94,6 +102,10 @@ impl<'a> Semantic<'a> {
                 }
                 head.styles.push(inner_text(child));
             }
+            // mjml renders a head `<mj-raw>` like any body component (it is a
+            // `BodyComponent`), so its content lands in `globalData.headRaw` and is
+            // injected verbatim at the end of the document `<head>`.
+            MjmlTag::MjRaw => head.raws.push(inner_text(child)),
             MjmlTag::MjAttributes => attributes.ingest(child),
             _ => diagnostics.push(
                 Diagnostic::warning(format!(

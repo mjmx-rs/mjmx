@@ -177,6 +177,24 @@ fn column_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn column_px_width_matches_mjml_reference() {
+    assert_golden(
+        "column_px_width",
+        fixture!("column_px_width.mjml"),
+        fixture!("column_px_width.html"),
+    );
+}
+
+#[test]
+fn column_inner_border_matches_mjml_reference() {
+    assert_golden(
+        "column_inner_border",
+        fixture!("column_inner_border.mjml"),
+        fixture!("column_inner_border.html"),
+    );
+}
+
+#[test]
 fn body_attrs_matches_mjml_reference() {
     assert_golden(
         "body_attrs",
@@ -197,6 +215,24 @@ fn body_attrs_head_matches_mjml_reference() {
 #[test]
 fn raw_matches_mjml_reference() {
     assert_golden("raw", fixture!("raw.mjml"), fixture!("raw.html"));
+}
+
+#[test]
+fn head_raw_matches_mjml_reference() {
+    assert_golden(
+        "head_raw",
+        fixture!("head_raw.mjml"),
+        fixture!("head_raw.html"),
+    );
+}
+
+#[test]
+fn head_raw_file_start_matches_mjml_reference() {
+    assert_golden(
+        "head_raw_file_start",
+        fixture!("head_raw_file_start.mjml"),
+        fixture!("head_raw_file_start.html"),
+    );
 }
 
 #[test]
@@ -368,6 +404,15 @@ fn hero_attrs_matches_mjml_reference() {
         "hero_attrs",
         fixture!("hero_attrs.mjml"),
         fixture!("hero_attrs.html"),
+    );
+}
+
+#[test]
+fn hero_fluid_matches_mjml_reference() {
+    assert_golden(
+        "hero_fluid",
+        fixture!("hero_fluid.mjml"),
+        fixture!("hero_fluid.html"),
     );
 }
 
