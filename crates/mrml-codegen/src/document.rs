@@ -75,7 +75,37 @@ pub fn render_document<'a>(
     out.push_str("<body style=\"word-spacing:normal;\">");
     out.push_str(&body_buf);
     out.push_str("</body></html>");
-    Ok(out)
+    Ok(merge_outlook_conditionals(&out))
+}
+
+/// Fuse adjacent Outlook conditional comments, mirroring mjml's
+/// `mergeOutlookConditionnals` post-process: every `<![endif]-->` immediately followed
+/// (across only whitespace) by `<!--[if mso | IE]>` is deleted, so two back-to-back
+/// `[if mso | IE]` blocks collapse into one. Layout components (wrapper, group, nested
+/// sections) emit their ghost tables as independent blocks and rely on this pass to
+/// reproduce mjml's seams byte-for-byte. Blocks under other conditions (`[if mso]`,
+/// `[if lte mso 11]`, `[if !mso]`) never match and are left intact.
+fn merge_outlook_conditionals(html: &str) -> String {
+    const END: &str = "<![endif]-->";
+    const OPEN: &str = "<!--[if mso | IE]>";
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(pos) = rest.find(END) {
+        // Look past the `<![endif]-->` and any whitespace for a fused `[if mso | IE]`.
+        let after = &rest[pos + END.len()..];
+        let trimmed = after.trim_start();
+        if let Some(fused) = trimmed.strip_prefix(OPEN) {
+            // Drop both the end marker and the following open marker (and the gap).
+            out.push_str(&rest[..pos]);
+            rest = fused;
+        } else {
+            // Keep this end marker and continue scanning after it.
+            out.push_str(&rest[..pos + END.len()]);
+            rest = after;
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Find the `<mj-body>` child of the `<mjml>` root.

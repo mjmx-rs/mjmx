@@ -61,6 +61,13 @@ pub struct RenderContext<'a> {
     pub lang: String,
     /// Document direction. `// mjml default: auto`.
     pub dir: String,
+    /// The effective container (content-box) width, in pixels, available to the
+    /// component currently rendering. Threaded body → wrapper → section → column →
+    /// group so width math (column pixel widths, divider ghost tables) resolves against
+    /// the real available width instead of a hard-coded constant. `// mjml default:
+    /// 600px` (the `<mj-body>` width). Each layout container saves, narrows, and
+    /// restores it around its children.
+    pub container_width: u32,
     /// Aggregated head data and the attribute resolver.
     pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
@@ -78,6 +85,8 @@ impl<'a> RenderContext<'a> {
             // mjml default: lang "und", dir "auto".
             lang: "und".to_string(),
             dir: "auto".to_string(),
+            // mjml default: <mj-body width> is 600px.
+            container_width: 600,
             semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),

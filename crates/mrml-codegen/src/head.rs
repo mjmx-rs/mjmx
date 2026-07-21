@@ -117,18 +117,26 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
         h.push_str("<!--<![endif]-->");
     }
 
-    // Responsive column rules (registered by mj-column).
+    // Responsive column rules (registered by mj-column / mj-group). mjml groups every
+    // class rule inside a single `@media` block, separated by a blank line.
     let media_queries = ctx.media_queries();
     if !media_queries.is_empty() {
         h.push_str("<style type=\"text/css\">");
-        for m in media_queries {
+        h.push_str(&format!(
+            "\n    @media only screen and (min-width:{bp}px) {{\n",
+            bp = ctx.breakpoint
+        ));
+        for (i, m) in media_queries.iter().enumerate() {
+            if i > 0 {
+                h.push('\n');
+            }
             h.push_str(&format!(
-                "\n    @media only screen and (min-width:{bp}px) {{\n      .{class} {{\n        {body}\n      }}\n    }}\n  ",
-                bp = ctx.breakpoint,
+                "      .{class} {{\n        {body}\n      }}\n",
                 class = m.class,
                 body = m.body,
             ));
         }
+        h.push_str("    }\n  ");
         h.push_str("</style>");
 
         h.push_str(&format!(

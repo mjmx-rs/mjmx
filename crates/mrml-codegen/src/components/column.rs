@@ -8,15 +8,36 @@ use crate::render::{Render, RenderResult, render_element};
 /// Renderer for `<mj-column>`.
 pub struct Column<'a> {
     element: &'a Element<'a>,
-    /// This column's width as a whole-number percentage of its section.
+    /// This column's width as a whole-number percentage of its container. Always the
+    /// share that keys the `mj-column-per-{share}` class and its media query.
     pct: u32,
+    /// Whether the column sits inside an `<mj-group>` (no mobile stacking). A group
+    /// column keeps its share as the inline outlook-div width; a section column uses
+    /// `100%` inline and lets the media query apply the share on desktop.
+    in_group: bool,
 }
 
 impl<'a> Column<'a> {
-    /// Wrap an `<mj-column>` element with its computed width percentage.
+    /// Wrap a section (or top-level) `<mj-column>` — mobile-stacking, so the inline
+    /// outlook-div width is `100%` and the share lives only in the media query.
     #[must_use]
     pub fn new(element: &'a Element<'a>, pct: u32) -> Self {
-        Self { element, pct }
+        Self {
+            element,
+            pct,
+            in_group: false,
+        }
+    }
+
+    /// Wrap an `<mj-group>` child `<mj-column>` — no mobile stacking, so the share is
+    /// also the inline outlook-div width.
+    #[must_use]
+    pub fn new_grouped(element: &'a Element<'a>, pct: u32) -> Self {
+        Self {
+            element,
+            pct,
+            in_group: true,
+        }
     }
 }
 
@@ -32,8 +53,11 @@ impl<'a> Render<'a> for Column<'a> {
             format!("width: {pct}% !important;\n        max-width: {pct}%;"),
         );
 
+        // Inline outlook-div width: a section column stacks on mobile (100%, share via
+        // the media query); a group column holds its share inline (no stacking).
+        let div_width = if self.in_group { pct } else { 100 };
         buf.push_str(&format!(
-            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:{pct}%;\">"
+            "<div class=\"{class} mj-outlook-group-fix\" style=\"font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:{div_width}%;\">"
         ));
         buf.push_str(
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"vertical-align:top;\" width=\"100%\">",

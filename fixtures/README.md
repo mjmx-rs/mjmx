@@ -30,6 +30,11 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `divider` | `<mj-divider>` `<p>` rule + the `<!--[if mso | IE]>` ghost table sized to the content box. |
 | `spacer` | `<mj-spacer height>` div/table vertical whitespace. |
 | `button` | `<mj-button href>`: table + `<a>`, registering the default Ubuntu font in the head. |
+| `twocol` | Two-column `<mj-section>`: each column stacks on mobile (inline `width:100%`), the `mj-column-per-50` class + media query carrying the desktop share. |
+| `raw` | `<mj-raw>` body passthrough: inner HTML emitted verbatim with no wrapping. |
+| `group` | `<mj-section>` holding a 2-column `<mj-group>` — side-by-side columns, group-managed Outlook ghost table, `mj-column-per-100`/`-50` media queries. |
+| `wrapper` | `<mj-wrapper>` > `mj-section` > `mj-column` > `mj-text`: section-shaped container wrapping a whole section (fused Outlook conditionals). |
+| `wrapper_full_width` | `<mj-wrapper full-width="full-width">`: adds the outer 100%-width table around the same inner markup. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.

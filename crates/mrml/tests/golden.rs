@@ -164,6 +164,39 @@ fn button_matches_mjml_reference() {
 }
 
 #[test]
+fn twocol_matches_mjml_reference() {
+    assert_golden("twocol", fixture!("twocol.mjml"), fixture!("twocol.html"));
+}
+
+#[test]
+fn raw_matches_mjml_reference() {
+    assert_golden("raw", fixture!("raw.mjml"), fixture!("raw.html"));
+}
+
+#[test]
+fn group_matches_mjml_reference() {
+    assert_golden("group", fixture!("group.mjml"), fixture!("group.html"));
+}
+
+#[test]
+fn wrapper_matches_mjml_reference() {
+    assert_golden(
+        "wrapper",
+        fixture!("wrapper.mjml"),
+        fixture!("wrapper.html"),
+    );
+}
+
+#[test]
+fn wrapper_full_width_matches_mjml_reference() {
+    assert_golden(
+        "wrapper_full_width",
+        fixture!("wrapper_full_width.mjml"),
+        fixture!("wrapper_full_width.html"),
+    );
+}
+
+#[test]
 fn normalize_is_strict_about_content() {
     // The comparator must NOT be so tolerant that wrong content passes.
     assert_ne!(
