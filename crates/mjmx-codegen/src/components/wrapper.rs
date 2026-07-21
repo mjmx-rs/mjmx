@@ -16,6 +16,7 @@ use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
 use crate::components::Section;
+use crate::components::background::Background;
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
 
@@ -38,7 +39,13 @@ impl<'a> Wrapper<'a> {
 
     /// The centered-container body shared by both variants (renderBefore + the section
     /// container + the wrapped section children + renderAfter).
-    fn render_inner(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
+    fn render_inner(
+        &self,
+        ctx: &mut RenderContext<'a>,
+        buf: &mut String,
+        bg: &Background<'a>,
+        full_width: bool,
+    ) -> RenderResult {
         let width = ctx.container_width;
 
         // Themeable attributes (a wrapper shares mj-section's styling).
@@ -51,7 +58,6 @@ impl<'a> Wrapper<'a> {
         let padding = attr("padding", "20px 0");
         let direction = attr("direction", "ltr");
         let text_align = attr("text-align", "center");
-        let background_color = opt("background-color");
         let border = opt("border");
         let border_radius = opt("border-radius");
 
@@ -59,17 +65,12 @@ impl<'a> Wrapper<'a> {
         // and borders.
         let box_width = width - horizontal_padding(padding) - border.map_or(0, horizontal_border);
 
-        let bg_prefix = background_color
-            .map(|bg| format!("background:{bg};background-color:{bg};"))
-            .unwrap_or_default();
-        let mso_bgcolor = background_color
-            .map(|bg| format!("bgcolor=\"{bg}\" "))
-            .unwrap_or_default();
-
-        // renderBefore: the section-shaped ghost table.
-        buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
-        ));
+        // In the full-width variant the background moved out to the outer 100% table.
+        let bg_prefix = if full_width { String::new() } else { bg.css() };
+        let bg_attr = match (full_width, bg.url()) {
+            (false, Some(url)) => format!("background=\"{url}\" "),
+            _ => String::new(),
+        };
 
         // The centered container.
         let radius_div = border_radius
@@ -78,13 +79,16 @@ impl<'a> Wrapper<'a> {
         buf.push_str(&format!(
             "<div style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
         ));
+        if bg.has_url() {
+            buf.push_str("<div style=\"line-height:0;font-size:0;\">");
+        }
         let table_suffix = if border_radius.is_some() {
             "border-collapse:separate;"
         } else {
             ""
         };
         buf.push_str(&format!(
-            "<table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
+            "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
         ));
         buf.push_str("<tbody><tr>");
         let mut td_style = String::new();
@@ -120,10 +124,29 @@ impl<'a> Wrapper<'a> {
         ctx.container_width = saved;
 
         buf.push_str("<!--[if mso | IE]></table><![endif]-->");
-        buf.push_str("</td></tr></tbody></table></div>");
-        // renderAfter.
-        buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
+        buf.push_str("</td></tr></tbody></table>");
+        if bg.has_url() {
+            buf.push_str("</div>");
+        }
+        buf.push_str("</div>");
         Ok(())
+    }
+
+    /// mjml's `renderBefore`: the section-shaped mso ghost table.
+    fn render_before(&self, ctx: &RenderContext<'a>, buf: &mut String, bg: &Background<'a>) {
+        let width = ctx.container_width;
+        let mso_bgcolor = bg
+            .color()
+            .map(|c| format!("bgcolor=\"{c}\" "))
+            .unwrap_or_default();
+        buf.push_str(&format!(
+            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
+        ));
+    }
+
+    /// mjml's `renderAfter`.
+    fn render_after(buf: &mut String) {
+        buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
     }
 }
 
@@ -165,16 +188,34 @@ fn horizontal_border(border: &str) -> u32 {
 
 impl<'a> Render<'a> for Wrapper<'a> {
     fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
+        let bg = Background::resolve(self.element, ctx);
+        let width = ctx.container_width;
+
         if self.is_full_width() {
-            // Outer full-width table, then the identical centered-container body.
-            buf.push_str(
-                "<table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:100%;\"><tbody><tr><td>",
-            );
-            self.render_inner(ctx, buf)?;
+            // Outer full-width table (which carries the background), then the identical
+            // centered-container body wrapped in the VML rect.
+            let bg_attr = bg
+                .url()
+                .map(|url| format!("background=\"{url}\" "))
+                .unwrap_or_default();
+            buf.push_str(&format!(
+                "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
+                bg.css()
+            ));
+            bg.vml_open(buf, true, width);
+            self.render_before(ctx, buf, &bg);
+            self.render_inner(ctx, buf, &bg, true)?;
+            Self::render_after(buf);
+            bg.vml_close(buf);
             buf.push_str("</td></tr></tbody></table>");
             Ok(())
         } else {
-            self.render_inner(ctx, buf)
+            self.render_before(ctx, buf, &bg);
+            bg.vml_open(buf, false, width);
+            self.render_inner(ctx, buf, &bg, false)?;
+            bg.vml_close(buf);
+            Self::render_after(buf);
+            Ok(())
         }
     }
 }

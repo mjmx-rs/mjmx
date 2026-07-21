@@ -1,0 +1,9 @@
+<mjml>
+  <mj-body>
+    <mj-section background-url="https://example.com/bg.png" background-color="#123456">
+      <mj-column>
+        <mj-text>Hello world</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

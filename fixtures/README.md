@@ -59,6 +59,12 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `accordion_attrs` | `<mj-accordion>` with `border`, `font-family`, `icon-position/width/height`, `padding`, and title/text `font-size`, `line-height`, `padding`, `color`, `background-color` resolved per child. |
 | `wrapper_attrs` | `<mj-wrapper>` with section-style `background-color`, `border`, `border-radius`, `padding`, `direction`, `text-align`; box width threaded to nested sections. |
 | `group_attrs` | `<mj-group>` with `background-color` (div + ghost `bgcolor`), `vertical-align` (div + section ghost cell), `direction`. |
+| `section_bg_url` | `<mj-section background-url background-color>`: default `repeat` / `auto` / `top center` — the `background` shorthand + longhands on div and table, the zero-line-height inner div, the `background=` attribute, and the VML `<v:rect>`/`<v:fill type="tile" origin="0.5, 0">` block. |
+| `section_bg_full` | `<mj-section>` with `background-size="cover"`, `background-repeat="no-repeat"`, `background-position="bottom right"`: keyword→percentage VML math (`origin="0.5, 0.5"`), `type="frame"`, `size="1,1" aspect="atleast"`. |
+| `section_bg_attrs` | Background attributes resolved through `<mj-attributes>` (a section default: `contain` + single-keyword `left`) and `<mj-class>` (`10.5% bottom`, two-length `background-size`), exercising `parseInt` percentage truncation. |
+| `section_bg_full_width` | `<mj-section full-width="full-width">` with a background: declarations move to the outer 100% table, the rect stretches with `mso-width-percent:1000`, and `background-position-x`/`-y` override the shorthand. |
+| `wrapper_bg_url` | `<mj-wrapper background-url background-color>`: the section background path applied to a wrapper (its ghost row still wraps each nested section). |
+| `wrapper_bg_full_width` | `<mj-wrapper full-width="full-width">` with `background-position="25% 75%"`, `background-size="50% 30%"`, `no-repeat`: percentage VML math (`origin="-0.25, 0.25"`) and two-length `size="50%,30%"`. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs`.

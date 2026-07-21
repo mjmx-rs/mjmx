@@ -1,0 +1,11 @@
+<mjml>
+  <mj-body>
+    <mj-wrapper full-width="full-width" background-url="https://example.com/bg.png" background-color="#101820" background-size="50% 30%" background-position="25% 75%" background-repeat="no-repeat">
+      <mj-section>
+        <mj-column>
+          <mj-text>Wrapped</mj-text>
+        </mj-column>
+      </mj-section>
+    </mj-wrapper>
+  </mj-body>
+</mjml>

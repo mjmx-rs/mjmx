@@ -7,6 +7,7 @@
 //! they read as component defaults rather than fixture-specific magic.
 
 mod accordion;
+mod background;
 mod body;
 mod button;
 mod carousel;

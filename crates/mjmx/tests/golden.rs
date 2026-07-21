@@ -241,6 +241,60 @@ fn wrapper_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn section_bg_url_matches_mjml_reference() {
+    assert_golden(
+        "section_bg_url",
+        fixture!("section_bg_url.mjml"),
+        fixture!("section_bg_url.html"),
+    );
+}
+
+#[test]
+fn section_bg_full_matches_mjml_reference() {
+    assert_golden(
+        "section_bg_full",
+        fixture!("section_bg_full.mjml"),
+        fixture!("section_bg_full.html"),
+    );
+}
+
+#[test]
+fn section_bg_attrs_matches_mjml_reference() {
+    assert_golden(
+        "section_bg_attrs",
+        fixture!("section_bg_attrs.mjml"),
+        fixture!("section_bg_attrs.html"),
+    );
+}
+
+#[test]
+fn section_bg_full_width_matches_mjml_reference() {
+    assert_golden(
+        "section_bg_full_width",
+        fixture!("section_bg_full_width.mjml"),
+        fixture!("section_bg_full_width.html"),
+    );
+}
+
+#[test]
+fn wrapper_bg_url_matches_mjml_reference() {
+    assert_golden(
+        "wrapper_bg_url",
+        fixture!("wrapper_bg_url.mjml"),
+        fixture!("wrapper_bg_url.html"),
+    );
+}
+
+#[test]
+fn wrapper_bg_full_width_matches_mjml_reference() {
+    assert_golden(
+        "wrapper_bg_full_width",
+        fixture!("wrapper_bg_full_width.mjml"),
+        fixture!("wrapper_bg_full_width.html"),
+    );
+}
+
+#[test]
 fn table_matches_mjml_reference() {
     assert_golden("table", fixture!("table.mjml"), fixture!("table.html"));
 }

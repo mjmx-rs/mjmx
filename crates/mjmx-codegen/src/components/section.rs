@@ -3,6 +3,7 @@
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
+use crate::components::background::Background;
 use crate::components::{Column, Group};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
@@ -18,10 +19,21 @@ impl<'a> Section<'a> {
     pub fn new(element: &'a Element<'a>) -> Self {
         Self { element }
     }
-}
 
-impl<'a> Render<'a> for Section<'a> {
-    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
+    /// Whether this is a `full-width="full-width"` section.
+    fn is_full_width(&self) -> bool {
+        self.element.attr("full-width") == Some("full-width")
+    }
+
+    /// The centered container: everything between the mso ghost table's cell and its
+    /// close (mjml's `renderSection`).
+    fn render_section(
+        &self,
+        ctx: &mut RenderContext<'a>,
+        buf: &mut String,
+        bg: &Background<'a>,
+        full_width: bool,
+    ) -> RenderResult {
         // The section's own width is the container width handed down to it (600px at
         // the body root, or whatever a wrapper threads in).
         let width = ctx.container_width;
@@ -37,7 +49,6 @@ impl<'a> Render<'a> for Section<'a> {
         let padding = attr("padding", "20px 0");
         let direction = attr("direction", "ltr");
         let text_align = attr("text-align", "center");
-        let background_color = opt("background-color");
         let border = opt("border");
         let border_radius = opt("border-radius");
 
@@ -55,19 +66,16 @@ impl<'a> Render<'a> for Section<'a> {
         let count = children.len().max(1) as u32;
         let pct = 100 / count;
 
-        // `background:x;background-color:x;` prefix shared by the div and inner table.
-        let bg_prefix = background_color
-            .map(|bg| format!("background:{bg};background-color:{bg};"))
-            .unwrap_or_default();
-
-        // Outer mso/IE ghost table (fixed to the section width) that Outlook honors;
-        // carries the section background as a `bgcolor`.
-        let mso_bgcolor = background_color
-            .map(|bg| format!("bgcolor=\"{bg}\" "))
-            .unwrap_or_default();
-        buf.push_str(&format!(
-            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
-        ));
+        // The background declarations ride on the div and the inner table — unless the
+        // section is full-width, in which case they moved out to the outer 100% table.
+        let bg_prefix = if full_width { String::new() } else { bg.css() };
+        // A background image is painted through an extra zero-line-height div (mjml's
+        // `innerDiv`), and the table repeats the url as an HTML attribute for clients
+        // that ignore CSS backgrounds.
+        let bg_attr = match (full_width, bg.url()) {
+            (false, Some(url)) => format!("background=\"{url}\" "),
+            _ => String::new(),
+        };
 
         // Real centered container. Border-radius adds a rounded-clip on the div and
         // forces `border-collapse:separate` on the inner table.
@@ -77,13 +85,16 @@ impl<'a> Render<'a> for Section<'a> {
         buf.push_str(&format!(
             "<div style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
         ));
+        if bg.has_url() {
+            buf.push_str("<div style=\"line-height:0;font-size:0;\">");
+        }
         let table_suffix = if border_radius.is_some() {
             "border-collapse:separate;"
         } else {
             ""
         };
         buf.push_str(&format!(
-            "<table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
+            "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
         ));
         buf.push_str("<tbody><tr>");
         // Section content <td>: border and border-radius only when set; direction,
@@ -142,8 +153,66 @@ impl<'a> Render<'a> for Section<'a> {
 
         ctx.container_width = saved;
 
-        buf.push_str("</td></tr></tbody></table></div>");
+        buf.push_str("</td></tr></tbody></table>");
+        if bg.has_url() {
+            buf.push_str("</div>");
+        }
+        buf.push_str("</div>");
+        Ok(())
+    }
+
+    /// mjml's `renderBefore`: the mso/IE ghost table fixed to the section width, which
+    /// Outlook honors in place of the centered div, carrying the background color.
+    fn render_before(&self, ctx: &RenderContext<'a>, buf: &mut String, bg: &Background<'a>) {
+        let width = ctx.container_width;
+        let mso_bgcolor = bg
+            .color()
+            .map(|c| format!("bgcolor=\"{c}\" "))
+            .unwrap_or_default();
+        buf.push_str(&format!(
+            "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
+        ));
+    }
+
+    /// mjml's `renderAfter`: closes the ghost table opened by [`Self::render_before`].
+    fn render_after(buf: &mut String) {
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");
+    }
+}
+
+impl<'a> Render<'a> for Section<'a> {
+    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
+        let bg = Background::resolve(self.element, ctx);
+        let full_width = self.is_full_width();
+        let width = ctx.container_width;
+
+        if full_width {
+            // mjml's `renderFullWidth`: a 100%-wide table carries the background, and
+            // the VML rect (stretched with `mso-width-percent`) wraps the whole ghost
+            // table + centered container.
+            let bg_attr = bg
+                .url()
+                .map(|url| format!("background=\"{url}\" "))
+                .unwrap_or_default();
+            buf.push_str(&format!(
+                "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
+                bg.css()
+            ));
+            bg.vml_open(buf, true, width);
+            self.render_before(ctx, buf, &bg);
+            self.render_section(ctx, buf, &bg, true)?;
+            Self::render_after(buf);
+            bg.vml_close(buf);
+            buf.push_str("</td></tr></tbody></table>");
+        } else {
+            // mjml's `renderSimple`: the ghost table brackets the VML rect, which in
+            // turn brackets the centered container.
+            self.render_before(ctx, buf, &bg);
+            bg.vml_open(buf, false, width);
+            self.render_section(ctx, buf, &bg, false)?;
+            bg.vml_close(buf);
+            Self::render_after(buf);
+        }
         Ok(())
     }
 }
