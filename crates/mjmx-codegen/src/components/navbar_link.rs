@@ -62,7 +62,7 @@ impl<'a> NavbarLink<'a> {
     /// The outlook-suffixed class list for the ghost `<td>` (empty without `css-class`),
     /// mjml's `suffixCssClasses(this.getAttribute('css-class'), 'outlook')`.
     pub fn outlook_class(&self, ctx: &RenderContext<'a>) -> String {
-        suffix_css_classes(css_class(ctx, self.element), "outlook")
+        suffix_css_classes(css_class(ctx, self.element).as_deref(), "outlook")
     }
 
     /// Render the `<a class="mj-link" …>` anchor.

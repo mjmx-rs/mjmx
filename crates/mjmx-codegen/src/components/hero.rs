@@ -90,7 +90,7 @@ impl<'a> Render<'a> for Hero<'a> {
 
         // Centered container. mjml's key order is align, class, style — `mj-hero` has
         // no `align` default, so `class` (from `css-class`) leads.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!(
             "<div {class}style=\"margin:0 auto;max-width:{container_width}px;\">"
         ));

@@ -82,7 +82,7 @@ impl<'a> Wrapper<'a> {
         let div_class = if full_width {
             String::new()
         } else {
-            class_attr(css_class(ctx, self.element))
+            class_attr(css_class(ctx, self.element).as_deref())
         };
         buf.push_str(&format!(
             "<div {div_class}style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
@@ -125,7 +125,7 @@ impl<'a> Wrapper<'a> {
         {
             // mjml's `renderWrappedChildren`: the ghost cell carries the *section*
             // child's `css-class`, suffixed with `-outlook`.
-            let ghost_class = suffix_css_classes(css_class(ctx, child), "outlook");
+            let ghost_class = suffix_css_classes(css_class(ctx, child).as_deref(), "outlook");
             buf.push_str(&format!(
                 "<!--[if mso | IE]><tr><td class=\"{ghost_class}\" width=\"{width}px\" ><![endif]-->"
             ));
@@ -150,7 +150,7 @@ impl<'a> Wrapper<'a> {
             .color()
             .map(|c| format!("bgcolor=\"{c}\" "))
             .unwrap_or_default();
-        let ghost_class = suffix_css_classes(css_class(ctx, self.element), "outlook");
+        let ghost_class = suffix_css_classes(css_class(ctx, self.element).as_deref(), "outlook");
         buf.push_str(&format!(
             "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"{ghost_class}\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
         ));
@@ -210,7 +210,7 @@ impl<'a> Render<'a> for Wrapper<'a> {
                 .url()
                 .map(|url| format!("background=\"{url}\" "))
                 .unwrap_or_default();
-            let class = class_attr(css_class(ctx, self.element));
+            let class = class_attr(css_class(ctx, self.element).as_deref());
             buf.push_str(&format!(
                 "<table align=\"center\" {class}{bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
                 bg.css()

@@ -45,7 +45,7 @@ impl<'a> Render<'a> for Spacer<'a> {
         }
         td_style.push_str("word-break:break-word;");
         // mj-spacer has no `align`, so the wrapping `<td>` is `class` then `style`.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!("<td {class}style=\"{td_style}\">"));
         buf.push_str(&format!(
             "<div style=\"height:{height};line-height:{height};\">&#8202;</div>"

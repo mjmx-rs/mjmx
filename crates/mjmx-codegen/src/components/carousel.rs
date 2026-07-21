@@ -11,6 +11,8 @@
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
+use std::borrow::Cow;
+
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult};
@@ -90,7 +92,7 @@ impl<'a> Render<'a> for Carousel<'a> {
         // Outer content cell (align, no padding).
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!(
             "<td align=\"{align}\" {class}style=\"font-size:0px;word-break:break-word;\">"
         ));
@@ -130,7 +132,7 @@ impl<'a> Render<'a> for Carousel<'a> {
                 // mjml's `MjCarouselImage.renderThumbnail`: the image's `css-class`,
                 // suffixed with `-thumbnail`, is appended to the generated classes
                 // (the trailing space is mjml's, present even when unset).
-                let thumb_class = suffix_css_classes(css_class(ctx, img), "thumbnail");
+                let thumb_class = suffix_css_classes(css_class(ctx, img).as_deref(), "thumbnail");
                 buf.push_str(&format!(
                     "<a style=\"border:{tb_border};border-radius:{tb_border_radius};display:{disp};overflow:hidden;width:{tb_width}px;\" href=\"#{idx}\" target=\"{target}\" class=\"mj-carousel-thumbnail mj-carousel-{id}-thumbnail mj-carousel-{id}-thumbnail-{idx} {thumb_class}\"><label for=\"mj-carousel-{id}-radio-{idx}\"><img style=\"display:block;width:100%;height:auto;\" src=\"{thumb_src}\" alt=\"{alt}\" width=\"{tb_width}\" /></label></a>"
                 ));
@@ -163,7 +165,7 @@ impl<'a> Render<'a> for Carousel<'a> {
             };
             // mjml's `MjCarouselImage.render`: `mj-carousel-image mj-carousel-image-N `
             // plus the raw `css-class` (empty string when unset).
-            let image_class = css_class(ctx, img).unwrap_or("");
+            let image_class = css_class(ctx, img).unwrap_or(Cow::Borrowed(""));
             buf.push_str(&format!(
                 "<div class=\"mj-carousel-image mj-carousel-image-{idx} {image_class}\" style=\"{div_style}\">{img_html}</div>",
                 img_html = carousel_img_html(img, src, alt, border_radius, container_width),
@@ -179,7 +181,7 @@ impl<'a> Render<'a> for Carousel<'a> {
         if let Some(first) = images.first() {
             let src = first.attr("src").unwrap_or("");
             let alt = first.attr("alt").unwrap_or(IMG_ALT);
-            let first_class = css_class(ctx, first).unwrap_or("");
+            let first_class = css_class(ctx, first).unwrap_or(Cow::Borrowed(""));
             buf.push_str(&format!(
                 "<!--[if mso]><div class=\"mj-carousel-image mj-carousel-image-1 {first_class}\" style=\"\" >{img_html}</div><![endif]-->",
                 img_html = carousel_img_html(first, src, alt, border_radius, container_width),

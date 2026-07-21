@@ -70,7 +70,7 @@ impl<'a> Render<'a> for Divider<'a> {
 
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!(
             "<td align=\"{align}\" {class}style=\"{td_style}\">"
         ));

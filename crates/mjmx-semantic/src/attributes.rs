@@ -13,6 +13,7 @@
 //! Each row becomes a name→value map. Resolution precedence (highest first) is applied
 //! by [`Semantic::attribute`](crate::Semantic::attribute).
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use mjmx_ast::Element;
@@ -75,6 +76,36 @@ impl<'a> AttributesRegistry<'a> {
             if let Some(v) = self.classes.get(class).and_then(|m| m.get(name)) {
                 found = Some(*v);
             }
+        }
+        found
+    }
+
+    /// The `css-class` value for `mj-class="a b"`, **concatenated** across every class
+    /// that defines one, in `mj-class` order.
+    ///
+    /// This is mjml's one deviation from last-wins, in `applyAttributes`
+    /// (`mjml-core/lib/index.js`):
+    ///
+    /// ```js
+    /// if (acc['css-class'] && get(mjClassValues, 'css-class')) {
+    ///   multipleClasses = { 'css-class': `${acc['css-class']} ${mjClassValues['css-class']}` }
+    /// }
+    /// ```
+    ///
+    /// `css-class` is the *only* attribute treated this way — every other name still
+    /// resolves through [`Self::class`]. A single contributing class borrows the arena;
+    /// only a genuine multi-class join allocates.
+    #[must_use]
+    pub fn class_css_class(&self, classes: &str) -> Option<Cow<'a, str>> {
+        let mut found: Option<Cow<'a, str>> = None;
+        for class in classes.split_whitespace() {
+            let Some(value) = self.classes.get(class).and_then(|m| m.get("css-class")) else {
+                continue;
+            };
+            found = Some(match found {
+                Some(acc) => Cow::Owned(format!("{acc} {value}")),
+                None => Cow::Borrowed(*value),
+            });
         }
         found
     }

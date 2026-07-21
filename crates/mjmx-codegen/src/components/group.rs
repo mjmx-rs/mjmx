@@ -68,7 +68,7 @@ impl<'a> Render<'a> for Group<'a> {
         // mjml's `render`: `${getColumnClass()} mj-outlook-group-fix` + `css-class`.
         let div_class = append_css_class(
             &format!("{class} mj-outlook-group-fix"),
-            css_class(ctx, self.element),
+            css_class(ctx, self.element).as_deref(),
         );
         buf.push_str(&format!(
             "<div class=\"{div_class}\" style=\"{div_style}\">"

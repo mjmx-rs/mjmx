@@ -97,7 +97,7 @@ impl<'a> Render<'a> for Accordion<'a> {
         // components): accordion has no align, padding default 10px 25px.
         // mj-accordion has no `align`, so the column's wrapping `<td>` is `class`
         // (from `css-class`) then `style`.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!(
             "<td {class}style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
         ));
@@ -125,7 +125,7 @@ fn render_element_row<'a>(
     buf: &mut String,
 ) {
     // mjml's `MjAccordionElement.render`: `css-class` lands on the element's `<tr>`.
-    let class = leading_class_attr(css_class(ctx, element));
+    let class = leading_class_attr(css_class(ctx, element).as_deref());
     buf.push_str(&format!("<tr{class}><td style=\"padding:0px;\">"));
     buf.push_str("<label class=\"mj-accordion-element\" style=\"font-size:13px;\">");
     buf.push_str(
@@ -182,7 +182,7 @@ fn render_title<'a>(
         "font-size:{font_size};font-family:{font_family};padding:{padding};"
     ));
     // mjml's `MjAccordionTitle.renderTitle`: `class` then `style` on the title cell.
-    let title_class = class_attr(css_class(ctx, element));
+    let title_class = class_attr(css_class(ctx, element).as_deref());
     let title_td = format!("<td {title_class}style=\"{title_style}\"> {content} </td>");
 
     // Icon cell carries the title's background-color as a `background:` declaration.
@@ -255,7 +255,7 @@ fn render_text<'a>(
     }
     text_style.push_str(&format!("padding:{padding};"));
     // mjml's `MjAccordionText.renderContent`: `class` then `style` on the text cell.
-    let text_class = class_attr(css_class(ctx, element));
+    let text_class = class_attr(css_class(ctx, element).as_deref());
     buf.push_str(&format!(
         "<td {text_class}style=\"{text_style}\"> {content} </td>"
     ));

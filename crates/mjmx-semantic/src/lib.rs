@@ -19,6 +19,11 @@
 //! 4. the global `<mj-all ...>` default;
 //! 5. the component default the caller passes in (`component_default`).
 //!
+//! The universal `css-class` attribute has its own resolver, [`Semantic::css_class`]:
+//! same precedence, except that several `mj-class` names each setting `css-class`
+//! *concatenate* rather than the later one winning. mjml special-cases exactly this one
+//! attribute in `applyAttributes` (`mjml-core/lib/index.js`).
+//!
 //! # On-the-fly, allocation-free
 //!
 //! No `NodeId` side-tables and no tree rewrite: everything is borrowed from the arena
@@ -31,6 +36,8 @@ mod head;
 
 pub use attributes::AttributesRegistry;
 pub use head::{DEFAULT_BREAKPOINT, FontFace, HeadData};
+
+use std::borrow::Cow;
 
 use mjmx_ast::{Document, Element, Node};
 use mjmx_diagnostics::Diagnostic;
@@ -163,6 +170,37 @@ impl<'a> Semantic<'a> {
         }
         // 5. the component's own default.
         component_default
+    }
+
+    /// Resolve the universal `css-class` attribute on body element `el`.
+    ///
+    /// Identical precedence to [`Self::attribute`], with mjml's one special case: when
+    /// `mj-class="a b"` names several classes that each set `css-class`, the values are
+    /// **concatenated** in `mj-class` order (`"one two"`) instead of the later one
+    /// winning. See [`AttributesRegistry::class_css_class`] for the mjml source; no
+    /// other attribute behaves this way, which is why `css-class` gets its own
+    /// resolver rather than a flag on `attribute`.
+    ///
+    /// Returns a [`Cow`] because a multi-class join is the one case that cannot borrow
+    /// the arena; every other path is still borrow-only.
+    #[must_use]
+    pub fn css_class(&self, el: &Element<'a>) -> Option<Cow<'a, str>> {
+        // 1. inline attribute on the element itself.
+        if let Some(value) = el.attr("css-class") {
+            return Some(Cow::Borrowed(value));
+        }
+        // 2. mj-class maps (concatenating, unlike every other attribute).
+        if let Some(classes) = el.attr("mj-class") {
+            if let Some(value) = self.attributes.class_css_class(classes) {
+                return Some(value);
+            }
+        }
+        // 3. per-tag default.
+        if let Some(value) = self.attributes.per_tag(el.raw_tag.as_str(), "css-class") {
+            return Some(Cow::Borrowed(value));
+        }
+        // 4. mj-all default.
+        self.attributes.all("css-class").map(Cow::Borrowed)
     }
 }
 
@@ -300,6 +338,43 @@ mod tests {
         let root = parsed.document.root_element().unwrap();
         let text = find(root, MjmlTag::MjText);
         assert_eq!(sem.attribute(text, "color", None), Some("BB"));
+    }
+
+    #[test]
+    fn css_class_concatenates_across_mj_classes() {
+        let alloc = Allocator::new();
+        let parsed = mjmx_parser::parse(
+            r#"<mjml><mj-head><mj-attributes>
+                 <mj-class name="a" css-class="one" color="AA" />
+                 <mj-class name="b" css-class="two" color="BB" />
+                 <mj-class name="plain" color="CC" />
+               </mj-attributes></mj-head>
+               <mj-body><mj-column>
+                 <mj-text mj-class="a b">x</mj-text>
+                 <mj-text mj-class="b a">y</mj-text>
+                 <mj-text mj-class="a plain b">z</mj-text>
+                 <mj-text mj-class="a b" css-class="inline">w</mj-text>
+                 <mj-text mj-class="plain">v</mj-text>
+               </mj-body></mj-column></mj-body></mjml>"#,
+            &alloc,
+        );
+        let sem = Semantic::build(&parsed.document).0;
+        let root = parsed.document.root_element().unwrap();
+        let column = find(root, MjmlTag::MjColumn);
+        let texts: Vec<_> = column.element_children().collect();
+
+        // mjml's `applyAttributes` joins `css-class` in mj-class order …
+        assert_eq!(sem.css_class(texts[0]).as_deref(), Some("one two"));
+        assert_eq!(sem.css_class(texts[1]).as_deref(), Some("two one"));
+        // … skipping classes that set none …
+        assert_eq!(sem.css_class(texts[2]).as_deref(), Some("one two"));
+        // … while an inline value still wins outright …
+        assert_eq!(sem.css_class(texts[3]).as_deref(), Some("inline"));
+        // … and no contributor means no class at all.
+        assert_eq!(sem.css_class(texts[4]).as_deref(), None);
+
+        // The join is `css-class`-specific: every other attribute stays last-wins.
+        assert_eq!(sem.attribute(texts[0], "color", None), Some("BB"));
     }
 
     #[test]

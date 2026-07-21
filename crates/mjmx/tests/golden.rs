@@ -483,6 +483,15 @@ fn css_class_carousel_matches_mjml_reference() {
 }
 
 #[test]
+fn css_class_multi_matches_mjml_reference() {
+    assert_golden(
+        "css_class_multi",
+        fixture!("css_class_multi.mjml"),
+        fixture!("css_class_multi.html"),
+    );
+}
+
+#[test]
 fn include_matches_mjml_reference() {
     // `render_file` resolves the `<mj-include>` in main.mjml against the file's own
     // directory (via the LocalLoader), exactly as the mjml CLI did when generating the

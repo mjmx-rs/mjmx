@@ -98,7 +98,7 @@ impl<'a> Render<'a> for Text<'a> {
 
         // mjml's `mj-column` / `mj-hero` wrap each child in `<td align class style>`,
         // taking the class from the *child's* `css-class`.
-        let class = class_attr(css_class(ctx, self.element));
+        let class = class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!(
             "<td align=\"{align}\" {class}style=\"{td_style}\">"
         ));

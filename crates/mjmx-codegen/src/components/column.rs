@@ -243,7 +243,7 @@ impl<'a> Render<'a> for Column<'a> {
         // appended when set.
         let class = append_css_class(
             &format!("{column_class} mj-outlook-group-fix"),
-            css_class(ctx, self.element),
+            css_class(ctx, self.element).as_deref(),
         );
 
         // Themeable attributes. `vertical-align` / `direction` have mjml defaults; the

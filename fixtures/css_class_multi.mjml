@@ -1,0 +1,22 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-class name="a" css-class="one" />
+      <mj-class name="b" css-class="two" />
+      <mj-class name="plain" color="#ff0000" />
+      <mj-class name="sec" css-class="sec-one" />
+      <mj-class name="sec2" css-class="sec-two" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body>
+    <mj-section mj-class="sec sec2">
+      <mj-column mj-class="a b">
+        <mj-text mj-class="a b">joined in mj-class order</mj-text>
+        <mj-text mj-class="b a">reversed order</mj-text>
+        <mj-text mj-class="a plain b">a class without css-class in the middle</mj-text>
+        <mj-text mj-class="a b" css-class="inline-wins">inline overrides mj-class</mj-text>
+        <mj-text mj-class="plain">no css-class at all</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

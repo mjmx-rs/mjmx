@@ -17,6 +17,8 @@
 //! * `suffixCssClasses(classes, suffix)` (`mjml-core/lib/helpers/suffixCssClasses.js`)
 //!   is `classes ? classes.split(' ').map(c => `${c}-${suffix}`).join(' ') : ''`.
 
+use std::borrow::Cow;
+
 use mjmx_ast::Element;
 
 use crate::context::RenderContext;
@@ -26,10 +28,12 @@ use crate::context::RenderContext;
 ///
 /// An empty value is treated as unset, matching JS truthiness in every mjml
 /// `css-class` site (`this.getAttribute('css-class') ? … : …`).
-pub(crate) fn css_class<'a>(ctx: &RenderContext<'a>, el: &Element<'a>) -> Option<&'a str> {
-    ctx.semantic
-        .attribute(el, "css-class", None)
-        .filter(|value| !value.is_empty())
+///
+/// The [`Cow`] is `Owned` only in mjml's multi-`mj-class` concatenation case (see
+/// [`mjmx_semantic::Semantic::css_class`]); everything else still borrows the arena.
+/// Call sites hand `.as_deref()` to the formatting helpers below.
+pub(crate) fn css_class<'a>(ctx: &RenderContext<'a>, el: &Element<'a>) -> Option<Cow<'a, str>> {
+    ctx.semantic.css_class(el).filter(|value| !value.is_empty())
 }
 
 /// mjml's `htmlAttributes({ class })`: `class="…" ` when set, nothing when unset.

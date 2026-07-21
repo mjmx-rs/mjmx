@@ -239,7 +239,7 @@ impl<'a> SocialElement<'a> {
         let content = self.content();
 
         // mjml puts `css-class` on the element's own `<tr>`.
-        let class = leading_class_attr(css_class(ctx, self.element));
+        let class = leading_class_attr(css_class(ctx, self.element).as_deref());
         buf.push_str(&format!("<tr{class}>"));
         // Icon cell.
         buf.push_str(&format!(
