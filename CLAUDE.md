@@ -56,6 +56,31 @@ Phase 1 — core pipeline:
 Phase 2 — toolchain: M8 traverse + transformer · M9 minifier + formatter · M10 sourcemap.
 Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 
+All of the above is **complete**, plus css-class, HTTP include loader (opt-in), v3→v4
+migrate, `mjmx lsp`, incremental LSP sync, and wasm-opt. Rendering parity has **zero known
+divergences** from mjml 4.18.0 across 56 fixtures / 58 golden tests.
+
+## Planned next (queued 2026-07-21, to work on 2026-07-22)
+
+1. **Ship as three packages: JS, Rust, Python.**
+   - JS: `@mjmx/node` (napi) and `mjmx-wasm` exist but are unpublished/`private`. Needs real
+     packaging — naming, README, install story, ESM+CJS, per-platform prebuilds.
+   - Rust: `mjmx` umbrella as a published-quality crate (docs.rs metadata, crate-level docs,
+     examples, keywords).
+   - Python: **new binding** (pyo3/maturin). This reverses the earlier "wasm + napi only, no
+     python" decision recorded under Prior art.
+2. **CLI parity audit** — walk the mjml README's CLI section and verify every argument has an
+   `mjmx` equivalent (`-r`, `-w`/`--watch`, `-s`, `-o`, `--config.*`, `-m`, validation-level
+   flags, …); fill the gaps.
+3. **Options parity audit** — every option mjml documents as passable to `mjml2html`
+   (`keepComments`, `beautify`, `minify`, `validationLevel`, `filePath`, `fonts`,
+   `juicePreserveTags`, `minifyOptions`, `preprocessors`, …) should be expressible from the
+   CLI and every binding. `RenderOptions` is currently only `{ breakpoint, beautify, minify }`
+   — expect a sizeable gap.
+
+Method reminder: read mjml's actual README/source rather than guessing — that has caught real
+bugs every single time.
+
 ## Working agreement
 
 - **Plan → approve → code.** Always show the plan and wait for explicit approval before
