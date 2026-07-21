@@ -35,6 +35,18 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `group` | `<mj-section>` holding a 2-column `<mj-group>` — side-by-side columns, group-managed Outlook ghost table, `mj-column-per-100`/`-50` media queries. |
 | `wrapper` | `<mj-wrapper>` > `mj-section` > `mj-column` > `mj-text`: section-shaped container wrapping a whole section (fused Outlook conditionals). |
 | `wrapper_full_width` | `<mj-wrapper full-width="full-width">`: adds the outer 100%-width table around the same inner markup. |
+| `table` | `<mj-table>` wrapping raw `<tr>`/`<th>`/`<td>` rows verbatim inside a styled `<table>`, registering the default Ubuntu font. |
+| `social` | `<mj-social>` (horizontal) with two `<mj-social-element>`s (facebook, twitter): per-element inline tables + merged mso ghost cells, baked network icons/colors/share hrefs. |
+| `social_vertical` | `<mj-social mode="vertical">`: the same two elements stacked as rows in one `margin:0px` table. |
+| `navbar` | `<mj-navbar>` with two `<mj-navbar-link>`s (no hamburger): `mj-inline-links` div + merged mso ghost table; still registers the `.mj-menu-*` head stylesheet. |
+| `navbar_hamburger` | `<mj-navbar hamburger="hamburger">`: adds the CSS-checkbox mobile-menu toggle (input/label/trigger) plus the `.mj-menu-*` head stylesheet. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
 vendored mjml 4.18.0 output in `crates/mrml/tests/golden.rs`.
+
+**Note on `navbar_hamburger`:** mjml stamps the checkbox/label pair with a per-navbar
+*random* 16-hex-digit id (`genRandomHexString(16)`), which is non-reproducible. The
+vendored golden's id is pinned to `0000000000000000` — the deterministic value our
+renderer emits (`RenderContext::next_hamburger_id`); every other byte is mjml's own
+output. The id is a purely internal anchor (`<input id>` must equal `<label for>`), so
+pinning it changes nothing observable.

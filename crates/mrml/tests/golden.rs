@@ -197,6 +197,42 @@ fn wrapper_full_width_matches_mjml_reference() {
 }
 
 #[test]
+fn table_matches_mjml_reference() {
+    assert_golden("table", fixture!("table.mjml"), fixture!("table.html"));
+}
+
+#[test]
+fn social_matches_mjml_reference() {
+    assert_golden("social", fixture!("social.mjml"), fixture!("social.html"));
+}
+
+#[test]
+fn social_vertical_matches_mjml_reference() {
+    assert_golden(
+        "social_vertical",
+        fixture!("social_vertical.mjml"),
+        fixture!("social_vertical.html"),
+    );
+}
+
+#[test]
+fn navbar_matches_mjml_reference() {
+    assert_golden("navbar", fixture!("navbar.mjml"), fixture!("navbar.html"));
+}
+
+#[test]
+fn navbar_hamburger_matches_mjml_reference() {
+    // The vendored golden's random 16-hex checkbox id has been pinned to the
+    // deterministic value our renderer emits (see RenderContext::next_hamburger_id);
+    // every other byte is mjml 4.18.0's own output.
+    assert_golden(
+        "navbar_hamburger",
+        fixture!("navbar_hamburger.mjml"),
+        fixture!("navbar_hamburger.html"),
+    );
+}
+
+#[test]
 fn normalize_is_strict_about_content() {
     // The comparator must NOT be so tolerant that wrong content passes.
     assert_ne!(

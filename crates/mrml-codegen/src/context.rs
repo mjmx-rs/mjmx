@@ -72,6 +72,7 @@ pub struct RenderContext<'a> {
     pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
     styles: Vec<String>,
+    hamburger_seq: u32,
 }
 
 impl<'a> RenderContext<'a> {
@@ -90,7 +91,20 @@ impl<'a> RenderContext<'a> {
             semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),
+            hamburger_seq: 0,
         }
+    }
+
+    /// Mint a deterministic anchor id for an `<mj-navbar hamburger>` checkbox/label
+    /// pair. mjml uses a per-navbar random 16-hex-digit token here
+    /// (`genRandomHexString(16)`); that value is non-reproducible, so we emit a stable
+    /// counter-derived id instead (the token is a purely internal anchor whose only
+    /// requirement is that the `<input id>` and `<label for>` agree). The vendored
+    /// hamburger golden has its random id pinned to the first value produced here.
+    pub fn next_hamburger_id(&mut self) -> String {
+        let id = format!("{:016x}", self.hamburger_seq);
+        self.hamburger_seq += 1;
+        id
     }
 
     /// Register a responsive column rule (deduped by class, insertion order kept).

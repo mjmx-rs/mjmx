@@ -11,8 +11,10 @@ use mrml_diagnostics::Diagnostic;
 use mrml_span::GetSpan;
 use mrml_syntax::MjmlTag;
 
+use crate::components::social_element::SocialInherited;
 use crate::components::{
-    Body, Button, Column, Divider, Group, Image, Raw, Section, Spacer, Text, Wrapper,
+    Body, Button, Column, Divider, Group, Image, Navbar, NavbarLink, Raw, Section, Social,
+    SocialElement, Spacer, Table, Text, Wrapper,
 };
 use crate::context::RenderContext;
 
@@ -51,6 +53,13 @@ pub fn render_element<'a>(
         MjmlTag::MjSpacer => Spacer::new(element).render(ctx, buf),
         MjmlTag::MjButton => Button::new(element).render(ctx, buf),
         MjmlTag::MjRaw => Raw::new(element).render(ctx, buf),
+        MjmlTag::MjTable => Table::new(element).render(ctx, buf),
+        MjmlTag::MjSocial => Social::new(element).render(ctx, buf),
+        MjmlTag::MjSocialElement => {
+            SocialElement::new(element, SocialInherited::default()).render(ctx, buf)
+        }
+        MjmlTag::MjNavbar => Navbar::new(element).render(ctx, buf),
+        MjmlTag::MjNavbarLink => NavbarLink::new(element, None).render(ctx, buf),
         _ => Err(unsupported(element)),
     }
 }
@@ -63,6 +72,6 @@ pub(crate) fn unsupported(element: &Element<'_>) -> Diagnostic {
     ))
     .with_label(element.span(), "unsupported component in this build")
     .with_help(
-        "this build renders mj-body, mj-wrapper, mj-section, mj-group, mj-column, mj-text, mj-image, mj-divider, mj-spacer, mj-button and mj-raw",
+        "this build renders mj-body, mj-wrapper, mj-section, mj-group, mj-column, mj-text, mj-image, mj-divider, mj-spacer, mj-button, mj-raw, mj-table, mj-social, mj-social-element, mj-navbar and mj-navbar-link",
     )
 }

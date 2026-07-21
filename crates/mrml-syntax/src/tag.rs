@@ -240,6 +240,9 @@ impl MjmlTag {
                 | MjmlTag::MjDivider
                 | MjmlTag::MjSpacer
                 | MjmlTag::MjRaw
+                | MjmlTag::MjTable
+                | MjmlTag::MjSocialElement
+                | MjmlTag::MjNavbarLink
                 | MjmlTag::MjAccordionText
                 | MjmlTag::MjAccordionTitle
         )
