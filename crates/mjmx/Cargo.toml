@@ -8,6 +8,13 @@ repository.workspace = true
 authors.workspace = true
 description = "MJML-to-HTML compiler toolchain: parse and render MJML into responsive HTML."
 
+[features]
+default = []
+# Opt-in network access for `<mj-include path="https://…">`, exposed as
+# `render_file_allow_http`. Off by default — see the security note in
+# `mjmx_transformer::http`.
+http-loader = ["mjmx-transformer/http-loader"]
+
 [dependencies]
 mjmx-allocator.workspace = true
 mjmx-parser.workspace = true

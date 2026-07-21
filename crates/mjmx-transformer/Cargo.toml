@@ -6,7 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "MJML-to-MJML transform passes for mjmx: mj-include resolution with a pluggable loader."
+description = "MJML-to-MJML transform passes for mjmx: mj-include resolution and the v3-to-v4 migration."
+
+[features]
+default = []
+# Opt-in network access: adds `HttpLoader` / `CombinedLoader`, which fetch
+# `<mj-include path="https://...">` over HTTP(S). OFF by default so the normal
+# build stays offline and dependency-light — see the crate docs' security note.
+http-loader = ["dep:ureq"]
 
 [dependencies]
 mjmx-ast.workspace = true
@@ -16,6 +23,7 @@ mjmx-span.workspace = true
 mjmx-syntax.workspace = true
 mjmx-diagnostics.workspace = true
 mjmx-traverse.workspace = true
+ureq = { workspace = true, optional = true }
 
 [lints]
 workspace = true

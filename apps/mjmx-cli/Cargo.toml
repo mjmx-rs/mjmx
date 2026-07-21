@@ -8,6 +8,12 @@ repository.workspace = true
 authors.workspace = true
 description = "Command-line interface for the mjmx MJML-to-HTML compiler."
 
+[features]
+default = []
+# Build the binary with HTTP `<mj-include>` support, unlocking
+# `--allow-http-includes`. Off by default so the shipped CLI is offline.
+http-loader = ["mjmx/http-loader"]
+
 [[bin]]
 name = "mjmx"
 path = "src/main.rs"

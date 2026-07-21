@@ -77,6 +77,43 @@ pub fn render_file(
     path: &std::path::Path,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
+    render_file_with(path, options, &mjmx_transformer::LocalLoader)
+}
+
+/// Render an MJML file, resolving `<mj-include>` **over the network as well as the
+/// disk**.
+///
+/// Only exists with the non-default `http-loader` feature. An include whose `path`
+/// is an `http://` / `https://` URL is fetched; a relative path inside a fetched
+/// partial resolves against that partial's URL; everything else comes off the disk
+/// exactly as in [`render_file`].
+///
+/// # Security
+///
+/// This hands the template author control over what your process connects to — an
+/// SSRF-shaped capability (cloud metadata endpoints, `localhost` admin ports,
+/// private subnets). It is a separate function behind a non-default cargo feature
+/// precisely so it cannot be reached by accident: [`render_file`] never fetches.
+/// Do not call this on templates you do not trust. See [`mjmx_transformer::http`].
+///
+/// # Errors
+///
+/// As [`render_file`], plus any HTTP transport or status failure.
+#[cfg(feature = "http-loader")]
+pub fn render_file_allow_http(
+    path: &std::path::Path,
+    options: &RenderOptions,
+) -> Result<String, Vec<Diagnostic>> {
+    render_file_with(path, options, &mjmx_transformer::CombinedLoader::new())
+}
+
+/// The shared body of [`render_file`] and `render_file_allow_http`:
+/// read → parse → resolve includes with `loader` → render.
+fn render_file_with(
+    path: &std::path::Path,
+    options: &RenderOptions,
+    loader: &dyn mjmx_transformer::IncludeLoader,
+) -> Result<String, Vec<Diagnostic>> {
     let source = std::fs::read_to_string(path).map_err(|err| {
         vec![Diagnostic::error(format!(
             "could not read '{}': {err}",
@@ -93,12 +130,8 @@ pub fn render_file(
     }
 
     let builder = mjmx_ast::AstBuilder::new(&allocator);
-    let (document, include_diags) = mjmx_transformer::resolve_includes(
-        &builder,
-        &parsed.document,
-        &mjmx_transformer::LocalLoader,
-        root_dir,
-    );
+    let (document, include_diags) =
+        mjmx_transformer::resolve_includes(&builder, &parsed.document, loader, root_dir);
     // Any error-severity include diagnostic blocks rendering (missing file, cycle).
     if include_diags.iter().any(|d| d.severity == Severity::Error) {
         return Err(include_diags);
@@ -126,6 +159,48 @@ pub fn format(source: &str, options: &FormatOptions) -> Result<String, Vec<Diagn
         return Err(parsed.errors);
     }
     Ok(mjmx_formatter::format(&parsed.document, options))
+}
+
+/// Migrate MJML **v3** `source` to v4, returning migrated MJML *source*.
+///
+/// Parses `source`, runs the [`mjmx_transformer::migrate`] AST pass (a faithful port
+/// of mjml's own `mjml-migrate`), and serializes the result back with
+/// [`mjmx_formatter`] — so the output is canonical, valid v4 MJML that this
+/// renderer accepts. Use [`migrate_with_notes`] to also see what changed.
+///
+/// Migration is meant to be run **once, on a v3 document**: some rules (unwrapping
+/// `<mj-container>`, rebuilding `<mj-social>` children) are destructive by design,
+/// matching mjml. See [`mjmx_transformer::migrate`] for the full rule table.
+///
+/// # Errors
+///
+/// Returns every parse [`Diagnostic`] if `source` is malformed.
+pub fn migrate(source: &str) -> Result<String, Vec<Diagnostic>> {
+    migrate_with_notes(source, &FormatOptions::default()).map(|(migrated, _)| migrated)
+}
+
+/// [`migrate`], plus the diagnostics describing every change made.
+///
+/// The notes are advisory ([`Severity::Advice`]) except for constructs that could
+/// not be migrated (dropped v3-only tags, a `<mj-hero>` with no `<mj-hero-content>`),
+/// which are [`Severity::Warning`]. Migration itself never fails once the document
+/// parses.
+///
+/// # Errors
+///
+/// Returns every parse [`Diagnostic`] if `source` is malformed.
+pub fn migrate_with_notes(
+    source: &str,
+    options: &FormatOptions,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
+    let allocator = Allocator::new();
+    let parsed = mjmx_parser::parse(source, &allocator);
+    if !parsed.errors.is_empty() {
+        return Err(parsed.errors);
+    }
+    let builder = mjmx_ast::AstBuilder::new(&allocator);
+    let (document, notes) = mjmx_transformer::migrate(&builder, &parsed.document);
+    Ok((mjmx_formatter::format(&document, options), notes))
 }
 
 /// Validate MJML `source` structurally, returning every diagnostic.

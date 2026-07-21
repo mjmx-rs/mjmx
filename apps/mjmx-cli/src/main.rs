@@ -1,6 +1,6 @@
 //! `mjmx` — the command-line interface.
 //!
-//! Two modes:
+//! Modes:
 //!
 //! - **render** (default): `mjmx <file>` reads MJML from a file (or stdin), renders it
 //!   to HTML with [`mjmx::render`], and writes the result to a file (or stdout). The
@@ -14,6 +14,9 @@
 //!   with [`mjmx::format`]. By default it writes the formatted source to stdout;
 //!   `--write`/`-w` rewrites the file in place, and `--check` writes nothing but
 //!   exits non-zero when the file is not already formatted.
+//! - **migrate**: `mjmx migrate <file>` converts an MJML **v3** document to v4 with
+//!   [`mjmx::migrate`] and prints the migrated MJML source. `--write`/`-w` rewrites
+//!   the file in place; notes describing every change go to stderr.
 //! - **dev**: `mjmx dev <file>` starts a local live-preview server for a file: it
 //!   renders the file, serves a browser preview, watches the file (and its
 //!   directory, for `<mj-include>` partials) for changes, and hot-reloads the
@@ -52,6 +55,8 @@ enum Command {
     Lint(LintArgs),
     /// Format an MJML document into canonical MJML source.
     Fmt(FmtArgs),
+    /// Convert an MJML v3 document to v4 MJML source.
+    Migrate(MigrateArgs),
     /// Serve a live browser preview with hot-reload on save.
     Dev(DevArgs),
 }
@@ -87,6 +92,14 @@ struct RenderArgs {
     /// With `--validate`, refuse to render if the linter reports any errors.
     #[arg(long, requires = "validate")]
     strict: bool,
+
+    /// Allow `<mj-include>` to fetch `http(s)://` URLs (requires a file input and a
+    /// binary built with `--features http-loader`).
+    ///
+    /// Off by default: a template that names a URL decides what this process
+    /// connects to. Only enable it for templates you trust.
+    #[arg(long)]
+    allow_http_includes: bool,
 }
 
 /// Arguments for the `lint` subcommand.
@@ -109,6 +122,21 @@ struct FmtArgs {
     /// Do not write anything; exit non-zero if the input is not already formatted.
     #[arg(long)]
     check: bool,
+}
+
+/// Arguments for the `migrate` subcommand.
+#[derive(Debug, Args)]
+struct MigrateArgs {
+    /// Input `.mjml` file. Reads from stdin when omitted.
+    input: Option<PathBuf>,
+
+    /// Rewrite the file in place with the migrated output (requires a file input).
+    #[arg(short, long)]
+    write: bool,
+
+    /// Do not print the per-change notes to stderr.
+    #[arg(short, long)]
+    quiet: bool,
 }
 
 /// Arguments for the `dev` subcommand.
@@ -139,6 +167,7 @@ fn main() -> ExitCode {
     match cli.command {
         Some(Command::Lint(args)) => run_lint(&args),
         Some(Command::Fmt(args)) => run_fmt(&args),
+        Some(Command::Migrate(args)) => run_migrate(&args),
         Some(Command::Dev(args)) => run_dev(args),
         None => run_render(&cli.render),
     }
@@ -211,6 +240,46 @@ fn run_fmt(args: &FmtArgs) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The `migrate` subcommand: parse + migrate v3 → v4, then print or rewrite.
+fn run_migrate(args: &MigrateArgs) -> ExitCode {
+    let source = match read_source(args.input.as_ref()) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("mjmx: error reading input: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let (migrated, notes) = match mjmx::migrate_with_notes(&source, &FormatOptions::default()) {
+        Ok(result) => result,
+        Err(diagnostics) => {
+            print_diagnostics(&diagnostics);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Notes go to stderr so stdout stays a clean stream of migrated MJML.
+    if !args.quiet {
+        print_diagnostics(&notes);
+    }
+
+    if args.write {
+        let Some(path) = args.input.as_ref() else {
+            eprintln!("mjmx: --write requires a file input (cannot rewrite stdin)");
+            return ExitCode::FAILURE;
+        };
+        if let Err(err) = fs::write(path, &migrated) {
+            eprintln!("mjmx: error writing output: {err}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    // `migrated` already ends with a newline.
+    print!("{migrated}");
+    ExitCode::SUCCESS
+}
+
 /// The `lint` subcommand: parse + validate, print diagnostics, exit non-zero on error.
 fn run_lint(args: &LintArgs) -> ExitCode {
     let source = match read_source(args.input.as_ref()) {
@@ -258,7 +327,12 @@ fn run_render(args: &RenderArgs) -> ExitCode {
     // A file input has a base directory, so `<mj-include>` resolves relative to it via
     // `render_file`; stdin has no base directory and uses the plain string renderer.
     let rendered = match args.input.as_ref() {
+        Some(path) if args.allow_http_includes => render_file_allow_http(path, &options),
         Some(path) => mjmx::render_file(path, &options),
+        None if args.allow_http_includes => {
+            eprintln!("mjmx: --allow-http-includes requires a file input");
+            return ExitCode::FAILURE;
+        }
         None => mjmx::render(&source, &options),
     };
 
@@ -276,6 +350,31 @@ fn run_render(args: &RenderArgs) -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+/// Render with network includes enabled — the `--allow-http-includes` path.
+///
+/// Two definitions: the real one when the binary was built with the `http-loader`
+/// feature, and a refusal when it was not, so the flag always parses and always
+/// explains itself instead of being silently absent from `--help`.
+#[cfg(feature = "http-loader")]
+fn render_file_allow_http(
+    path: &std::path::Path,
+    options: &RenderOptions,
+) -> Result<String, Vec<Diagnostic>> {
+    mjmx::render_file_allow_http(path, options)
+}
+
+/// The no-network build's stand-in for `render_file_allow_http`.
+#[cfg(not(feature = "http-loader"))]
+fn render_file_allow_http(
+    _path: &std::path::Path,
+    _options: &RenderOptions,
+) -> Result<String, Vec<Diagnostic>> {
+    Err(vec![Diagnostic::error(
+        "this mjmx was built without HTTP include support; \
+         rebuild with `--features http-loader` to use --allow-http-includes",
+    )])
 }
 
 /// Whether any diagnostic is error-severity.

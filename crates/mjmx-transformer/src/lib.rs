@@ -17,14 +17,20 @@
 //! - **`type="css"`** — wrap the loaded text in an `<mj-style>` so it lands in the
 //!   head `<style>` block (mjml's behavior).
 //!
-//! Loading is delegated to an [`IncludeLoader`]; the filesystem [`LocalLoader`] is the
-//! only implementation for now. The pass **never panics**: missing files, read
-//! errors, and include cycles are reported as [`Diagnostic`]s and the offending
-//! include is skipped.
+//! Loading is delegated to an [`IncludeLoader`]. [`LocalLoader`] (filesystem) is
+//! always available; [`HttpLoader`] and [`CombinedLoader`] exist only behind the
+//! non-default `http-loader` feature — see the [`http`] module for the security
+//! rationale. The pass **never panics**: missing files, read errors, and include
+//! cycles are reported as [`Diagnostic`]s and the offending include is skipped.
+//!
+//! The second pass is [`migrate`], the MJML v3 → v4 source migration.
 
+#[cfg(feature = "http-loader")]
+pub mod http;
 mod loader;
+mod migrate;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use mjmx_allocator::Vec as ArenaVec;
 use mjmx_ast::{AstBuilder, Document, Element, Node};
@@ -33,7 +39,10 @@ use mjmx_span::Span;
 use mjmx_syntax::MjmlTag;
 use mjmx_traverse::{Visit, walk_element};
 
-pub use loader::{IncludeLoader, LocalLoader};
+#[cfg(feature = "http-loader")]
+pub use http::{CombinedLoader, HttpFetch, HttpLoader, UreqFetch, is_http_url};
+pub use loader::{IncludeBase, IncludeLoader, Loaded, LocalLoader};
+pub use migrate::migrate;
 
 /// Resolve every `<mj-include>` in `document`, returning a rebuilt document and any
 /// diagnostics gathered along the way.
@@ -42,6 +51,8 @@ pub use loader::{IncludeLoader, LocalLoader};
 /// includes is resolved relative to it, and nested includes relative to their own
 /// parent file. If the document contains no includes it is rebuilt shallowly and no
 /// I/O happens. This function never panics.
+///
+/// Use [`resolve_includes_from`] when the document's base is not a local directory.
 #[must_use]
 pub fn resolve_includes<'a>(
     builder: &AstBuilder<'a>,
@@ -49,20 +60,34 @@ pub fn resolve_includes<'a>(
     loader: &dyn IncludeLoader,
     root_dir: &Path,
 ) -> (Document<'a>, Vec<Diagnostic>) {
+    resolve_includes_from(builder, document, loader, &IncludeBase::dir(root_dir))
+}
+
+/// Like [`resolve_includes`], but the top-level document's base is given explicitly.
+///
+/// Pass an [`IncludeBase::Url`] when the document itself came off the network, so
+/// its relative includes resolve against that URL instead of the filesystem.
+#[must_use]
+pub fn resolve_includes_from<'a>(
+    builder: &AstBuilder<'a>,
+    document: &Document<'a>,
+    loader: &dyn IncludeLoader,
+    root: &IncludeBase,
+) -> (Document<'a>, Vec<Diagnostic>) {
     let mut diagnostics = Vec::new();
 
-    // Fast path: nothing to expand, so avoid a deep rebuild and all filesystem work.
+    // Fast path: nothing to expand, so avoid a deep rebuild and all I/O.
     if !contains_include(document) {
         let children = builder.vec_from_iter(document.children.iter().copied());
         return (builder.document(children, document.span), diagnostics);
     }
 
-    let mut stack: Vec<PathBuf> = Vec::new();
+    let mut stack: Vec<String> = Vec::new();
     let children = rebuild_nodes(
         builder,
         &document.children,
         loader,
-        root_dir,
+        root,
         &mut stack,
         &mut diagnostics,
     );
@@ -93,18 +118,18 @@ fn rebuild_nodes<'a>(
     builder: &AstBuilder<'a>,
     nodes: &[Node<'a>],
     loader: &dyn IncludeLoader,
-    from_dir: &Path,
-    stack: &mut Vec<PathBuf>,
+    from: &IncludeBase,
+    stack: &mut Vec<String>,
     diags: &mut Vec<Diagnostic>,
 ) -> ArenaVec<'a, Node<'a>> {
     let mut out = builder.vec();
     for node in nodes {
         match node {
             Node::Element(el) if el.tag == MjmlTag::MjInclude => {
-                resolve_include(builder, el, loader, from_dir, stack, &mut out, diags);
+                resolve_include(builder, el, loader, from, stack, &mut out, diags);
             }
             Node::Element(el) => {
-                let rebuilt = rebuild_element(builder, el, loader, from_dir, stack, diags);
+                let rebuilt = rebuild_element(builder, el, loader, from, stack, diags);
                 out.push(builder.element_node(rebuilt));
             }
             // Text and comment nodes are `Copy` leaves; carry them over unchanged.
@@ -119,12 +144,12 @@ fn rebuild_element<'a>(
     builder: &AstBuilder<'a>,
     el: &Element<'a>,
     loader: &dyn IncludeLoader,
-    from_dir: &Path,
-    stack: &mut Vec<PathBuf>,
+    from: &IncludeBase,
+    stack: &mut Vec<String>,
     diags: &mut Vec<Diagnostic>,
 ) -> &'a Element<'a> {
     let attributes = builder.vec_from_iter(el.attributes.iter().copied());
-    let children = rebuild_nodes(builder, &el.children, loader, from_dir, stack, diags);
+    let children = rebuild_nodes(builder, &el.children, loader, from, stack, diags);
     builder.element(el.tag, el.raw_tag, attributes, children, el.span)
 }
 
@@ -133,8 +158,8 @@ fn resolve_include<'a>(
     builder: &AstBuilder<'a>,
     el: &Element<'a>,
     loader: &dyn IncludeLoader,
-    from_dir: &Path,
-    stack: &mut Vec<PathBuf>,
+    from: &IncludeBase,
+    stack: &mut Vec<String>,
     out: &mut ArenaVec<'a, Node<'a>>,
     diags: &mut Vec<Diagnostic>,
 ) {
@@ -151,29 +176,29 @@ fn resolve_include<'a>(
 
     match include_type {
         // Raw HTML passthrough: wrap in <mj-raw> so codegen emits it verbatim.
-        "html" => match loader.load(path, from_dir) {
-            Ok((contents, _)) => out.push(builder.element_node(wrap_raw_text(
+        "html" => match loader.load(path, from) {
+            Ok(loaded) => out.push(builder.element_node(wrap_raw_text(
                 builder,
                 MjmlTag::MjRaw,
                 "mj-raw",
-                &contents,
+                &loaded.contents,
                 el.span,
             ))),
             Err(diag) => diags.push(annotate(diag, el.span, path)),
         },
         // CSS: wrap in <mj-style> so it lands in the head <style> block.
-        "css" => match loader.load(path, from_dir) {
-            Ok((contents, _)) => out.push(builder.element_node(wrap_raw_text(
+        "css" => match loader.load(path, from) {
+            Ok(loaded) => out.push(builder.element_node(wrap_raw_text(
                 builder,
                 MjmlTag::MjStyle,
                 "mj-style",
-                &contents,
+                &loaded.contents,
                 el.span,
             ))),
             Err(diag) => diags.push(annotate(diag, el.span, path)),
         },
         // Default: an MJML fragment, parsed and spliced (with cycle detection).
-        _ => resolve_mjml_include(builder, el, path, loader, from_dir, stack, out, diags),
+        _ => resolve_mjml_include(builder, el, path, loader, from, stack, out, diags),
     }
 }
 
@@ -184,19 +209,27 @@ fn resolve_mjml_include<'a>(
     el: &Element<'a>,
     path: &str,
     loader: &dyn IncludeLoader,
-    from_dir: &Path,
-    stack: &mut Vec<PathBuf>,
+    from: &IncludeBase,
+    stack: &mut Vec<String>,
     out: &mut ArenaVec<'a, Node<'a>>,
     diags: &mut Vec<Diagnostic>,
 ) {
-    // Cycle key: the resolved absolute path of the target file. Canonicalize when
-    // possible so `./a.mjml` and `a.mjml` (or `../x/../a.mjml`) map to one key.
-    let candidate = from_dir.join(path);
-    let key = candidate.canonicalize().unwrap_or(candidate);
+    // The loader owns resolution, so it also owns the cycle identity: only it knows
+    // how to canonicalize (a real path via the filesystem, a normalized absolute URL
+    // over HTTP). That means the load happens first and the identity is checked
+    // after — one redundant fetch/read closes a cycle, and recursion still stops
+    // because the identity is already on the stack.
+    let loaded = match loader.load(path, from) {
+        Ok(loaded) => loaded,
+        Err(diag) => {
+            diags.push(annotate(diag, el.span, path));
+            return;
+        }
+    };
 
-    if stack.contains(&key) {
+    if stack.contains(&loaded.id) {
         diags.push(
-            Diagnostic::error(format!("include cycle: {}", cycle_chain(stack, &key)))
+            Diagnostic::error(format!("include cycle: {}", cycle_chain(stack, &loaded.id)))
                 .with_label(
                     el.span,
                     "this <mj-include> re-enters a file already being resolved",
@@ -206,26 +239,18 @@ fn resolve_mjml_include<'a>(
         return;
     }
 
-    let (contents, file_dir) = match loader.load(path, from_dir) {
-        Ok(loaded) => loaded,
-        Err(diag) => {
-            diags.push(annotate(diag, el.span, path));
-            return;
-        }
-    };
-
     // Copy the loaded source into the arena so the parsed nodes can share lifetime 'a.
-    let source = builder.atom(&contents).as_str();
+    let source = builder.atom(&loaded.contents).as_str();
     let parsed = mjmx_parser::parse(source, builder.allocator());
     // Surface malformed-partial diagnostics (spans are relative to the partial).
     diags.extend(parsed.errors);
 
-    stack.push(key);
+    stack.push(loaded.id);
     let children = rebuild_nodes(
         builder,
         &parsed.document.children,
         loader,
-        &file_dir,
+        &loaded.base,
         stack,
         diags,
     );
@@ -255,18 +280,17 @@ fn annotate(diag: Diagnostic, span: Span, path: &str) -> Diagnostic {
     )
 }
 
-/// Render the current cycle as `a -> b -> a` using file names for readability.
-fn cycle_chain(stack: &[PathBuf], repeated: &Path) -> String {
-    let mut parts: Vec<String> = stack.iter().map(|p| display_name(p)).collect();
+/// Render the current cycle as `a -> b -> a` using short names for readability.
+fn cycle_chain(stack: &[String], repeated: &str) -> String {
+    let mut parts: Vec<&str> = stack.iter().map(|id| display_name(id)).collect();
     parts.push(display_name(repeated));
     parts.join(" -> ")
 }
 
-/// A short display label for a path: its file name if present, else the full path.
-fn display_name(path: &Path) -> String {
-    path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
+/// A short label for an include identity: the last path/URL segment, else the whole
+/// thing. Works for both local paths and URLs since both are `/`-separated.
+fn display_name(id: &str) -> &str {
+    id.rsplit('/').find(|s| !s.is_empty()).unwrap_or(id)
 }
 
 #[cfg(test)]
@@ -275,6 +299,7 @@ mod tests {
     use mjmx_allocator::Allocator;
     use mjmx_diagnostics::Severity;
     use std::collections::HashMap;
+    use std::path::PathBuf;
 
     /// An in-memory loader for tests: maps an absolute path key to file contents.
     ///
@@ -286,12 +311,19 @@ mod tests {
     }
 
     impl IncludeLoader for MemLoader {
-        fn load(&self, path: &str, from_dir: &Path) -> Result<(String, PathBuf), Diagnostic> {
+        fn load(&self, path: &str, from: &IncludeBase) -> Result<Loaded, Diagnostic> {
+            let from_dir = from
+                .as_dir()
+                .ok_or_else(|| Diagnostic::error("MemLoader needs a directory base"))?;
             let full = normalize(&from_dir.join(path));
             match self.files.get(&full) {
                 Some(contents) => {
                     let dir = full.parent().unwrap_or(from_dir).to_path_buf();
-                    Ok((contents.clone(), dir))
+                    Ok(Loaded {
+                        contents: contents.clone(),
+                        base: IncludeBase::Dir(dir),
+                        id: full.display().to_string(),
+                    })
                 }
                 None => Err(Diagnostic::error(format!(
                     "no such file: {}",
