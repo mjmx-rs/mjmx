@@ -1,0 +1,15 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Georgia, serif" />
+      <mj-text color="#ff0000" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Hello world</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

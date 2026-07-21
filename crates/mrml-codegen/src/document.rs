@@ -1,12 +1,14 @@
 //! Document assembly: the crate entry point [`render_document`].
 //!
-//! Two passes: first render the body into a buffer (which side-effects the
-//! [`RenderContext`], collecting fonts and responsive rules), then assemble the full
-//! HTML document — doctype, `<html>`, the head built from the accumulated context,
-//! and the body wrapper.
+//! Three steps: build the [`Semantic`] view (`<mj-head>` aggregation + attribute
+//! resolution), render the body into a buffer (which side-effects the
+//! [`RenderContext`], collecting responsive rules), then assemble the full HTML
+//! document — doctype, `<html>`, the head built from the accumulated context and head
+//! data, and the body wrapper.
 
 use mrml_ast::{Document, Element};
 use mrml_diagnostics::Diagnostic;
+use mrml_semantic::Semantic;
 use mrml_syntax::MjmlTag;
 
 use crate::components::Body;
@@ -18,8 +20,8 @@ use crate::render::Render;
 ///
 /// Returns `Err` with every diagnostic collected if the document has no `<mjml>`
 /// root or a component fails to render.
-pub fn render_document(
-    document: &Document<'_>,
+pub fn render_document<'a>(
+    document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
     let root = document.root_element().ok_or_else(|| {
@@ -35,7 +37,15 @@ pub fn render_document(
         ]);
     }
 
-    let mut ctx = RenderContext::new(options.clone());
+    // Semantic analysis: aggregate <mj-head> and set up attribute resolution. Head
+    // warnings are non-fatal and do not abort the render.
+    let (semantic, _diagnostics) = Semantic::build(document);
+
+    let mut ctx = RenderContext::new(options.clone(), semantic);
+    // A <mj-breakpoint> overrides the option-supplied breakpoint.
+    if let Some(bp) = ctx.semantic.head().breakpoint {
+        ctx.breakpoint = bp;
+    }
     // mjml default: lang "und", dir "auto"; overridden by <mjml> attributes.
     if let Some(lang) = root.attr("lang") {
         ctx.lang = lang.to_string();
@@ -43,7 +53,7 @@ pub fn render_document(
     if let Some(dir) = root.attr("dir") {
         ctx.dir = dir.to_string();
     }
-    let title = mj_title(root).unwrap_or_default();
+    let title = ctx.semantic.head().title.clone().unwrap_or_default();
 
     // Pass 1: render the body, collecting head requirements into `ctx`.
     let mut body_buf = String::new();
@@ -61,7 +71,7 @@ pub fn render_document(
         lang = ctx.lang,
         dir = ctx.dir,
     ));
-    out.push_str(&render_head(&ctx, &title));
+    out.push_str(&render_head(&ctx, &title, &body_buf));
     out.push_str("<body style=\"word-spacing:normal;\">");
     out.push_str(&body_buf);
     out.push_str("</body></html>");
@@ -71,21 +81,4 @@ pub fn render_document(
 /// Find the `<mj-body>` child of the `<mjml>` root.
 fn body_element<'a>(root: &'a Element<'a>) -> Option<&'a Element<'a>> {
     root.element_children().find(|el| el.tag == MjmlTag::MjBody)
-}
-
-/// The `<mj-title>` text, if a `<mj-head>` provides one.
-fn mj_title(root: &Element<'_>) -> Option<String> {
-    let head = root
-        .element_children()
-        .find(|el| el.tag == MjmlTag::MjHead)?;
-    let title = head
-        .element_children()
-        .find(|el| el.tag == MjmlTag::MjTitle)?;
-    let mut text = String::new();
-    for child in title.children() {
-        if let mrml_ast::Node::Text(t) = child {
-            text.push_str(t.value.as_str());
-        }
-    }
-    Some(text)
 }

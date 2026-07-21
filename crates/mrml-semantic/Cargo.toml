@@ -1,0 +1,22 @@
+[package]
+name = "mrml-semantic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Semantic analysis for mrml: mj-head aggregation and MJML attribute resolution."
+
+[dependencies]
+mrml-ast.workspace = true
+mrml-span.workspace = true
+mrml-syntax.workspace = true
+mrml-diagnostics.workspace = true
+
+[dev-dependencies]
+mrml-allocator.workspace = true
+mrml-parser.workspace = true
+
+[lints]
+workspace = true

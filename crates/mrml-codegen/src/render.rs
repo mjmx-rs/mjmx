@@ -18,9 +18,12 @@ use crate::context::RenderContext;
 pub type RenderResult = Result<(), Diagnostic>;
 
 /// A component that can render itself to HTML, side-effecting the [`RenderContext`].
-pub trait Render {
+///
+/// The lifetime `'a` is the document arena: a component borrows its element and the
+/// context's [`Semantic`](mrml_semantic::Semantic) view for the same `'a`.
+pub trait Render<'a> {
     /// Render this component into `buf`, registering head requirements in `ctx`.
-    fn render(&self, ctx: &mut RenderContext, buf: &mut String) -> RenderResult;
+    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult;
 }
 
 /// Dispatch an element to its component renderer by tag.
@@ -30,7 +33,7 @@ pub trait Render {
 /// element's span, so M6 can fill them in.
 pub fn render_element<'a>(
     element: &'a Element<'a>,
-    ctx: &mut RenderContext,
+    ctx: &mut RenderContext<'a>,
     buf: &mut String,
 ) -> RenderResult {
     match element.tag {

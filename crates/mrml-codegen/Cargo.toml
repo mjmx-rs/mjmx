@@ -13,9 +13,11 @@ mrml-ast.workspace = true
 mrml-span.workspace = true
 mrml-syntax.workspace = true
 mrml-diagnostics.workspace = true
+mrml-semantic.workspace = true
 
 [dev-dependencies]
 mrml-allocator.workspace = true
+mrml-parser.workspace = true
 
 [lints]
 workspace = true

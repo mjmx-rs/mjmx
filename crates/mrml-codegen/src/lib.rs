@@ -41,6 +41,6 @@ mod document;
 mod head;
 mod render;
 
-pub use context::{Font, MediaQuery, RenderContext, RenderOptions};
+pub use context::{MediaQuery, RenderContext, RenderOptions};
 pub use document::render_document;
 pub use render::{Render, RenderResult, render_element};

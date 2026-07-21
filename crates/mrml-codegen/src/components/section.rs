@@ -23,8 +23,8 @@ impl<'a> Section<'a> {
     }
 }
 
-impl Render for Section<'_> {
-    fn render(&self, ctx: &mut RenderContext, buf: &mut String) -> RenderResult {
+impl<'a> Render<'a> for Section<'a> {
+    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
         let width = CONTAINER_WIDTH;
 
         let columns: Vec<&Element> = self

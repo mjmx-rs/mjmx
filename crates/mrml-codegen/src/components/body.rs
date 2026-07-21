@@ -18,12 +18,25 @@ impl<'a> Body<'a> {
     }
 }
 
-impl Render for Body<'_> {
-    fn render(&self, ctx: &mut RenderContext, buf: &mut String) -> RenderResult {
+impl<'a> Render<'a> for Body<'a> {
+    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
+        // A <mj-preview> emits a hidden preheader <div> as the first body child,
+        // before the email wrapper.
+        if let Some(preview) = ctx.semantic.head().preview.clone() {
+            buf.push_str(&format!(
+                "<div style=\"display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;\">{preview}</div>"
+            ));
+        }
+
         // The body carries the ARIA email wrapper. `style=""` because this slice has
-        // no background-color; lang/dir are inherited from the <mjml> root.
+        // no background-color; lang/dir are inherited from the <mjml> root. A
+        // <mj-title> adds an `aria-label` before `aria-roledescription`.
+        let aria_label = match &ctx.semantic.head().title {
+            Some(title) => format!("aria-label=\"{title}\" "),
+            None => String::new(),
+        };
         buf.push_str(&format!(
-            "<div aria-roledescription=\"email\" style=\"\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\">",
+            "<div {aria_label}aria-roledescription=\"email\" style=\"\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\">",
             lang = ctx.lang,
             dir = ctx.dir,
         ));

@@ -65,7 +65,11 @@ const MSO_GROUP_FIX: &str = r#"<!--[if lte mso 11]>
     <![endif]-->"#;
 
 /// Assemble the `<head>` from the accumulated render context.
-pub fn render_head(ctx: &RenderContext, title: &str) -> String {
+///
+/// `body` is the already-rendered body markup; it is scanned so that a web font is
+/// imported only when its family name is actually referenced, matching mjml's
+/// font-collection behaviour.
+pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     let mut h = String::new();
     h.push_str("<head>");
     h.push_str(&format!("<title>{title}</title>"));
@@ -85,18 +89,26 @@ pub fn render_head(ctx: &RenderContext, title: &str) -> String {
     h.push_str(MSO_OFFICE);
     h.push_str(MSO_GROUP_FIX);
 
-    // Fonts (present because mj-text used the Ubuntu stack). Guarded from Outlook.
-    let fonts = ctx.fonts();
+    // Web fonts: a face from the head's font table (mjml built-ins + <mj-font>) is
+    // imported only if its family name appears in the rendered body. Guarded from
+    // Outlook.
+    let fonts: Vec<_> = ctx
+        .semantic
+        .head()
+        .fonts
+        .iter()
+        .filter(|f| body.contains(f.name))
+        .collect();
     if !fonts.is_empty() {
         h.push_str("<!--[if !mso]><!-->");
-        for font in fonts {
+        for font in &fonts {
             h.push_str(&format!(
                 "<link href=\"{}\" rel=\"stylesheet\" type=\"text/css\">",
                 font.href
             ));
         }
         h.push_str("<style type=\"text/css\">");
-        for font in fonts {
+        for font in &fonts {
             // Leading/trailing whitespace mirrors mjml so the normalized token
             // stream (`> @import ... </style>`) matches.
             h.push_str(&format!("\n    @import url({});\n  ", font.href));
@@ -135,6 +147,14 @@ pub fn render_head(ctx: &RenderContext, title: &str) -> String {
 
     // Component <style>s (none in the M4 slice, but wired for extensibility).
     for style in ctx.styles() {
+        h.push_str("<style type=\"text/css\">");
+        h.push_str(style);
+        h.push_str("</style>");
+    }
+
+    // Document <mj-style> CSS, emitted verbatim. (Inline `<mj-style inline>` injection
+    // is deferred to the css-inline milestone; here the CSS is emitted as-is.)
+    for style in &ctx.semantic.head().styles {
         h.push_str("<style type=\"text/css\">");
         h.push_str(style);
         h.push_str("</style>");

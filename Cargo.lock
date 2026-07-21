@@ -157,6 +157,8 @@ dependencies = [
  "mrml-allocator",
  "mrml-ast",
  "mrml-diagnostics",
+ "mrml-parser",
+ "mrml-semantic",
  "mrml-span",
  "mrml-syntax",
 ]
@@ -179,6 +181,18 @@ dependencies = [
  "mrml-allocator",
  "mrml-ast",
  "mrml-diagnostics",
+ "mrml-span",
+ "mrml-syntax",
+]
+
+[[package]]
+name = "mrml-semantic"
+version = "0.1.0"
+dependencies = [
+ "mrml-allocator",
+ "mrml-ast",
+ "mrml-diagnostics",
+ "mrml-parser",
  "mrml-span",
  "mrml-syntax",
 ]

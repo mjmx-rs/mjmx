@@ -1,14 +1,17 @@
-//! End-to-end golden test: `fixtures/slice.mjml` must render to `fixtures/slice.html`
-//! (the vendored mjml 4.18.0 reference) under whitespace-normalized comparison.
+//! End-to-end golden tests: each `fixtures/<name>.mjml` must render to
+//! `fixtures/<name>.html` (the vendored mjml 4.18.0 reference) under
+//! whitespace-normalized comparison.
 
-const MJML: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../fixtures/slice.mjml"
-));
-const GOLDEN: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../fixtures/slice.html"
-));
+/// Absolute path to a fixture file under `fixtures/`.
+macro_rules! fixture {
+    ($name:literal) => {
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/",
+            $name
+        ))
+    };
+}
 
 /// Normalize HTML for semantic comparison.
 ///
@@ -44,15 +47,16 @@ fn normalize(html: &str) -> String {
     out.trim().to_string()
 }
 
-#[test]
-fn slice_matches_mjml_reference() {
-    let rendered = mrml::render_default(MJML).expect("slice.mjml should render without errors");
+/// Render `mjml` and assert it matches `golden` under [`normalize`], surfacing the
+/// first divergence to make failures debuggable.
+fn assert_golden(name: &str, mjml: &str, golden: &str) {
+    let rendered =
+        mrml::render_default(mjml).unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
 
     let got = normalize(&rendered);
-    let want = normalize(GOLDEN);
+    let want = normalize(golden);
 
     if got != want {
-        // Surface the first divergence to make failures debuggable.
         let first_diff = got
             .char_indices()
             .zip(want.char_indices())
@@ -61,7 +65,7 @@ fn slice_matches_mjml_reference() {
             .unwrap_or(got.len().min(want.len()));
         let ctx_start = first_diff.saturating_sub(80);
         panic!(
-            "rendered HTML does not match golden reference.\n\
+            "{name}: rendered HTML does not match golden reference.\n\
              first divergence near byte {first_diff}:\n\
              GOT : ...{}\n\
              WANT: ...{}\n",
@@ -70,7 +74,60 @@ fn slice_matches_mjml_reference() {
         );
     }
 
-    assert_eq!(got, want, "normalized HTML must match the mjml reference");
+    assert_eq!(
+        got, want,
+        "{name}: normalized HTML must match the mjml reference"
+    );
+}
+
+#[test]
+fn slice_matches_mjml_reference() {
+    assert_golden("slice", fixture!("slice.mjml"), fixture!("slice.html"));
+}
+
+#[test]
+fn attrs_all_matches_mjml_reference() {
+    assert_golden(
+        "attrs_all",
+        fixture!("attrs_all.mjml"),
+        fixture!("attrs_all.html"),
+    );
+}
+
+#[test]
+fn attrs_class_matches_mjml_reference() {
+    assert_golden(
+        "attrs_class",
+        fixture!("attrs_class.mjml"),
+        fixture!("attrs_class.html"),
+    );
+}
+
+#[test]
+fn head_breakpoint_matches_mjml_reference() {
+    assert_golden(
+        "head_breakpoint",
+        fixture!("head_breakpoint.mjml"),
+        fixture!("head_breakpoint.html"),
+    );
+}
+
+#[test]
+fn head_title_preview_matches_mjml_reference() {
+    assert_golden(
+        "head_title_preview",
+        fixture!("head_title_preview.mjml"),
+        fixture!("head_title_preview.html"),
+    );
+}
+
+#[test]
+fn head_font_matches_mjml_reference() {
+    assert_golden(
+        "head_font",
+        fixture!("head_font.mjml"),
+        fixture!("head_font.html"),
+    );
 }
 
 #[test]

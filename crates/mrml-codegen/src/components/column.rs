@@ -20,8 +20,8 @@ impl<'a> Column<'a> {
     }
 }
 
-impl Render for Column<'_> {
-    fn render(&self, ctx: &mut RenderContext, buf: &mut String) -> RenderResult {
+impl<'a> Render<'a> for Column<'a> {
+    fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
         let pct = self.pct;
         let class = format!("mj-column-per-{pct}");
 

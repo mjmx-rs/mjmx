@@ -2,16 +2,22 @@
 //!
 //! [`RenderContext`] is the mutable accumulator that body components push their
 //! *head requirements* into while they render. MJML's head (`@media` column rules,
-//! font `@import`s, component `<style>`s) is not known up front — it is discovered
-//! during the body pass, then emitted afterwards. This is the two-pass model: render
-//! the body into a buffer (side-effecting the context), then assemble the document
-//! head from what was collected.
+//! component `<style>`s) is not known up front — it is discovered during the body
+//! pass, then emitted afterwards. This is the two-pass model: render the body into a
+//! buffer (side-effecting the context), then assemble the document head from what was
+//! collected.
+//!
+//! The context also carries the [`Semantic`] view of the document, so components can
+//! resolve attributes (`<mj-attributes>` / `mj-class` / defaults) and the head can
+//! read aggregated `<mj-head>` metadata (title, preview, fonts, breakpoint).
+
+use mrml_semantic::Semantic;
 
 /// Global options controlling a render.
 #[derive(Debug, Clone)]
 pub struct RenderOptions {
     /// The responsive breakpoint, in pixels. Columns collapse to full width below
-    /// this width. `// mjml default: 480px`.
+    /// this width. `// mjml default: 480px`. A document `<mj-breakpoint>` overrides it.
     pub breakpoint: u32,
     /// Pretty-print the output. **Not yet honored** — accepted for forward
     /// compatibility with the CLI. Output is currently always compact-ish.
@@ -32,15 +38,6 @@ impl Default for RenderOptions {
     }
 }
 
-/// A font the document depends on: a family name and the stylesheet URL to import.
-#[derive(Debug, Clone)]
-pub struct Font {
-    /// The font-family name (dedup key), e.g. `Ubuntu`.
-    pub name: String,
-    /// The stylesheet URL to `<link>` / `@import`.
-    pub href: String,
-}
-
 /// A responsive column rule to register in the head, keyed by CSS class.
 #[derive(Debug, Clone)]
 pub struct MediaQuery {
@@ -51,25 +48,29 @@ pub struct MediaQuery {
 }
 
 /// Mutable render state accumulated during the body pass and consumed by the head.
+///
+/// Borrows the document arena for lifetime `'a` through the owned [`Semantic`] view.
 #[derive(Debug)]
-pub struct RenderContext {
+pub struct RenderContext<'a> {
     /// Global render options.
     pub options: RenderOptions,
-    /// The active breakpoint (mirrors `options.breakpoint`).
+    /// The active breakpoint (mirrors `options.breakpoint`, overridden by
+    /// `<mj-breakpoint>`).
     pub breakpoint: u32,
     /// Document language (`<html lang>` / body `<div lang>`). `// mjml default: und`.
     pub lang: String,
     /// Document direction. `// mjml default: auto`.
     pub dir: String,
-    fonts: Vec<Font>,
+    /// Aggregated head data and the attribute resolver.
+    pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
     styles: Vec<String>,
 }
 
-impl RenderContext {
-    /// Create a context from render options.
+impl<'a> RenderContext<'a> {
+    /// Create a context from render options and the analysed [`Semantic`] view.
     #[must_use]
-    pub fn new(options: RenderOptions) -> Self {
+    pub fn new(options: RenderOptions, semantic: Semantic<'a>) -> Self {
         let breakpoint = options.breakpoint;
         Self {
             options,
@@ -77,22 +78,10 @@ impl RenderContext {
             // mjml default: lang "und", dir "auto".
             lang: "und".to_string(),
             dir: "auto".to_string(),
-            fonts: Vec::new(),
+            semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),
         }
-    }
-
-    /// Register a font dependency (deduped by family name, insertion order kept).
-    pub fn add_font(&mut self, name: impl Into<String>, href: impl Into<String>) {
-        let name = name.into();
-        if self.fonts.iter().any(|f| f.name == name) {
-            return;
-        }
-        self.fonts.push(Font {
-            name,
-            href: href.into(),
-        });
     }
 
     /// Register a responsive column rule (deduped by class, insertion order kept).
@@ -114,12 +103,6 @@ impl RenderContext {
             return;
         }
         self.styles.push(css);
-    }
-
-    /// The registered fonts, in insertion order.
-    #[must_use]
-    pub fn fonts(&self) -> &[Font] {
-        &self.fonts
     }
 
     /// The registered responsive column rules, in insertion order.
