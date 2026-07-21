@@ -25,6 +25,7 @@ mjmx-traverse = { version = "0.1.0", path = "crates/mjmx-traverse" }
 mjmx-transformer = { version = "0.1.0", path = "crates/mjmx-transformer" }
 mjmx-html-compare = { version = "0.1.0", path = "crates/mjmx-html-compare" }
 mjmx-minifier = { version = "0.1.0", path = "crates/mjmx-minifier" }
+mjmx-formatter = { version = "0.1.0", path = "crates/mjmx-formatter" }
 mjmx = { version = "0.1.0", path = "crates/mjmx" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 clap = { version = "4", features = ["derive"] }

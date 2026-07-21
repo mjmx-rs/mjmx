@@ -1,0 +1,22 @@
+[package]
+name = "mjmx-formatter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Canonical MJML source formatter for mjmx: pretty-prints an AST back to MJML (the `mjmx fmt` tool)."
+
+[dependencies]
+mjmx-ast.workspace = true
+mjmx-span.workspace = true
+mjmx-syntax.workspace = true
+
+[dev-dependencies]
+mjmx-parser.workspace = true
+mjmx-allocator.workspace = true
+mjmx-html-compare.workspace = true
+
+[lints]
+workspace = true

@@ -124,6 +124,7 @@ dependencies = [
  "mjmx-ast",
  "mjmx-codegen",
  "mjmx-diagnostics",
+ "mjmx-formatter",
  "mjmx-html-compare",
  "mjmx-linter",
  "mjmx-minifier",
@@ -173,6 +174,18 @@ name = "mjmx-diagnostics"
 version = "0.1.0"
 dependencies = [
  "mjmx-span",
+]
+
+[[package]]
+name = "mjmx-formatter"
+version = "0.1.0"
+dependencies = [
+ "mjmx-allocator",
+ "mjmx-ast",
+ "mjmx-html-compare",
+ "mjmx-parser",
+ "mjmx-span",
+ "mjmx-syntax",
 ]
 
 [[package]]

@@ -18,6 +18,7 @@ use mjmx_allocator::Allocator;
 
 pub use mjmx_codegen::{RenderContext, RenderOptions};
 pub use mjmx_diagnostics::{Diagnostic, Severity};
+pub use mjmx_formatter::FormatOptions;
 
 /// Render MJML `source` to HTML using the given [`RenderOptions`].
 ///
@@ -105,6 +106,26 @@ pub fn render_file(
 
     let html = mjmx_codegen::render_document(&document, options)?;
     Ok(post_process(html, options))
+}
+
+/// Format MJML `source` into canonical MJML source text.
+///
+/// Parses `source` and pretty-prints the resulting tree with [`mjmx_formatter`].
+/// This is the programmatic front door for the `mjmx fmt` tool. Formatting is a
+/// pure source-to-source transform: the output is idempotent under re-formatting,
+/// reparse-equivalent to the input, and render-equivalent to it.
+///
+/// # Errors
+///
+/// Returns every parse [`Diagnostic`] if `source` is malformed; a well-formed
+/// document always formats successfully.
+pub fn format(source: &str, options: &FormatOptions) -> Result<String, Vec<Diagnostic>> {
+    let allocator = Allocator::new();
+    let parsed = mjmx_parser::parse(source, &allocator);
+    if !parsed.errors.is_empty() {
+        return Err(parsed.errors);
+    }
+    Ok(mjmx_formatter::format(&parsed.document, options))
 }
 
 /// Validate MJML `source` structurally, returning every diagnostic.

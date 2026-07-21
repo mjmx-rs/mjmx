@@ -10,6 +10,10 @@
 //! - **lint**: `mjmx lint <file>` parses and validates the document with
 //!   [`mjmx::lint`], prints diagnostics to stderr, and exits non-zero if any are
 //!   error-severity. It never renders.
+//! - **fmt**: `mjmx fmt <file>` parses the document and prints canonical MJML source
+//!   with [`mjmx::format`]. By default it writes the formatted source to stdout;
+//!   `--write`/`-w` rewrites the file in place, and `--check` writes nothing but
+//!   exits non-zero when the file is not already formatted.
 //!
 //! Diagnostics are always written to stderr; a non-zero exit code is returned on
 //! failure.
@@ -20,7 +24,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
-use mjmx::{Diagnostic, RenderOptions, Severity};
+use mjmx::{Diagnostic, FormatOptions, RenderOptions, Severity};
 
 /// Compile or validate an MJML document.
 #[derive(Debug, Parser)]
@@ -41,6 +45,8 @@ struct Cli {
 enum Command {
     /// Validate an MJML document structurally without rendering it.
     Lint(LintArgs),
+    /// Format an MJML document into canonical MJML source.
+    Fmt(FmtArgs),
 }
 
 /// Arguments for the default render path.
@@ -83,12 +89,74 @@ struct LintArgs {
     input: Option<PathBuf>,
 }
 
+/// Arguments for the `fmt` subcommand.
+#[derive(Debug, Args)]
+struct FmtArgs {
+    /// Input `.mjml` file. Reads from stdin when omitted.
+    input: Option<PathBuf>,
+
+    /// Rewrite the file in place with the formatted output (requires a file input).
+    #[arg(short, long, conflicts_with = "check")]
+    write: bool,
+
+    /// Do not write anything; exit non-zero if the input is not already formatted.
+    #[arg(long)]
+    check: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Some(Command::Lint(args)) => run_lint(&args),
+        Some(Command::Fmt(args)) => run_fmt(&args),
         None => run_render(&cli.render),
     }
+}
+
+/// The `fmt` subcommand: parse + format, then print / rewrite / check.
+fn run_fmt(args: &FmtArgs) -> ExitCode {
+    let source = match read_source(args.input.as_ref()) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("mjmx: error reading input: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let formatted = match mjmx::format(&source, &FormatOptions::default()) {
+        Ok(formatted) => formatted,
+        Err(diagnostics) => {
+            print_diagnostics(&diagnostics);
+            return ExitCode::FAILURE;
+        }
+    };
+
+    if args.check {
+        if formatted == source {
+            return ExitCode::SUCCESS;
+        }
+        match args.input.as_ref() {
+            Some(path) => eprintln!("mjmx: {} is not formatted", path.display()),
+            None => eprintln!("mjmx: input is not formatted"),
+        }
+        return ExitCode::FAILURE;
+    }
+
+    if args.write {
+        let Some(path) = args.input.as_ref() else {
+            eprintln!("mjmx: --write requires a file input (cannot rewrite stdin)");
+            return ExitCode::FAILURE;
+        };
+        if let Err(err) = fs::write(path, &formatted) {
+            eprintln!("mjmx: error writing output: {err}");
+            return ExitCode::FAILURE;
+        }
+        return ExitCode::SUCCESS;
+    }
+
+    // Default: print to stdout. `formatted` already ends with a newline.
+    print!("{formatted}");
+    ExitCode::SUCCESS
 }
 
 /// The `lint` subcommand: parse + validate, print diagnostics, exit non-zero on error.
