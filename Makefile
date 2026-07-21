@@ -11,7 +11,15 @@ NAPI_LIB := target/release/libmjmx_napi.$(NAPI_EXT)
 NAPI_TRIPLE := $(shell $(NODE) -p "process.platform + '-' + process.arch + (process.platform === 'linux' ? '-gnu' : '')" 2>/dev/null)
 NAPI_OUT := $(NAPI_DIR)/mjmx.$(if $(NAPI_TRIPLE),$(NAPI_TRIPLE),unknown).node
 
-.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test
+# WebAssembly package: cargo emits a bare module, `wasm-bindgen` generates the JS
+# glue + .d.ts next to it. The CLI version must match the `wasm-bindgen` crate
+# version pinned in the workspace Cargo.toml (see crates/mjmx-wasm/README.md).
+WASM_DIR := crates/mjmx-wasm
+WASM_TARGET := wasm32-unknown-unknown
+WASM_LIB := target/$(WASM_TARGET)/release/mjmx_wasm.wasm
+WASM_OUT := $(WASM_DIR)/pkg
+
+.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-test
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -49,6 +57,14 @@ napi: ## Build the Node addon and stage it as a loadable .node
 
 napi-test: napi ## Run the Node addon smoke test
 	$(NODE) $(NAPI_DIR)/test/smoke.mjs
+
+wasm: ## Build the WebAssembly package
+	$(CARGO) build -p mjmx-wasm --target $(WASM_TARGET) --release
+	wasm-bindgen --target nodejs --out-dir $(WASM_OUT) --out-name mjmx_wasm $(WASM_LIB)
+	@echo "staged $(WASM_OUT)"
+
+wasm-test: wasm ## Run the wasm smoke test
+	$(NODE) $(WASM_DIR)/test/smoke.mjs
 
 doc: ## Build workspace documentation
 	$(CARGO) doc --workspace --no-deps

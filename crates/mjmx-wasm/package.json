@@ -1,0 +1,28 @@
+{
+  "name": "@mjmx/wasm",
+  "version": "0.1.0",
+  "description": "WebAssembly bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryeasin03/mjmx.git",
+    "directory": "crates/mjmx-wasm"
+  },
+  "main": "pkg/mjmx_wasm.js",
+  "types": "pkg/mjmx_wasm.d.ts",
+  "engines": {
+    "node": ">= 18"
+  },
+  "files": [
+    "pkg/mjmx_wasm.js",
+    "pkg/mjmx_wasm.d.ts",
+    "pkg/mjmx_wasm_bg.wasm",
+    "pkg/mjmx_wasm_bg.wasm.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "make -C ../.. wasm",
+    "test": "node test/smoke.mjs"
+  },
+  "private": true
+}

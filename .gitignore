@@ -8,3 +8,7 @@
 *.dylib
 *.dll
 node_modules/
+
+# WebAssembly build artifacts (crates/mjmx-wasm)
+pkg/
+*.wasm
