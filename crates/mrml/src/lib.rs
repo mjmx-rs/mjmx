@@ -35,3 +35,19 @@ pub fn render(source: &str, options: &RenderOptions) -> Result<String, Vec<Diagn
 pub fn render_default(source: &str) -> Result<String, Vec<Diagnostic>> {
     render(source, &RenderOptions::default())
 }
+
+/// Validate MJML `source` structurally, returning every diagnostic.
+///
+/// This is purely advisory and never fails: it parses `source`, then runs the
+/// [`mrml_linter`] rules. The result concatenates parse diagnostics (malformed
+/// syntax) with linter diagnostics (structural rule violations), in that order.
+/// Callers decide what to do with them — e.g. print and exit non-zero on any
+/// [`Severity::Error`].
+#[must_use]
+pub fn lint(source: &str) -> Vec<Diagnostic> {
+    let allocator = Allocator::new();
+    let parsed = mrml_parser::parse(source, &allocator);
+    let mut diagnostics = parsed.errors;
+    diagnostics.extend(mrml_linter::lint(&parsed.document));
+    diagnostics
+}

@@ -1,0 +1,22 @@
+[package]
+name = "mrml-linter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Structural validator/linter for mrml: advisory MJML diagnostics that never block rendering."
+
+[dependencies]
+mrml-ast.workspace = true
+mrml-span.workspace = true
+mrml-syntax.workspace = true
+mrml-diagnostics.workspace = true
+
+[dev-dependencies]
+mrml-allocator.workspace = true
+mrml-parser.workspace = true
+
+[lints]
+workspace = true

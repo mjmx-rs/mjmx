@@ -20,6 +20,7 @@ mrml-ast = { version = "0.1.0", path = "crates/mrml-ast" }
 mrml-parser = { version = "0.1.0", path = "crates/mrml-parser" }
 mrml-semantic = { version = "0.1.0", path = "crates/mrml-semantic" }
 mrml-codegen = { version = "0.1.0", path = "crates/mrml-codegen" }
+mrml-linter = { version = "0.1.0", path = "crates/mrml-linter" }
 mrml = { version = "0.1.0", path = "crates/mrml" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
 clap = { version = "4", features = ["derive"] }

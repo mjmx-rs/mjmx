@@ -12,6 +12,7 @@ description = "MJML-to-HTML compiler toolchain: parse and render MJML into respo
 mrml-allocator.workspace = true
 mrml-parser.workspace = true
 mrml-codegen.workspace = true
+mrml-linter.workspace = true
 mrml-diagnostics.workspace = true
 
 [lints]
