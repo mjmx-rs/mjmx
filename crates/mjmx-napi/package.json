@@ -1,0 +1,37 @@
+{
+  "name": "@mjmx/node",
+  "version": "0.1.0",
+  "description": "Node.js bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryeasin03/mjmx.git",
+    "directory": "crates/mjmx-napi"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "engines": {
+    "node": ">= 18"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node",
+    "README.md"
+  ],
+  "napi": {
+    "binaryName": "mjmx",
+    "targets": [
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-apple-darwin",
+      "aarch64-apple-darwin",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "scripts": {
+    "build": "cargo build -p mjmx-napi --release",
+    "test": "node test/smoke.mjs"
+  },
+  "private": true
+}
