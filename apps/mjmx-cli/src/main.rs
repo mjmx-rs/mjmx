@@ -51,8 +51,8 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
-    Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, MjmlCompat, PreserveTag,
+    RenderOptions, Severity, ValidationLevel,
 };
 use mjmx_dev_server::DevOptions;
 use serde::de::{MapAccess, Visitor};
@@ -129,6 +129,12 @@ struct RenderOptionArgs {
     #[arg(long, overrides_with = "keep_comments")]
     no_keep_comments: bool,
 
+    /// Which mjml release to reproduce. mjml 5 changed the rendered HTML (the `<body>`
+    /// tag moved under `mj-body`, minification switched to htmlnano/cssnano), so pass
+    /// `4` to keep the pre-5.x output. [mjmx extension]
+    #[arg(long, value_name = "VERSION", default_value_t = MjmlVersionArg::V5)]
+    mjml_version: MjmlVersionArg,
+
     /// How hard to insist the document validates: report and render anyway (soft),
     /// refuse to render on any error (strict), or do not validate (skip).
     /// [mjml: `validationLevel`]
@@ -175,6 +181,37 @@ struct RenderOptionArgs {
     juice_preserve_tags: Option<String>,
 }
 
+/// `--mjml-version` values, spelled as the major version alone: these name an upstream
+/// release line, not an exact patch, and mjmx tracks the newest patch of each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum MjmlVersionArg {
+    /// Reproduce mjml 4.18.0.
+    #[value(name = "4")]
+    V4,
+    /// Reproduce mjml 5.4.0. mjmx's default, tracking upstream's `latest`.
+    #[value(name = "5")]
+    V5,
+}
+
+impl std::fmt::Display for MjmlVersionArg {
+    /// Renders as the bare major version, which is also what `--help` shows as the default.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::V4 => "4",
+            Self::V5 => "5",
+        })
+    }
+}
+
+impl From<MjmlVersionArg> for MjmlCompat {
+    fn from(value: MjmlVersionArg) -> Self {
+        match value {
+            MjmlVersionArg::V4 => Self::V4,
+            MjmlVersionArg::V5 => Self::V5,
+        }
+    }
+}
+
 /// `--validation-level` values, spelled exactly as mjml's `validationLevel` strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum ValidationLevelArg {
@@ -219,6 +256,7 @@ impl RenderOptionArgs {
             )?);
         Ok(RenderOptions {
             inline_options,
+            compat: self.mjml_version.into(),
             breakpoint: self.breakpoint,
             beautify: self.beautify,
             minify: self.minify,
@@ -1156,6 +1194,21 @@ mod tests {
                 "for --validation-level {flag}"
             );
         }
+    }
+
+    #[test]
+    fn mjml_version_selects_the_behaviour_bundle() {
+        for (flag, expected) in [("4", MjmlCompat::V4), ("5", MjmlCompat::V5)] {
+            let options = render_options(&["in.mjml", "--mjml-version", flag]);
+            assert_eq!(options.compat, expected, "for --mjml-version {flag}");
+        }
+        // Omitted tracks upstream's `latest`.
+        assert_eq!(render_options(&["in.mjml"]).compat, MjmlCompat::V5);
+    }
+
+    #[test]
+    fn mjml_version_rejects_unknown_values() {
+        assert!(Cli::try_parse_from(["mjmx", "in.mjml", "--mjml-version", "3"]).is_err());
     }
 
     #[test]

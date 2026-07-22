@@ -17,7 +17,7 @@
 use mjmx_allocator::Allocator;
 
 pub use mjmx_codegen::{
-    FontFace, Mapping, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
+    FontFace, Mapping, MjmlCompat, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
 };
 pub use mjmx_css_inline::{
     InlineOptions, PreserveTag, SUPPORTED_OPTIONS, refusal, unsupported_option,

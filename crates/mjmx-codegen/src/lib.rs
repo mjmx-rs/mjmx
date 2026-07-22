@@ -41,7 +41,7 @@ mod document;
 mod head;
 mod render;
 
-pub use context::{MediaQuery, RenderContext, RenderOptions, ValidationLevel};
+pub use context::{MediaQuery, MjmlCompat, RenderContext, RenderOptions, ValidationLevel};
 // Re-exported so a caller can build a `RenderOptions::fonts` table without depending on
 // `mjmx-semantic` directly.
 pub use document::{

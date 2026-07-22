@@ -31,12 +31,50 @@ pub enum ValidationLevel {
     Skip,
 }
 
+/// Which mjml release mjmx reproduces.
+///
+/// mjml 5.0.0 changed rendered output in ways that are not additive — the `<body>` tag
+/// moved under `mj-body`, the empty `style=""` on the article `<div>` is dropped, the
+/// minifier became htmlnano/cssnano — so "parity with mjml" is only well defined once a
+/// release is named. This selects the whole behaviour bundle at once rather than exposing
+/// a flag per change: upstream ships these together, and the invalid combinations of
+/// per-feature toggles are not worth carrying.
+///
+/// [`V4`](Self::V4) is frozen: it is the 4.18.0 behaviour mjmx shipped before 5.x support,
+/// and the existing golden fixtures are its regression gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MjmlCompat {
+    /// Reproduce mjml 4.18.0.
+    V4,
+    /// Reproduce mjml 5.4.0. The default, tracking upstream's `latest`.
+    #[default]
+    V5,
+}
+
+impl MjmlCompat {
+    /// Whether this is the 5.x behaviour bundle.
+    ///
+    /// Render sites branch on this rather than matching the enum, so adding a future
+    /// `V6` does not silently give it 4.x behaviour at every call site.
+    #[must_use]
+    pub fn is_v5(self) -> bool {
+        matches!(self, Self::V5)
+    }
+}
+
 /// Global options controlling a render.
 ///
-/// Each field notes whether it mirrors an option mjml 4.18.0 accepts on `mjml2html`
-/// or is an mjmx extension.
+/// Each field notes whether it mirrors an option mjml accepts on `mjml2html` or is an
+/// mjmx extension. Where 4.18.0 and 5.4.0 differ, [`compat`](RenderOptions::compat)
+/// decides which is reproduced.
 #[derive(Debug, Clone)]
 pub struct RenderOptions {
+    /// Which mjml release to reproduce. `// mjmx default: v5`.
+    ///
+    /// **mjmx extension.** mjml has no such option — a given mjml install *is* one
+    /// version. mjmx carries both because a renderer that silently changes its output
+    /// on upgrade is not usable in a pipeline that diffs HTML.
+    pub compat: MjmlCompat,
     /// The responsive breakpoint, in pixels. Columns collapse to full width below
     /// this width. `// mjml default: 480px`. A document `<mj-breakpoint>` overrides it.
     ///
@@ -122,6 +160,8 @@ pub struct RenderOptions {
 impl Default for RenderOptions {
     fn default() -> Self {
         Self {
+            // mjmx default: track upstream's `latest`, currently 5.4.0.
+            compat: MjmlCompat::V5,
             // mjml default: 480px breakpoint.
             breakpoint: 480,
             beautify: false,

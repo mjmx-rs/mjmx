@@ -10,6 +10,14 @@
  */
 export interface RenderOptions {
   /**
+   * Which mjml release to reproduce. mjml 5 changed the rendered HTML (the `<body>`
+   * tag moved under `mj-body`, minification switched to htmlnano/cssnano), so pass
+   * `4` to keep the pre-5.x output. Default: 5.
+   *
+   * mjmx extension — a given mjml install *is* one version.
+   */
+  mjmlVersion?: 4 | 5;
+  /**
    * Responsive breakpoint in pixels; columns collapse below this width. Default: 480.
    *
    * mjmx extension — mjml has no such option, it hardcodes 480 and only

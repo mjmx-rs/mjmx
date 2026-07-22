@@ -2,6 +2,11 @@
 //! `fixtures/<name>.html` (the vendored mjml 4.18.0 reference), compared
 //! semantically via the [`mjmx_html_compare`] crate (structure/attribute/CSS
 //! aware, tolerant of insignificant layout differences).
+//!
+//! These fixtures are the **4.18.0** reference, so every render here pins
+//! [`MjmlCompat::V4`] explicitly rather than taking the default (which is `V5`,
+//! tracking upstream's `latest`). This file is the V4 regression gate: it must stay
+//! green as 5.x behaviour lands behind `compat`.
 
 /// Absolute path to a fixture file under `fixtures/`.
 macro_rules! fixture {
@@ -14,11 +19,20 @@ macro_rules! fixture {
     };
 }
 
+/// The options every golden renders under: mjmx's defaults, pinned to the mjml
+/// release these fixtures were generated from.
+fn v4_options() -> mjmx::RenderOptions {
+    mjmx::RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
+        ..Default::default()
+    }
+}
+
 /// Render `mjml` and assert it is semantically equivalent to `golden`, surfacing
 /// the first divergence (with a tag-path breadcrumb) to make failures debuggable.
 fn assert_golden(name: &str, mjml: &str, golden: &str) {
-    let rendered =
-        mjmx::render_default(mjml).unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
+    let rendered = mjmx::render(mjml, &v4_options())
+        .unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
 
     if let Err(mismatch) = mjmx_html_compare::compare(golden, &rendered) {
         panic!("{name}: rendered HTML does not match golden reference.\n{mismatch}");
@@ -719,7 +733,7 @@ fn include_matches_mjml_reference() {
         env!("CARGO_MANIFEST_DIR"),
         "/../../fixtures/include/main.mjml"
     );
-    let rendered = mjmx::render_file(std::path::Path::new(path), &mjmx::RenderOptions::default())
+    let rendered = mjmx::render_file(std::path::Path::new(path), &v4_options())
         .unwrap_or_else(|e| panic!("include/main.mjml should render: {e:?}"));
 
     let golden = fixture!("include/main.html");

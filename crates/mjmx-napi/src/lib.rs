@@ -28,8 +28,8 @@
 
 use indexmap::IndexMap;
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
-    Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, MjmlCompat, PreserveTag,
+    RenderOptions, Severity, ValidationLevel,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -41,6 +41,10 @@ use napi_derive::napi;
 #[napi(object)]
 #[derive(Default)]
 pub struct JsRenderOptions {
+    /// Which mjml release to reproduce, `4` or `5` (default: 5). mjml 5 changed the
+    /// rendered HTML, so pass `4` to keep the pre-5.x output.
+    /// mjmx extension — a given mjml install *is* one version.
+    pub mjml_version: Option<u8>,
     /// Responsive breakpoint in pixels; columns collapse below this width.
     /// mjmx extension — mjml hardcodes 480 and only `<mj-breakpoint>` changes it.
     pub breakpoint: Option<u32>,
@@ -205,6 +209,9 @@ fn to_render_options(
         return Ok(defaults);
     };
     Ok(RenderOptions {
+        compat: options
+            .mjml_version
+            .map_or(Ok(defaults.compat), parse_mjml_version)?,
         breakpoint: options.breakpoint.unwrap_or(defaults.breakpoint),
         beautify: options.beautify.unwrap_or(defaults.beautify),
         minify: options.minify.unwrap_or(defaults.minify),
@@ -252,6 +259,20 @@ fn render_options(options: Option<JsRenderOptions>) -> Result<RenderOptions> {
 }
 
 /// Parse one of mjml's `validationLevel` strings.
+/// Map the bare mjml major version a caller passes onto the behaviour bundle.
+///
+/// An unknown major is an error rather than a fallback to the default: rendering some
+/// version other than the one asked for is the failure this option exists to prevent.
+fn parse_mjml_version(version: u8) -> std::result::Result<MjmlCompat, String> {
+    match version {
+        4 => Ok(MjmlCompat::V4),
+        5 => Ok(MjmlCompat::V5),
+        other => Err(format!(
+            "mjmx: unknown mjmlVersion {other} (expected 4 or 5)"
+        )),
+    }
+}
+
 fn parse_validation_level(level: &str) -> std::result::Result<ValidationLevel, String> {
     match level {
         "soft" => Ok(ValidationLevel::Soft),
@@ -453,6 +474,7 @@ mod tests {
         fonts.insert("Alpha".to_owned(), "https://a.example/a.css".to_owned());
 
         let options = convert(Some(JsRenderOptions {
+            mjml_version: Some(4),
             breakpoint: Some(600),
             beautify: Some(true),
             minify: Some(true),
@@ -483,6 +505,7 @@ mod tests {
         }))
         .unwrap();
 
+        assert_eq!(options.compat, MjmlCompat::V4);
         assert_eq!(options.breakpoint, 600);
         assert!(options.beautify);
         assert!(options.minify);
@@ -591,6 +614,24 @@ mod tests {
         }))
         .unwrap_err();
         assert!(err.contains("loud"), "{err}");
+    }
+
+    #[test]
+    fn an_unknown_mjml_version_is_rejected() {
+        // Falling back to the default here would render 5.x output for a caller who
+        // explicitly asked for something else.
+        let err = convert(Some(JsRenderOptions {
+            mjml_version: Some(3),
+            ..JsRenderOptions::default()
+        }))
+        .unwrap_err();
+        assert!(err.contains('3'), "{err}");
+    }
+
+    #[test]
+    fn an_omitted_mjml_version_tracks_upstream_latest() {
+        let options = convert(Some(JsRenderOptions::default())).unwrap();
+        assert_eq!(options.compat, MjmlCompat::V5);
     }
 
     #[test]

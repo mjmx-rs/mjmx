@@ -32,8 +32,8 @@
 //! own name.
 
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
-    Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, MjmlCompat, PreserveTag,
+    RenderOptions, Severity, ValidationLevel,
 };
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,14 @@ const TYPESCRIPT_TYPES: &'static str = r#"
  * JS mjml. Each field says whether it matches an mjml option or is an mjmx extension.
  */
 export interface RenderOptions {
+  /**
+   * Which mjml release to reproduce. mjml 5 changed the rendered HTML (the `<body>`
+   * tag moved under `mj-body`, minification switched to htmlnano/cssnano), so pass
+   * `4` to keep the pre-5.x output. Default: 5.
+   *
+   * mjmx extension — a given mjml install *is* one version.
+   */
+  mjmlVersion?: 4 | 5;
   /**
    * Responsive breakpoint in pixels; columns collapse below this width. Default: 480.
    *
@@ -258,6 +266,7 @@ extern "C" {
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct JsRenderOptions {
+    mjml_version: Option<JsMjmlVersion>,
     breakpoint: Option<u32>,
     beautify: Option<bool>,
     minify: Option<bool>,
@@ -412,6 +421,37 @@ enum JsValidationLevel {
     Skip,
 }
 
+/// `mjmlVersion`, spelled as the bare major version number the caller writes: `5`.
+///
+/// A number rather than a string because that is how a JS caller thinks of an mjml
+/// version, and it keeps `mjmlVersion: 5` from being confused with a full semver.
+/// An unknown major is rejected by name rather than silently falling back to the
+/// default, which would render *some* version the caller did not ask for.
+#[derive(Deserialize)]
+#[serde(try_from = "u8")]
+struct JsMjmlVersion(MjmlCompat);
+
+impl TryFrom<u8> for JsMjmlVersion {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            4 => Ok(Self(MjmlCompat::V4)),
+            5 => Ok(Self(MjmlCompat::V5)),
+            other => Err(format!(
+                "`mjmlVersion` must be 4 or 5, got {other}. mjmx reproduces mjml 4.18.0 \
+                 and 5.4.0."
+            )),
+        }
+    }
+}
+
+impl From<JsMjmlVersion> for MjmlCompat {
+    fn from(value: JsMjmlVersion) -> Self {
+        value.0
+    }
+}
+
 impl From<JsValidationLevel> for ValidationLevel {
     fn from(value: JsValidationLevel) -> Self {
         match value {
@@ -491,6 +531,7 @@ impl JsRenderOptions {
         let defaults = RenderOptions::default();
         Ok(RenderOptions {
             inline_options,
+            compat: self.mjml_version.map_or(defaults.compat, Into::into),
             breakpoint: self.breakpoint.unwrap_or(defaults.breakpoint),
             beautify: self.beautify.unwrap_or(defaults.beautify),
             minify: self.minify.unwrap_or(defaults.minify),
@@ -836,6 +877,27 @@ mod tests {
         let err = options(r#"{"filePath": "./partials"}"#).unwrap_err();
         assert!(err.contains("filePath"), "{err}");
         assert!(err.contains("no filesystem"), "{err}");
+    }
+
+    #[test]
+    fn mjml_version_selects_the_behaviour_bundle() {
+        assert_eq!(
+            options(r#"{"mjmlVersion": 4}"#).unwrap().compat,
+            MjmlCompat::V4
+        );
+        assert_eq!(
+            options(r#"{"mjmlVersion": 5}"#).unwrap().compat,
+            MjmlCompat::V5
+        );
+        // Omitted tracks upstream's `latest`.
+        assert_eq!(options("{}").unwrap().compat, MjmlCompat::V5);
+    }
+
+    #[test]
+    fn an_unknown_mjml_version_is_a_deserialization_error() {
+        // Falling back to the default would render 5.x for a caller who asked for 3.
+        let err = options(r#"{"mjmlVersion": 3}"#).unwrap_err();
+        assert!(err.contains('3'), "{err}");
     }
 
     #[test]
