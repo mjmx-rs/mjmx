@@ -16,25 +16,127 @@
 
 use mjmx_allocator::Allocator;
 
-pub use mjmx_codegen::{Mapping, RenderContext, RenderOptions, SourceMap, Span};
+pub use mjmx_codegen::{
+    FontFace, Mapping, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
+};
 pub use mjmx_diagnostics::{Diagnostic, Severity};
 pub use mjmx_formatter::FormatOptions;
 
+use std::path::Path;
+
 /// Render MJML `source` to HTML using the given [`RenderOptions`].
 ///
-/// Returns every parse or render [`Diagnostic`] on failure.
+/// Returns every parse, validation or render [`Diagnostic`] on failure.
 ///
-/// This does **not** resolve `<mj-include>`: a bare string has no base directory to
-/// resolve relative paths against. Use [`render_file`] to render a file on disk with
-/// includes resolved.
+/// `<mj-include>` is resolved only when [`RenderOptions::file_path`] gives a base to
+/// resolve relative paths against; with the default `None` a bare string renders with
+/// its includes left untouched. Use [`render_file`] to render a file on disk, which
+/// derives that base from the file itself.
+///
+/// Non-fatal diagnostics (a `soft` [`validation_level`](RenderOptions::validation_level)
+/// finding, an advisory include note) are dropped here. Use [`render_with_diagnostics`]
+/// to see them alongside the HTML.
 pub fn render(source: &str, options: &RenderOptions) -> Result<String, Vec<Diagnostic>> {
+    render_with_diagnostics(source, options).map(|(html, _)| html)
+}
+
+/// [`render`], also returning the diagnostics that did **not** stop the render.
+///
+/// This is mjml's own shape — `mjml2html` returns `{ html, errors }`, where `errors` is
+/// what `validationLevel: 'soft'` found but rendered through anyway. `render` exists
+/// unchanged for callers that only want the HTML.
+///
+/// # Errors
+///
+/// As [`render`]: parse errors, include-resolution errors, a `strict` validation
+/// failure, or a render error.
+pub fn render_with_diagnostics(
+    source: &str,
+    options: &RenderOptions,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
+    render_source_with(source, options, &mjmx_transformer::LocalLoader)
+}
+
+/// [`render_with_diagnostics`] with the loader — and, for a file render, the include
+/// base directory — chosen by the caller.
+///
+/// The whole pipeline lives here: parse → resolve `<mj-include>` (only when there is a
+/// base) → validate at the requested [`ValidationLevel`] → render → post-process.
+/// `base` overrides [`RenderOptions::file_path`], so a file render always has a base
+/// even with the default options.
+fn render_source(
+    source: &str,
+    options: &RenderOptions,
+    loader: &dyn mjmx_transformer::IncludeLoader,
+    base: Option<&Path>,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let allocator = Allocator::new();
     let parsed = mjmx_parser::parse(source, &allocator);
     if !parsed.errors.is_empty() {
         return Err(parsed.errors);
     }
-    let html = mjmx_codegen::render_document(&parsed.document, options)?;
-    Ok(post_process(html, options))
+
+    // Everything that was reported but did not stop the render.
+    let mut soft = Vec::new();
+
+    let builder = mjmx_ast::AstBuilder::new(&allocator);
+    let document = match base.or_else(|| options.file_path.as_deref().map(include_base)) {
+        Some(root_dir) => {
+            let (document, include_diags) =
+                mjmx_transformer::resolve_includes(&builder, &parsed.document, loader, root_dir);
+            // Any error-severity include diagnostic blocks rendering (missing file, cycle).
+            if include_diags.iter().any(|d| d.severity == Severity::Error) {
+                return Err(include_diags);
+            }
+            soft.extend(include_diags);
+            document
+        }
+        None => parsed.document,
+    };
+
+    // mjml's `validationLevel`, applied to the post-include tree exactly as mjml
+    // applies `MJMLValidator` after parsing.
+    match options.validation_level {
+        ValidationLevel::Skip => {}
+        level => {
+            let lint_diags = mjmx_linter::lint(&document);
+            if level == ValidationLevel::Strict && has_errors(&lint_diags) {
+                return Err(lint_diags);
+            }
+            soft.extend(lint_diags);
+        }
+    }
+
+    let html = mjmx_codegen::render_document(&document, options)?;
+    Ok((post_process(html, options), soft))
+}
+
+/// [`render_source`] with no caller-supplied base: the only base, if any, is
+/// [`RenderOptions::file_path`].
+fn render_source_with(
+    source: &str,
+    options: &RenderOptions,
+    loader: &dyn mjmx_transformer::IncludeLoader,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
+    render_source(source, options, loader, None)
+}
+
+/// The directory relative `<mj-include>` paths resolve against, given a
+/// [`RenderOptions::file_path`]: the path itself when it is a directory, otherwise its
+/// parent (mjml's `filePath` is documented as the *file* the source came from).
+fn include_base(path: &Path) -> &Path {
+    if path.is_dir() {
+        return path;
+    }
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
+
+/// Whether any diagnostic is error-severity.
+fn has_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics.iter().any(|d| d.severity == Severity::Error)
 }
 
 /// Apply the whitespace post-processors selected by `options`.
@@ -69,6 +171,11 @@ fn post_process(html: String, options: &RenderOptions) -> String {
 /// let m = map.lookup(at).unwrap();
 /// assert!(source[m.source.start as usize..m.source.end as usize].starts_with("<mj-text"));
 /// ```
+///
+/// This is the bare codegen path: it neither validates
+/// ([`validation_level`](RenderOptions::validation_level)) nor resolves `<mj-include>`
+/// ([`file_path`](RenderOptions::file_path)), since both would move the source offsets
+/// the map is expressed in. Every other option is honored.
 ///
 /// # Errors
 ///
@@ -119,6 +226,21 @@ pub fn render_file(
     path: &std::path::Path,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
+    render_file_with_diagnostics(path, options).map(|(html, _)| html)
+}
+
+/// [`render_file`], also returning the diagnostics that did **not** stop the render.
+///
+/// The file-input counterpart of [`render_with_diagnostics`], with the same
+/// `{ html, errors }` shape mjml's `mjml2html` returns.
+///
+/// # Errors
+///
+/// As [`render_file`].
+pub fn render_file_with_diagnostics(
+    path: &std::path::Path,
+    options: &RenderOptions,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     render_file_with(path, options, &mjmx_transformer::LocalLoader)
 }
 
@@ -146,6 +268,20 @@ pub fn render_file_allow_http(
     path: &std::path::Path,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
+    render_file_allow_http_with_diagnostics(path, options).map(|(html, _)| html)
+}
+
+/// `render_file_allow_http`, also returning the diagnostics that did **not** stop the
+/// render — the network-enabled counterpart of [`render_file_with_diagnostics`].
+///
+/// # Errors
+///
+/// As `render_file_allow_http`.
+#[cfg(feature = "http-loader")]
+pub fn render_file_allow_http_with_diagnostics(
+    path: &std::path::Path,
+    options: &RenderOptions,
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     render_file_with(path, options, &mjmx_transformer::CombinedLoader::new())
 }
 
@@ -155,7 +291,7 @@ fn render_file_with(
     path: &std::path::Path,
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
-) -> Result<String, Vec<Diagnostic>> {
+) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let source = std::fs::read_to_string(path).map_err(|err| {
         vec![Diagnostic::error(format!(
             "could not read '{}': {err}",
@@ -163,24 +299,16 @@ fn render_file_with(
         ))]
     })?;
 
-    let root_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    // An explicit `file_path` wins over the directory derived from the input path,
+    // matching mjml: `filePath` is what includes resolve against, whatever file the
+    // source was actually read from.
+    let derived = path.parent().unwrap_or_else(|| Path::new("."));
+    let root_dir = options
+        .file_path
+        .as_deref()
+        .map_or(derived, |explicit| include_base(explicit));
 
-    let allocator = Allocator::new();
-    let parsed = mjmx_parser::parse(&source, &allocator);
-    if !parsed.errors.is_empty() {
-        return Err(parsed.errors);
-    }
-
-    let builder = mjmx_ast::AstBuilder::new(&allocator);
-    let (document, include_diags) =
-        mjmx_transformer::resolve_includes(&builder, &parsed.document, loader, root_dir);
-    // Any error-severity include diagnostic blocks rendering (missing file, cycle).
-    if include_diags.iter().any(|d| d.severity == Severity::Error) {
-        return Err(include_diags);
-    }
-
-    let html = mjmx_codegen::render_document(&document, options)?;
-    Ok(post_process(html, options))
+    render_source(&source, options, loader, Some(root_dir))
 }
 
 /// Format MJML `source` into canonical MJML source text.

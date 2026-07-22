@@ -11,14 +11,35 @@
 //! resolve attributes (`<mj-attributes>` / `mj-class` / defaults) and the head can
 //! read aggregated `<mj-head>` metadata (title, preview, fonts, breakpoint).
 
-use mjmx_semantic::Semantic;
+use std::path::PathBuf;
+
+use mjmx_semantic::{FontFace, Semantic};
 use mjmx_sourcemap::SourceMapBuilder;
 
+/// How hard a render insists the document validates. mjml's `validationLevel`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ValidationLevel {
+    /// Validate, report, but render anyway. mjml's default, and ours.
+    #[default]
+    Soft,
+    /// Validate and fail the render if any error-severity diagnostic is produced
+    /// (mjml throws a `ValidationError` here).
+    Strict,
+    /// Do not validate at all.
+    Skip,
+}
+
 /// Global options controlling a render.
+///
+/// Each field notes whether it mirrors an option mjml 4.18.0 accepts on `mjml2html`
+/// or is an mjmx extension.
 #[derive(Debug, Clone)]
 pub struct RenderOptions {
     /// The responsive breakpoint, in pixels. Columns collapse to full width below
     /// this width. `// mjml default: 480px`. A document `<mj-breakpoint>` overrides it.
+    ///
+    /// **mjmx extension.** mjml has no such option: it hardcodes `globalData.breakpoint`
+    /// to `480px` and only `<mj-breakpoint>` changes it.
     pub breakpoint: u32,
     /// Pretty-print the output. Honored by the umbrella crate as a whitespace
     /// post-process (`mjmx_minifier::beautify`) after codegen produces the HTML;
@@ -29,6 +50,34 @@ pub struct RenderOptions {
     /// post-process (`mjmx_minifier::minify`) after codegen produces the HTML.
     /// Takes precedence over `beautify` when both are set.
     pub minify: bool,
+    /// Keep MJML source comments in the output HTML. `// mjml default: true`.
+    ///
+    /// Matches mjml's `keepComments`. mjml's parser turns every comment into an
+    /// implicit `<mj-raw>` child of the enclosing element, so a kept comment is emitted
+    /// verbatim exactly where it stood; setting this to `false` drops it. Comments
+    /// *inside* an ending tag (`<mj-text>`, `<mj-raw>`, …) are part of that tag's raw
+    /// body and survive either way — mjml captures that body as a source substring.
+    pub keep_comments: bool,
+    /// How hard to insist the document validates. `// mjml default: soft`.
+    ///
+    /// Matches mjml's `validationLevel`. Honored by the umbrella crate, which owns the
+    /// linter; codegen itself never validates.
+    pub validation_level: ValidationLevel,
+    /// The path relative `<mj-include>` paths resolve against. `// mjml default: "."`.
+    ///
+    /// Matches mjml's `filePath`. A directory is used as-is; a file contributes its
+    /// parent directory. `None` — our default rather than mjml's `"."` — means a
+    /// string render resolves no includes at all, which is what `mjmx::render` has
+    /// always done. Honored by the umbrella crate, which owns include resolution.
+    pub file_path: Option<PathBuf>,
+    /// The web-font table, replacing mjml's built-ins. `// mjml default: the five
+    /// built-in Google fonts`.
+    ///
+    /// Matches mjml's `fonts`, including its *replace, never merge* semantics: passing
+    /// a table drops `Open Sans`/`Droid Sans`/`Lato`/`Roboto`/`Ubuntu`. `None` keeps the
+    /// built-ins. A `<mj-font>` still extends (or overrides by name) whatever is seeded,
+    /// and either way a face is only emitted when the body actually references it.
+    pub fonts: Option<Vec<FontFace<'static>>>,
 }
 
 impl Default for RenderOptions {
@@ -38,6 +87,14 @@ impl Default for RenderOptions {
             breakpoint: 480,
             beautify: false,
             minify: false,
+            // mjml default: comments are kept.
+            keep_comments: true,
+            // mjml default: soft validation.
+            validation_level: ValidationLevel::Soft,
+            // mjml defaults `filePath` to "."; None means "resolve no includes".
+            file_path: None,
+            // mjml default: the built-in font table.
+            fonts: None,
         }
     }
 }

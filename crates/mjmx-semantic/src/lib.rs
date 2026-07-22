@@ -60,8 +60,22 @@ impl<'a> Semantic<'a> {
     /// yields a [`Semantic`] carrying only defaults.
     #[must_use]
     pub fn build(document: &Document<'a>) -> (Self, Vec<Diagnostic>) {
+        Self::build_with_fonts(document, None)
+    }
+
+    /// [`Semantic::build`], with the built-in web-font table replaced by `fonts`.
+    ///
+    /// `None` keeps mjml's built-ins. `Some(table)` seeds the head with `table` instead —
+    /// mjml's `fonts` option replaces the default map rather than merging into it — and
+    /// any `<mj-font>` in the document still adds to (or overrides by name) whatever was
+    /// seeded.
+    #[must_use]
+    pub fn build_with_fonts(
+        document: &Document<'a>,
+        fonts: Option<&[FontFace<'_>]>,
+    ) -> (Self, Vec<Diagnostic>) {
         let mut diagnostics = Vec::new();
-        let mut head = HeadData::with_defaults();
+        let mut head = HeadData::with_fonts(fonts);
         let mut attributes = AttributesRegistry::default();
 
         if let Some(root) = document.root_element() {
@@ -253,6 +267,22 @@ mod tests {
         assert!(sem.head().preview.is_none());
         // Built-in fonts are always seeded.
         assert!(sem.head().fonts.iter().any(|f| f.name == "Ubuntu"));
+    }
+
+    #[test]
+    fn supplied_fonts_replace_the_built_ins() {
+        let alloc = Allocator::new();
+        let parsed = mjmx_parser::parse(
+            "<mjml><mj-head><mj-font name=\"Raleway\" href=\"https://example.test/raleway\" /></mj-head><mj-body></mj-body></mjml>",
+            &alloc,
+        );
+        let supplied = [FontFace::new("Comic Sans", "https://example.test/comic")];
+        let sem = Semantic::build_with_fonts(&parsed.document, Some(&supplied)).0;
+        // mjml's `fonts` option replaces the default map …
+        assert!(!sem.head().fonts.iter().any(|f| f.name == "Ubuntu"));
+        assert!(sem.head().fonts.iter().any(|f| f.name == "Comic Sans"));
+        // … while <mj-font> still extends whatever was seeded.
+        assert!(sem.head().fonts.iter().any(|f| f.name == "Raleway"));
     }
 
     #[test]

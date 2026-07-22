@@ -24,8 +24,15 @@
 //! paths against — cannot be exposed. Callers that need includes must inline the
 //! partials themselves before handing the source to [`render`], or use the native
 //! Node addon.
+//!
+//! For the same reason mjml's `filePath` option is **rejected** rather than accepted
+//! and ignored: `filePath` exists only to resolve includes, so silently accepting it
+//! would return HTML with the `<mj-include>` tags still in it while the caller believed
+//! they had been resolved. Every other `mjml2html` option is supported, under mjml's
+//! own name.
 
-use mjmx::{Diagnostic, FormatOptions, RenderOptions, Severity};
+use mjmx::{Diagnostic, FontFace, FormatOptions, RenderOptions, Severity, ValidationLevel};
+use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -35,14 +42,52 @@ use wasm_bindgen::prelude::*;
 /// `.d.ts` would otherwise type them as `any`.
 #[wasm_bindgen(typescript_custom_section)]
 const TYPESCRIPT_TYPES: &'static str = r#"
-/** Options controlling a render. Omitted fields use the Rust-side defaults. */
+/**
+ * Options controlling a render. Omitted fields use the Rust-side defaults.
+ *
+ * The names are mjml's own `mjml2html` option names, so this reads as a drop-in for
+ * JS mjml. Each field says whether it matches an mjml option or is an mjmx extension.
+ */
 export interface RenderOptions {
-  /** Responsive breakpoint in pixels. Default: 480. */
+  /**
+   * Responsive breakpoint in pixels; columns collapse below this width. Default: 480.
+   *
+   * mjmx extension — mjml has no such option, it hardcodes 480 and only
+   * `<mj-breakpoint>` changes it.
+   */
   breakpoint?: number;
-  /** Pretty-print the rendered HTML. Default: false. */
+  /** Pretty-print the rendered HTML. Matches mjml's `beautify`. Default: false. */
   beautify?: boolean;
-  /** Minify the rendered HTML. Takes precedence over `beautify`. Default: false. */
+  /**
+   * Minify the rendered HTML. Takes precedence over `beautify`.
+   * Matches mjml's `minify`. Default: false.
+   */
   minify?: boolean;
+  /**
+   * Keep MJML source comments in the output HTML.
+   * Matches mjml's `keepComments`. Default: true.
+   */
+  keepComments?: boolean;
+  /**
+   * How hard to insist the document validates: report and render anyway (`'soft'`),
+   * throw on any error (`'strict'`), or do not validate (`'skip'`).
+   * Matches mjml's `validationLevel`. Default: `'soft'`.
+   */
+  validationLevel?: 'soft' | 'strict' | 'skip';
+  /**
+   * Matches mjml's `filePath`, but **not supported here**: WebAssembly has no
+   * filesystem, so there is nothing to resolve `<mj-include>` against. Passing it
+   * throws, rather than silently returning HTML with the includes unresolved. Inline
+   * the partials first, or use the native Node addon's `renderFile`.
+   */
+  filePath?: never;
+  /**
+   * Web fonts to make importable, as mjml's `{ name: url }` object. Matches mjml's
+   * `fonts`, including its *replace, never merge* semantics: passing a table drops the
+   * five built-in Google fonts. Key order is preserved. A face is only emitted when the
+   * body actually references it. Default: the built-in table.
+   */
+  fonts?: Record<string, string>;
 }
 
 /** Options controlling `format`. */
@@ -89,25 +134,114 @@ extern "C" {
     pub type DiagnosticArray;
 }
 
-/// JS-side render options: `{ breakpoint?, beautify?, minify? }`.
+/// JS-side render options, under mjml's own option names.
 ///
-/// Every field is optional; omitted fields fall back to [`RenderOptions::default`].
+/// Every field is optional; omitted fields fall back to [`RenderOptions::default`],
+/// whose defaults are mjml's.
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct JsRenderOptions {
     breakpoint: Option<u32>,
     beautify: Option<bool>,
     minify: Option<bool>,
+    keep_comments: Option<bool>,
+    validation_level: Option<JsValidationLevel>,
+    /// Accepted by the deserializer only so it can be rejected with an explanation;
+    /// see [`JsRenderOptions::into_render_options`].
+    file_path: Option<String>,
+    fonts: Option<FontTable>,
 }
 
-impl From<JsRenderOptions> for RenderOptions {
-    fn from(value: JsRenderOptions) -> Self {
-        let defaults = Self::default();
-        Self {
-            breakpoint: value.breakpoint.unwrap_or(defaults.breakpoint),
-            beautify: value.beautify.unwrap_or(defaults.beautify),
-            minify: value.minify.unwrap_or(defaults.minify),
+/// mjml's `validationLevel` string union, as an enum.
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum JsValidationLevel {
+    Soft,
+    Strict,
+    Skip,
+}
+
+impl From<JsValidationLevel> for ValidationLevel {
+    fn from(value: JsValidationLevel) -> Self {
+        match value {
+            JsValidationLevel::Soft => Self::Soft,
+            JsValidationLevel::Strict => Self::Strict,
+            JsValidationLevel::Skip => Self::Skip,
         }
+    }
+}
+
+/// mjml's `fonts` object — `{ "Inter": "https://…" }` — kept **in key order**.
+///
+/// A `HashMap` would lose that order, and it is observable: it decides the order of the
+/// `<link>` tags in the rendered head. JS objects iterate their string keys in
+/// insertion order, so collecting the entries as they arrive reproduces what the caller
+/// wrote.
+struct FontTable(Vec<(String, String)>);
+
+impl<'de> Deserialize<'de> for FontTable {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TableVisitor;
+
+        impl<'de> Visitor<'de> for TableVisitor {
+            type Value = FontTable;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object mapping font names to stylesheet URLs")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<FontTable, M::Error> {
+                let mut entries = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some((name, href)) = map.next_entry::<String, String>()? {
+                    entries.push((name, href));
+                }
+                Ok(FontTable(entries))
+            }
+        }
+
+        deserializer.deserialize_map(TableVisitor)
+    }
+}
+
+impl FontTable {
+    /// The table as the owned faces [`RenderOptions::fonts`] expects.
+    fn into_faces(self) -> Vec<FontFace<'static>> {
+        self.0
+            .into_iter()
+            .map(|(name, href)| FontFace::new(name, href))
+            .collect()
+    }
+}
+
+impl JsRenderOptions {
+    /// Translate the JS object into [`RenderOptions`], or explain why it cannot be.
+    ///
+    /// The error is a plain `String` rather than a `JsError` so this conversion can be
+    /// unit-tested on the host: constructing a `JsValue` outside wasm panics.
+    fn into_render_options(self) -> Result<RenderOptions, String> {
+        // `filePath` only ever means "resolve <mj-include> against this"; wasm has no
+        // filesystem, so honoring it is impossible and ignoring it would hand back HTML
+        // with the includes still in place under the pretense they were resolved.
+        if self.file_path.is_some() {
+            return Err(
+                "`filePath` is not supported in WebAssembly: there is no filesystem to \
+                 resolve <mj-include> against. Inline the partials first, or use the \
+                 native Node addon's renderFile()."
+                    .to_owned(),
+            );
+        }
+        let defaults = RenderOptions::default();
+        Ok(RenderOptions {
+            breakpoint: self.breakpoint.unwrap_or(defaults.breakpoint),
+            beautify: self.beautify.unwrap_or(defaults.beautify),
+            minify: self.minify.unwrap_or(defaults.minify),
+            keep_comments: self.keep_comments.unwrap_or(defaults.keep_comments),
+            validation_level: self
+                .validation_level
+                .map_or(defaults.validation_level, Into::into),
+            file_path: None,
+            fonts: self.fonts.map(FontTable::into_faces),
+        })
     }
 }
 
@@ -221,7 +355,9 @@ where
     reason = "wasm-bindgen owns its arguments"
 )]
 pub fn render(source: String, options: Option<RenderOptionsObject>) -> Result<String, JsError> {
-    let options: RenderOptions = from_js_options::<JsRenderOptions>(options)?.into();
+    let options = from_js_options::<JsRenderOptions>(options)?
+        .into_render_options()
+        .map_err(|message| JsError::new(&format!("mjmx: {message}")))?;
     mjmx::render(&source, &options).map_err(|diagnostics| to_js_error(&diagnostics))
 }
 
@@ -257,4 +393,94 @@ pub fn lint(source: String) -> Result<DiagnosticArray, JsError> {
 #[must_use]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// Conversion tests for the JS options objects.
+///
+/// These run on the **host** target, not in wasm: they exercise the serde layer and
+/// [`JsRenderOptions::into_render_options`], neither of which touches a `JsValue`. The
+/// end-to-end JS surface is covered by `test/smoke.mjs`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deserialize a JSON literal as if it were the JS options object. `serde_json` and
+    /// `serde-wasm-bindgen` drive the same `Deserialize` impl, so what is asserted here
+    /// is exactly what the JS boundary produces.
+    fn options(json: &str) -> Result<RenderOptions, String> {
+        serde_json::from_str::<JsRenderOptions>(json)
+            .expect("options should deserialize")
+            .into_render_options()
+    }
+
+    #[test]
+    fn an_empty_object_is_mjmls_defaults() {
+        let options = options("{}").unwrap();
+        let defaults = RenderOptions::default();
+        assert_eq!(options.breakpoint, defaults.breakpoint);
+        assert!(!options.beautify);
+        assert!(!options.minify);
+        assert!(options.keep_comments);
+        assert_eq!(options.validation_level, ValidationLevel::Soft);
+        assert_eq!(options.file_path, None);
+        assert_eq!(options.fonts, None);
+    }
+
+    #[test]
+    fn every_option_round_trips_under_its_mjml_name() {
+        let options = options(
+            r#"{
+                "breakpoint": 600,
+                "beautify": true,
+                "minify": true,
+                "keepComments": false,
+                "validationLevel": "strict",
+                "fonts": {"Zeta": "https://z.example/z.css", "Alpha": "https://a.example/a.css"}
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(options.breakpoint, 600);
+        assert!(options.beautify);
+        assert!(options.minify);
+        assert!(!options.keep_comments);
+        assert_eq!(options.validation_level, ValidationLevel::Strict);
+        assert_eq!(
+            options.fonts.unwrap(),
+            vec![
+                FontFace::new("Zeta", "https://z.example/z.css"),
+                FontFace::new("Alpha", "https://a.example/a.css"),
+            ]
+        );
+    }
+
+    #[test]
+    fn validation_level_accepts_every_string_in_the_union() {
+        for (name, expected) in [
+            ("soft", ValidationLevel::Soft),
+            ("strict", ValidationLevel::Strict),
+            ("skip", ValidationLevel::Skip),
+        ] {
+            let options = options(&format!(r#"{{"validationLevel": "{name}"}}"#)).unwrap();
+            assert_eq!(options.validation_level, expected, "for '{name}'");
+        }
+    }
+
+    #[test]
+    fn an_unknown_validation_level_is_a_deserialization_error() {
+        assert!(serde_json::from_str::<JsRenderOptions>(r#"{"validationLevel": "loud"}"#).is_err());
+    }
+
+    #[test]
+    fn file_path_is_rejected_with_an_explanation() {
+        let err = options(r#"{"filePath": "./partials"}"#).unwrap_err();
+        assert!(err.contains("filePath"), "{err}");
+        assert!(err.contains("no filesystem"), "{err}");
+    }
+
+    #[test]
+    fn format_options_take_indent_width() {
+        let js: JsFormatOptions =
+            serde_json::from_str(r#"{"indentWidth": 4}"#).expect("options should deserialize");
+        assert_eq!(FormatOptions::from(js).indent_width, 4);
+    }
 }

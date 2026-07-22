@@ -23,6 +23,8 @@ mjmx.workspace = true
 mjmx-dev-server.workspace = true
 mjmx-language-server.workspace = true
 clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

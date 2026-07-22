@@ -16,42 +16,101 @@
 //!
 //! `render`, `renderFile` and `format` throw a JS `Error` whose message aggregates
 //! the diagnostics; `lint` never throws and returns the diagnostics as data.
+//!
+//! # Options
+//!
+//! The render options use mjml's own `mjml2html` option names (`keepComments`,
+//! `validationLevel`, `filePath`, `fonts`) so the addon reads as a drop-in for JS
+//! mjml. Unlike [`mjmx-wasm`](https://docs.rs/mjmx-wasm) this is a native addon with
+//! filesystem access, so `filePath` is fully supported: it is the base directory
+//! relative `<mj-include>` paths resolve against, for [`render`] as well as
+//! [`render_file`].
 
-use mjmx::{Diagnostic, FormatOptions, RenderOptions, Severity};
+use indexmap::IndexMap;
+use mjmx::{Diagnostic, FontFace, FormatOptions, RenderOptions, Severity, ValidationLevel};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
-/// JS-side render options: `{ breakpoint?, beautify?, minify? }`.
+/// JS-side render options, under mjml's own option names.
 ///
-/// Every field is optional; omitted fields fall back to [`RenderOptions::default`].
+/// Every field is optional; omitted fields fall back to [`RenderOptions::default`],
+/// whose defaults are mjml's.
 #[napi(object)]
 #[derive(Default)]
 pub struct JsRenderOptions {
-    /// Responsive breakpoint in pixels (mjml default: 480).
+    /// Responsive breakpoint in pixels; columns collapse below this width.
+    /// mjmx extension — mjml hardcodes 480 and only `<mj-breakpoint>` changes it.
     pub breakpoint: Option<u32>,
-    /// Pretty-print the rendered HTML.
+    /// Pretty-print the rendered HTML. [mjml: `beautify`]
     pub beautify: Option<bool>,
-    /// Minify the rendered HTML. Takes precedence over `beautify`.
+    /// Minify the rendered HTML. Takes precedence over `beautify`. [mjml: `minify`]
     pub minify: Option<bool>,
+    /// Keep MJML source comments in the output HTML (default: true).
+    /// [mjml: `keepComments`]
+    pub keep_comments: Option<bool>,
+    /// `"soft"` (report and render anyway, the default), `"strict"` (throw on any
+    /// error) or `"skip"` (do not validate). [mjml: `validationLevel`]
+    pub validation_level: Option<String>,
+    /// Directory (or file) relative `<mj-include>` paths resolve against; overrides the
+    /// rendered file's own directory. [mjml: `filePath`]
+    pub file_path: Option<String>,
+    /// Web fonts as mjml's `{ name: url }` object, *replacing* the built-in table
+    /// rather than extending it. Key order is preserved. [mjml: `fonts`]
+    pub fonts: Option<IndexMap<String, String>>,
 }
 
-impl From<Option<JsRenderOptions>> for RenderOptionsWrapper {
-    fn from(value: Option<JsRenderOptions>) -> Self {
-        let defaults = RenderOptions::default();
-        let Some(options) = value else {
-            return Self(defaults);
-        };
-        Self(RenderOptions {
-            breakpoint: options.breakpoint.unwrap_or(defaults.breakpoint),
-            beautify: options.beautify.unwrap_or(defaults.beautify),
-            minify: options.minify.unwrap_or(defaults.minify),
-        })
+/// Build the [`RenderOptions`] a JS options object describes; `None` is the defaults.
+///
+/// The error is a plain `String` rather than a napi [`Error`], for two reasons: it
+/// keeps the conversion unit-testable outside a Node process (dropping an `Error` calls
+/// into the N-API runtime), and the caller is what knows the right [`Status`].
+fn to_render_options(
+    options: Option<JsRenderOptions>,
+) -> std::result::Result<RenderOptions, String> {
+    let defaults = RenderOptions::default();
+    let Some(options) = options else {
+        return Ok(defaults);
+    };
+    Ok(RenderOptions {
+        breakpoint: options.breakpoint.unwrap_or(defaults.breakpoint),
+        beautify: options.beautify.unwrap_or(defaults.beautify),
+        minify: options.minify.unwrap_or(defaults.minify),
+        keep_comments: options.keep_comments.unwrap_or(defaults.keep_comments),
+        validation_level: options
+            .validation_level
+            .as_deref()
+            .map_or(Ok(defaults.validation_level), parse_validation_level)?,
+        file_path: options.file_path.map(std::path::PathBuf::from),
+        fonts: options.fonts.map(to_font_faces),
+    })
+}
+
+/// [`to_render_options`], with the failure turned into the JS `TypeError` the exported
+/// functions throw.
+fn render_options(options: Option<JsRenderOptions>) -> Result<RenderOptions> {
+    to_render_options(options).map_err(|message| Error::new(Status::InvalidArg, message))
+}
+
+/// Parse one of mjml's `validationLevel` strings.
+fn parse_validation_level(level: &str) -> std::result::Result<ValidationLevel, String> {
+    match level {
+        "soft" => Ok(ValidationLevel::Soft),
+        "strict" => Ok(ValidationLevel::Strict),
+        "skip" => Ok(ValidationLevel::Skip),
+        other => Err(format!(
+            "mjmx: unknown validationLevel '{other}' (expected soft, strict or skip)"
+        )),
     }
 }
 
-/// Newtype so the JS options object can be converted with a blanket [`From`] impl
-/// (the orphan rule forbids `impl From<Option<JsRenderOptions>> for RenderOptions`).
-struct RenderOptionsWrapper(RenderOptions);
+/// Turn mjml's `fonts` object into the owned faces [`RenderOptions::fonts`] expects,
+/// keeping the JS key order (which decides `<link>` order in the rendered head).
+fn to_font_faces(fonts: IndexMap<String, String>) -> Vec<FontFace<'static>> {
+    fonts
+        .into_iter()
+        .map(|(name, href)| FontFace::new(name, href))
+        .collect()
+}
 
 /// JS-side format options: `{ indentWidth? }`.
 #[napi(object)]
@@ -75,7 +134,8 @@ impl From<Option<JsFormatOptions>> for FormatOptionsWrapper {
     }
 }
 
-/// Newtype mirroring [`RenderOptionsWrapper`] for [`FormatOptions`].
+/// Newtype so the JS format options can be converted with a blanket [`From`] impl
+/// (the orphan rule forbids `impl From<Option<JsFormatOptions>> for FormatOptions`).
 struct FormatOptionsWrapper(FormatOptions);
 
 /// A span-anchored label on a [`JsDiagnostic`].
@@ -156,18 +216,19 @@ fn to_js_error(diagnostics: &[Diagnostic]) -> Error {
 
 /// Render MJML `source` to HTML. Throws if parsing or rendering produced errors.
 ///
-/// Does **not** resolve `<mj-include>` (a bare string has no base directory); use
-/// [`render_file`] for that.
+/// Resolves `<mj-include>` only when `options.filePath` gives a base directory to
+/// resolve relative paths against (mjml's `filePath`); use [`render_file`] to render a
+/// file, which derives that base from the file itself.
 #[napi]
 pub fn render(source: String, options: Option<JsRenderOptions>) -> Result<String> {
-    let RenderOptionsWrapper(options) = options.into();
+    let options = render_options(options)?;
     mjmx::render(&source, &options).map_err(|diagnostics| to_js_error(&diagnostics))
 }
 
 /// Render the MJML file at `path` to HTML, resolving `<mj-include>` from disk.
 #[napi]
 pub fn render_file(path: String, options: Option<JsRenderOptions>) -> Result<String> {
-    let RenderOptionsWrapper(options) = options.into();
+    let options = render_options(options)?;
     mjmx::render_file(std::path::Path::new(&path), &options)
         .map_err(|diagnostics| to_js_error(&diagnostics))
 }
@@ -192,4 +253,107 @@ pub fn lint(source: String) -> Vec<JsDiagnostic> {
 #[napi]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
+}
+
+/// Conversion tests for the JS options objects.
+///
+/// The structs are plain Rust once N-API has decoded them, so the JS-object →
+/// [`RenderOptions`] mapping is testable without a Node process. The end-to-end JS
+/// surface is covered by `test/smoke.mjs`.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `RenderOptions` a JS options object converts to.
+    fn convert(options: Option<JsRenderOptions>) -> std::result::Result<RenderOptions, String> {
+        to_render_options(options)
+    }
+
+    #[test]
+    fn omitted_options_are_mjmls_defaults() {
+        for options in [None, Some(JsRenderOptions::default())] {
+            let options = convert(options).unwrap();
+            assert_eq!(options.breakpoint, 480);
+            assert!(!options.beautify);
+            assert!(!options.minify);
+            assert!(options.keep_comments);
+            assert_eq!(options.validation_level, ValidationLevel::Soft);
+            assert_eq!(options.file_path, None);
+            assert_eq!(options.fonts, None);
+        }
+    }
+
+    #[test]
+    fn every_option_round_trips_under_its_mjml_name() {
+        let mut fonts = IndexMap::new();
+        fonts.insert("Zeta".to_owned(), "https://z.example/z.css".to_owned());
+        fonts.insert("Alpha".to_owned(), "https://a.example/a.css".to_owned());
+
+        let options = convert(Some(JsRenderOptions {
+            breakpoint: Some(600),
+            beautify: Some(true),
+            minify: Some(true),
+            keep_comments: Some(false),
+            validation_level: Some("strict".to_owned()),
+            file_path: Some("./partials".to_owned()),
+            fonts: Some(fonts),
+        }))
+        .unwrap();
+
+        assert_eq!(options.breakpoint, 600);
+        assert!(options.beautify);
+        assert!(options.minify);
+        assert!(!options.keep_comments);
+        assert_eq!(options.validation_level, ValidationLevel::Strict);
+        assert_eq!(
+            options.file_path,
+            Some(std::path::PathBuf::from("./partials"))
+        );
+        // Key order survives the boundary: it decides `<link>` order in the head.
+        assert_eq!(
+            options.fonts.unwrap(),
+            vec![
+                FontFace::new("Zeta", "https://z.example/z.css"),
+                FontFace::new("Alpha", "https://a.example/a.css"),
+            ]
+        );
+    }
+
+    #[test]
+    fn validation_level_accepts_every_string_in_the_union() {
+        for (name, expected) in [
+            ("soft", ValidationLevel::Soft),
+            ("strict", ValidationLevel::Strict),
+            ("skip", ValidationLevel::Skip),
+        ] {
+            let options = convert(Some(JsRenderOptions {
+                validation_level: Some(name.to_owned()),
+                ..JsRenderOptions::default()
+            }))
+            .unwrap();
+            assert_eq!(options.validation_level, expected, "for '{name}'");
+        }
+    }
+
+    #[test]
+    fn an_unknown_validation_level_is_rejected() {
+        let err = convert(Some(JsRenderOptions {
+            validation_level: Some("loud".to_owned()),
+            ..JsRenderOptions::default()
+        }))
+        .unwrap_err();
+        assert!(err.contains("loud"), "{err}");
+    }
+
+    #[test]
+    fn format_options_take_indent_width() {
+        let FormatOptionsWrapper(options) = Some(JsFormatOptions {
+            indent_width: Some(4),
+        })
+        .into();
+        assert_eq!(options.indent_width, 4);
+
+        let FormatOptionsWrapper(options) = None.into();
+        assert_eq!(options.indent_width, FormatOptions::default().indent_width);
+    }
 }

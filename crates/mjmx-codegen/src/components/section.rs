@@ -7,7 +7,7 @@ use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::components::{Column, ColumnWidth, Group};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, render_children};
 
 /// Renderer for `<mj-section>`.
 pub struct Section<'a> {
@@ -125,10 +125,22 @@ impl<'a> Section<'a> {
         // Column ghost row: <table><tr>, then a ghost <td> per child interleaved with
         // the real child markup. Each ghost <td>'s style comes from the child: a column
         // carries `vertical-align:top`, a group carries only its pixel width.
+        //
+        // Every conditional block is opened *and closed* here, exactly as mjml's
+        // `renderWrappedChildren` emits them; `merge_outlook_conditionals` fuses the
+        // adjacent ones back into one block afterwards, so the usual output is
+        // byte-identical. Keeping them closed is what lets a raw/comment child land
+        // between two blocks instead of inside an open comment (comments do not nest —
+        // an inner `-->` would end the conditional early and leak Outlook markup).
         buf.push_str(
-            "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr>",
+            "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr><![endif]-->",
         );
-        for child in &children {
+        render_children(self.element, ctx, buf, |child, ctx, buf| {
+            // Only columns and groups take part in the ghost row; any other element
+            // child is not a section-level layout component and is skipped.
+            if !matches!(child.tag, MjmlTag::MjColumn | MjmlTag::MjGroup) {
+                return Ok(());
+            }
             // mjml's `renderWrappedChildren`: the ghost cell's class is the *child's*
             // `css-class`, suffixed with `-outlook` (empty string when unset, which is
             // why the bare `class=""` is always emitted).
@@ -143,7 +155,7 @@ impl<'a> Section<'a> {
                         style.push_str(&format!("vertical-align:{va};"));
                     }
                     buf.push_str(&format!(
-                        "<td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
+                        "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
                     ));
                     crate::render::traced(child, ctx, buf, |ctx, buf| {
                         Group::new(child, count).render(ctx, buf)
@@ -161,16 +173,17 @@ impl<'a> Section<'a> {
                         .attribute(child, "vertical-align", Some("top"))
                         .unwrap_or("top");
                     buf.push_str(&format!(
-                        "<td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
+                        "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
                     ));
                     crate::render::traced(child, ctx, buf, |ctx, buf| {
                         Column::new(child, width, raw, count).render(ctx, buf)
                     })?;
                 }
             }
-            buf.push_str("<!--[if mso | IE]></td>");
-        }
-        buf.push_str("</tr></table><![endif]-->");
+            buf.push_str("<!--[if mso | IE]></td><![endif]-->");
+            Ok(())
+        })?;
+        buf.push_str("<!--[if mso | IE]></tr></table><![endif]-->");
 
         ctx.container_width = saved;
 

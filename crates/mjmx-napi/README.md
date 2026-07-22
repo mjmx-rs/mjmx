@@ -20,8 +20,18 @@ make napi-test   # the above, then node crates/mjmx-napi/test/smoke.mjs
 ```js
 const mjmx = require('@mjmx/node');
 
-mjmx.render(source, { breakpoint: 480, beautify: false, minify: false }); // -> HTML
-mjmx.renderFile('email.mjml', options);   // resolves <mj-include>
+// Render options use mjml's own `mjml2html` names and defaults; `breakpoint` is the
+// one mjmx extension (mjml hardcodes 480 and only <mj-breakpoint> changes it).
+mjmx.render(source, {
+  breakpoint: 480,              // mjmx extension
+  beautify: false,
+  minify: false,
+  keepComments: true,
+  validationLevel: 'soft',      // 'soft' | 'strict' | 'skip'
+  filePath: './partials',       // base dir for <mj-include>, as in mjml
+  fonts: { Inter: 'https://fonts.example/inter.css' }, // replaces the built-in table
+});                                       // -> HTML
+mjmx.renderFile('email.mjml', options);   // resolves <mj-include> relative to the file
 mjmx.lint(source);                        // -> Diagnostic[], never throws
 mjmx.format(source, { indentWidth: 2 });  // -> canonical MJML
 mjmx.version();                           // -> "0.1.0"

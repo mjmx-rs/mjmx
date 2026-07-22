@@ -6,7 +6,7 @@
 //! component renderer by [`MjmlTag`]; tags outside the current slice produce a clear
 //! [`Diagnostic`] so later milestones know exactly what is missing.
 
-use mjmx_ast::Element;
+use mjmx_ast::{Element, Node};
 use mjmx_diagnostics::Diagnostic;
 use mjmx_span::GetSpan;
 use mjmx_syntax::MjmlTag;
@@ -74,6 +74,49 @@ pub(crate) fn traced<'a, R>(
         sm.record(span, tag, start..end, depth);
     }
     result
+}
+
+/// Render a container's children, giving comments mjml's treatment.
+///
+/// mjml's parser rewrites every comment into an implicit `<mj-raw>` child of the
+/// enclosing element (`oncomment` in `mjml-parser-xml`), and `mj-raw` is a *raw*
+/// element — so a comment is emitted verbatim at its own position, outside the row/cell
+/// scaffolding the container wraps its real children in. `element` children are handed
+/// to `f`, which supplies exactly that scaffolding; comments bypass it, and text nodes
+/// (whitespace between tags) are dropped as they always have been.
+///
+/// # Callers must keep Outlook conditionals closed
+///
+/// A comment lands wherever the buffer currently is, so a caller must not have an
+/// `<!--[if …]>` block open around the loop: HTML comments do not nest, and the
+/// comment's own `-->` would terminate the conditional early and leak the Outlook-only
+/// markup that follows into every other client. Emit each ghost block opened *and*
+/// closed — as mjml's `renderWrappedChildren` does — and let
+/// [`merge_outlook_conditionals`](crate::render_document) fuse the adjacent ones back
+/// together afterwards; the output is byte-identical when no comment intervenes.
+///
+/// Honors [`RenderOptions::keep_comments`](crate::RenderOptions::keep_comments): when it
+/// is off, a comment renders to nothing.
+pub(crate) fn render_children<'a>(
+    element: &'a Element<'a>,
+    ctx: &mut RenderContext<'a>,
+    buf: &mut String,
+    mut f: impl FnMut(&'a Element<'a>, &mut RenderContext<'a>, &mut String) -> RenderResult,
+) -> RenderResult {
+    for child in element.children() {
+        match child {
+            Node::Element(el) => f(el, ctx, buf)?,
+            Node::Comment(comment) => {
+                if ctx.options.keep_comments {
+                    buf.push_str("<!--");
+                    buf.push_str(comment.value.as_str());
+                    buf.push_str("-->");
+                }
+            }
+            Node::Text(_) => {}
+        }
+    }
+    Ok(())
 }
 
 /// The tag → component-renderer table, wrapped by [`render_element`].

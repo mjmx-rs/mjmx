@@ -11,7 +11,7 @@ use mjmx_syntax::MjmlTag;
 use crate::components::css_class::{append_css_class, css_class};
 use crate::components::{Column, ColumnWidth};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, render_children};
 
 /// Renderer for `<mj-group>`.
 pub struct Group<'a> {
@@ -93,7 +93,11 @@ impl<'a> Render<'a> for Group<'a> {
         // Columns size against the group width, not the section.
         let saved = ctx.container_width;
         ctx.container_width = group_width;
-        for col in &columns {
+        render_children(self.element, ctx, buf, |col, ctx, buf| {
+            // Only columns are laid out in a group; any other element child is skipped.
+            if col.tag != MjmlTag::MjColumn {
+                return Ok(());
+            }
             // mjml's `getElementWidth(component.getWidthAsPixel())`: the column's own
             // width resolved against the *group* box.
             let raw = ctx.semantic.attribute(col, "width", None);
@@ -110,7 +114,8 @@ impl<'a> Render<'a> for Group<'a> {
                 Column::new_grouped(col, width, raw, num).render(ctx, buf)
             })?;
             buf.push_str("<!--[if mso | IE]></td><![endif]-->");
-        }
+            Ok(())
+        })?;
         ctx.container_width = saved;
 
         buf.push_str("<!--[if mso | IE]></tr></table><![endif]-->");

@@ -40,6 +40,9 @@ notify = "8"
 napi = { version = "3", default-features = false, features = ["napi4"] }
 napi-derive = "3"
 napi-build = "2"
+# Only for the N-API binding, to receive mjml's `fonts` object with its key order
+# intact (see `crates/mjmx-napi/Cargo.toml`).
+indexmap = "2"
 # Pinned exactly: the `wasm-bindgen-cli` used by `make wasm` must be the same
 # version as this crate dependency or code generation refuses to run.
 wasm-bindgen = "=0.2.100"

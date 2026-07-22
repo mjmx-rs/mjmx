@@ -13,7 +13,7 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_element};
+use crate::render::{Render, RenderResult, render_children, render_element};
 
 // mjml defaults.
 const MODE: &str = "fixed-height";
@@ -157,11 +157,12 @@ impl<'a> Render<'a> for Hero<'a> {
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:100%;margin:0px;\">",
         );
         buf.push_str("<tbody>");
-        for child in self.element.element_children() {
+        render_children(self.element, ctx, buf, |child, ctx, buf| {
             buf.push_str("<tr>");
             render_element(child, ctx, buf)?;
             buf.push_str("</tr>");
-        }
+            Ok(())
+        })?;
         buf.push_str("</tbody></table></td></tr></tbody></table></div>");
 
         buf.push_str("<!--[if mso | IE]></td></tr></table><![endif]-->");

@@ -19,7 +19,7 @@ use crate::components::Section;
 use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, render_children};
 
 /// Renderer for `<mj-wrapper>`.
 pub struct Wrapper<'a> {
@@ -118,11 +118,11 @@ impl<'a> Wrapper<'a> {
 
         let saved = ctx.container_width;
         ctx.container_width = box_width;
-        for child in self
-            .element
-            .element_children()
-            .filter(|el| el.tag == MjmlTag::MjSection)
-        {
+        render_children(self.element, ctx, buf, |child, ctx, buf| {
+            // Only sections are wrapped; any other element child is skipped.
+            if child.tag != MjmlTag::MjSection {
+                return Ok(());
+            }
             // mjml's `renderWrappedChildren`: the ghost cell carries the *section*
             // child's `css-class`, suffixed with `-outlook`.
             let ghost_class = suffix_css_classes(css_class(ctx, child).as_deref(), "outlook");
@@ -133,7 +133,8 @@ impl<'a> Wrapper<'a> {
                 Section::new(child).render(ctx, buf)
             })?;
             buf.push_str("<!--[if mso | IE]></td></tr><![endif]-->");
-        }
+            Ok(())
+        })?;
         ctx.container_width = saved;
 
         buf.push_str("<!--[if mso | IE]></table><![endif]-->");

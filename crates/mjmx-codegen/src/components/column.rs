@@ -4,7 +4,7 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{append_css_class, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_element};
+use crate::render::{Render, RenderResult, render_children, render_element};
 
 /// A column's resolved width, mirroring mjml's `widthParser` output (`{parsedWidth,
 /// unit}`) as produced by `MjColumn.getParsedWidth`.
@@ -363,11 +363,12 @@ impl<'a> Render<'a> for Column<'a> {
                 "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{inner_style}\" width=\"100%\">"
             ));
             buf.push_str("<tbody>");
-            for child in self.element.element_children() {
+            render_children(self.element, ctx, buf, |child, ctx, buf| {
                 buf.push_str("<tr>");
                 render_element(child, ctx, buf)?;
                 buf.push_str("</tr>");
-            }
+                Ok(())
+            })?;
             buf.push_str("</tbody></table></td></tr></tbody></table></div>");
         } else {
             // No gutter: the box styles sit directly on the single content table.
@@ -375,11 +376,12 @@ impl<'a> Render<'a> for Column<'a> {
                 "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{box_style}\" width=\"100%\">"
             ));
             buf.push_str("<tbody>");
-            for child in self.element.element_children() {
+            render_children(self.element, ctx, buf, |child, ctx, buf| {
                 buf.push_str("<tr>");
                 render_element(child, ctx, buf)?;
                 buf.push_str("</tr>");
-            }
+                Ok(())
+            })?;
             buf.push_str("</tbody></table></div>");
         }
         ctx.container_width = saved;

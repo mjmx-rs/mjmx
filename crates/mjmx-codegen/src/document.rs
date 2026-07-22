@@ -75,8 +75,9 @@ fn render_impl<'a>(
     }
 
     // Semantic analysis: aggregate <mj-head> and set up attribute resolution. Head
-    // warnings are non-fatal and do not abort the render.
-    let (semantic, _diagnostics) = Semantic::build(document);
+    // warnings are non-fatal and do not abort the render. A caller-supplied font table
+    // replaces the built-in one before any <mj-font> is folded in.
+    let (semantic, _diagnostics) = Semantic::build_with_fonts(document, options.fonts.as_deref());
 
     let mut ctx = RenderContext::new(options.clone(), semantic);
     if sourcemap {

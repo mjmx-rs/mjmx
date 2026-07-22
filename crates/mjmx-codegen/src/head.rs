@@ -97,7 +97,7 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
         .head()
         .fonts
         .iter()
-        .filter(|f| body.contains(f.name))
+        .filter(|f| body.contains(f.name.as_ref()))
         .collect();
     if !fonts.is_empty() {
         h.push_str("<!--[if !mso]><!-->");

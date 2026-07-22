@@ -4,7 +4,7 @@ use mjmx_ast::Element;
 use mjmx_syntax::Length;
 
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_element};
+use crate::render::{Render, RenderResult, render_children, render_element};
 
 /// Renderer for `<mj-body>`.
 pub struct Body<'a> {
@@ -71,11 +71,11 @@ impl<'a> Render<'a> for Body<'a> {
             dir = ctx.dir,
         ));
 
-        // Only element children (sections) render; whitespace text between
+        // Only element children (sections) and comments render; whitespace text between
         // body-level components is not significant and is skipped.
-        for child in self.element.element_children() {
-            render_element(child, ctx, buf)?;
-        }
+        render_children(self.element, ctx, buf, |child, ctx, buf| {
+            render_element(child, ctx, buf)
+        })?;
 
         buf.push_str("</div>");
         Ok(())

@@ -13,8 +13,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mjmx.workspace = true
-napi.workspace = true
+# `object_indexmap` is what lets a JS object cross the boundary as an ordered map.
+# mjml's `fonts` option is a `{ name: url }` object whose key order decides the order
+# of the `<link>` tags in the rendered head, and a `HashMap` would lose it.
+napi = { workspace = true, features = ["object_indexmap"] }
 napi-derive.workspace = true
+indexmap.workspace = true
 
 [build-dependencies]
 napi-build.workspace = true

@@ -6,18 +6,46 @@
 //! [`Semantic::build`](crate::Semantic::build), then read back by codegen when it
 //! assembles the `<head>`.
 
+use std::borrow::Cow;
+
 /// A font the document may depend on: a family name and the stylesheet URL to import.
 ///
-/// The table starts with mjml's built-in web fonts and is extended (or overridden,
-/// by name) by each `<mj-font>` in the head. Whether a given face is actually emitted
-/// is decided later by codegen: a face is imported only if its [`name`](FontFace::name)
-/// appears in the rendered body.
+/// The table starts with mjml's built-in web fonts — or with a caller-supplied table,
+/// which *replaces* them wholesale — and is extended (or overridden, by name) by each
+/// `<mj-font>` in the head. Whether a given face is actually emitted is decided later by
+/// codegen: a face is imported only if its [`name`](FontFace::name) appears in the
+/// rendered body.
+///
+/// Both strings are [`Cow`]s: a `<mj-font>` borrows the document arena for `'a`, while a
+/// face handed in by a caller (who has no arena) owns its strings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FontFace<'a> {
     /// The font-family name (dedup key and the substring codegen scans for), e.g. `Ubuntu`.
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     /// The stylesheet URL to `<link>` / `@import`.
-    pub href: &'a str,
+    pub href: Cow<'a, str>,
+}
+
+impl<'a> FontFace<'a> {
+    /// A face from any pair of string-likes — a borrowed arena `&'a str`, or owned
+    /// `String`s from a caller-supplied font table.
+    #[must_use]
+    pub fn new(name: impl Into<Cow<'a, str>>, href: impl Into<Cow<'a, str>>) -> Self {
+        Self {
+            name: name.into(),
+            href: href.into(),
+        }
+    }
+
+    /// The same face with both strings owned, so it can be re-seeded into a head with a
+    /// different (shorter or longer) arena lifetime.
+    #[must_use]
+    pub fn to_owned_face(&self) -> FontFace<'static> {
+        FontFace {
+            name: Cow::Owned(self.name.clone().into_owned()),
+            href: Cow::Owned(self.href.clone().into_owned()),
+        }
+    }
 }
 
 /// mjml 4.18.0's built-in web-font table, in its canonical insertion order.
@@ -78,10 +106,23 @@ impl<'a> HeadData<'a> {
     /// A head pre-seeded with mjml's built-in fonts and no other metadata.
     #[must_use]
     pub fn with_defaults() -> Self {
-        let fonts = DEFAULT_FONTS
-            .iter()
-            .map(|&(name, href)| FontFace { name, href })
-            .collect();
+        Self::with_fonts(None)
+    }
+
+    /// A head pre-seeded with `fonts`, or with mjml's built-ins when `fonts` is `None`.
+    ///
+    /// A caller-supplied table **replaces** the built-ins rather than extending them,
+    /// matching mjml: its `fonts` option is a plain default value for `globalData.fonts`,
+    /// so passing one drops `Open Sans` & co. entirely.
+    #[must_use]
+    pub fn with_fonts(fonts: Option<&[FontFace<'_>]>) -> Self {
+        let fonts = match fonts {
+            Some(supplied) => supplied.iter().map(FontFace::to_owned_face).collect(),
+            None => DEFAULT_FONTS
+                .iter()
+                .map(|&(name, href)| FontFace::new(name, href))
+                .collect(),
+        };
         Self {
             breakpoint: None,
             title: None,
@@ -106,9 +147,9 @@ impl<'a> HeadData<'a> {
     /// that already exists (including a built-in) has its href replaced in place.
     pub fn add_font(&mut self, name: &'a str, href: &'a str) {
         if let Some(existing) = self.fonts.iter_mut().find(|f| f.name == name) {
-            existing.href = href;
+            existing.href = Cow::Borrowed(href);
         } else {
-            self.fonts.push(FontFace { name, href });
+            self.fonts.push(FontFace::new(name, href));
         }
     }
 

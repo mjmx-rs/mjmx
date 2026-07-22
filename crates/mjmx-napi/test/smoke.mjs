@@ -62,6 +62,49 @@ check('renderFile() resolves mj-include', () => {
   assert.ok(out.includes('After include.'));
 });
 
+check('render({ keepComments }) matches mjml', () => {
+  const source =
+    '<mjml><mj-body><mj-section><mj-column>' +
+    '<!-- kept --><mj-text>Hi</mj-text>' +
+    '</mj-column></mj-section></mj-body></mjml>';
+  // mjml defaults `keepComments` to true.
+  assert.ok(mjmx.render(source).includes('kept'), 'expected comments kept by default');
+  assert.ok(
+    !mjmx.render(source, { keepComments: false }).includes('kept'),
+    'expected --keepComments:false to strip the comment'
+  );
+});
+
+check('render({ fonts }) replaces the built-in table, in key order', () => {
+  const source =
+    '<mjml><mj-body><mj-section><mj-column>' +
+    '<mj-text font-family="Zeta">a</mj-text><mj-text font-family="Alpha">b</mj-text>' +
+    '</mj-column></mj-section></mj-body></mjml>';
+  const out = mjmx.render(source, {
+    fonts: { Zeta: 'https://z.example/z.css', Alpha: 'https://a.example/a.css' },
+  });
+  assert.ok(!out.includes('fonts.googleapis.com'), 'expected the built-ins to be replaced');
+  assert.ok(
+    out.indexOf('z.example') < out.indexOf('a.example'),
+    'expected the object key order to be preserved'
+  );
+});
+
+check('render({ validationLevel }) matches mjml', () => {
+  const bad = '<mjml><mj-body><mj-text>x</mj-text></mj-body></mjml>';
+  // 'soft' (the default) reports but renders anyway; 'strict' throws; 'skip' is silent.
+  assert.ok(mjmx.render(bad).includes('<!doctype html>'), 'expected soft to render');
+  assert.throws(() => mjmx.render(bad, { validationLevel: 'strict' }), /mj-text/);
+  assert.ok(mjmx.render(bad, { validationLevel: 'skip' }).includes('<!doctype html>'));
+  assert.throws(() => mjmx.render(bad, { validationLevel: 'loud' }), /validationLevel|invalid options/i);
+});
+
+check('render({ filePath }) resolves mj-include from a string', () => {
+  const main = readFileSync(join(fixtures, 'include', 'main.mjml'), 'utf8');
+  const out = mjmx.render(main, { filePath: join(fixtures, 'include') });
+  assert.ok(out.includes('Included section content.'), 'expected the partial to be inlined');
+});
+
 check('lint() flags a known-bad document', () => {
   const diagnostics = mjmx.lint('<mjml><mj-body><mj-column></mj-column></mj-body></mjml>');
   assert.ok(Array.isArray(diagnostics));

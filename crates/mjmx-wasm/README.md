@@ -62,7 +62,19 @@ lint(source: string): Diagnostic[]                        // never throws
 format(source: string, options?: FormatOptions): string   // throws on parse errors
 version(): string
 
-interface RenderOptions { breakpoint?: number; beautify?: boolean; minify?: boolean }
+// mjml's own `mjml2html` option names, with mjml's defaults. `breakpoint` is the one
+// mjmx extension; `filePath` is the one mjml option wasm cannot support (no
+// filesystem, so there is nothing to resolve `<mj-include>` against) and passing it
+// throws rather than silently returning HTML with the includes unresolved.
+interface RenderOptions {
+  breakpoint?: number;                              // default 480 (mjmx extension)
+  beautify?: boolean;                               // default false
+  minify?: boolean;                                 // default false
+  keepComments?: boolean;                           // default true
+  validationLevel?: 'soft' | 'strict' | 'skip';     // default 'soft'
+  filePath?: never;                                 // unsupported here — throws
+  fonts?: Record<string, string>;                   // replaces the built-in table
+}
 interface FormatOptions { indentWidth?: number }
 interface DiagnosticLabel { start: number; end: number; message: string }
 interface Diagnostic {
