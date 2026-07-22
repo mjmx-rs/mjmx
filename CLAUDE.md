@@ -301,6 +301,32 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
   `...juiceOptions` is spread last, letting a caller delete a document's own inline CSS
   via `extraCss`; mjml-cli's README documents a `-l` flag that does not exist in 4.18.0.
 
+## Custom / unknown components
+
+**mjmx is strict on unknown elements — mjml's model, not mrml's.** An unrecognized tag
+(`<mj-foo>`, or a bare `<div>` in the body) is a **fatal error at both lint and render**,
+matching mjml ("Element X doesn't exist or is not registered"), which rejects it even under
+soft validation. jdrouet/mrml is the lenient outlier: its generic `node` component passes
+unknown tags through as literal HTML. For a compiler toolchain with an LSP, strict-with-a-
+good-diagnostic is the right call.
+
+A 2026-07-22 diagnostics fix (`render::unsupported`, `mjmx-linter::check_unknown`) made this
+consistent: the render error used to read "rendering is not implemented for `<div>` yet …
+unsupported component in this build", framing a nonexistent tag as a pending mjmx feature —
+false, since every real `MjmlTag` has a renderer, so that branch only ever fired for tags
+that don't exist. It now distinguishes `MjmlTag::Unknown` ("not a recognized MJML component")
+from a recognized head-only tag misplaced in the body ("not valid inside the body"). The
+linter was a **warning** whose help falsely claimed unknown tags "are rendered as-is"; it is
+now an **error** with accurate help, so lint and render tell the same story.
+
+**Custom components proper are won't-port via `.mjmlconfig`** (see "Won't port" above) but
+there is a design for an mjmx-owned alternative: **`docs/design/custom-components.md`** — a
+small, versioned `ComponentCx` contract (leaf-only first), a native Rust trait plus
+napi/wasm/python callbacks over one shared shape, with the cross-binding rule
+"registered → renders, else the clean unknown-component error". Proposal only, unimplemented;
+phasing and three open questions (head-contribution return channel, raw-vs-resolved `attr()`,
+ABI versioning) are in the doc.
+
 ## Planned next
 
 1. **Ship as three packages: JS, Rust, Python.**
@@ -372,4 +398,6 @@ step; optional `async` for async loaders.
 **Deliberate divergence:** arena + spans buys speed, precise diagnostics, and makes the LSP
 / formatter / sourcemap surfaces natural — at the cost of cheap serde JSON round-trip of the
 AST. **Decided:** AST↔JSON (mjml→json) is out of scope — pure arena, no serde AST. Bindings
-are **wasm + napi only** (no python).
+were originally **wasm + napi only**; that "no python" decision is **reversed** — a pyo3
+python binding is now planned (see "Planned next"). Adopting mrml's python binding as prior
+art there.
