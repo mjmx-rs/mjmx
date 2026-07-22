@@ -285,12 +285,17 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
     to prevent. Per-node file provenance (which would also fix the existing gap that
     spans from an included partial are meaningless in the main source) is a
     parser/AST milestone, not an option.
-- **Tier 3:** `mjmlConfigPath` / `useMjmlConfigOptions` — needs a `.mjmlconfig` reader.
 - **Two juice options are real gaps, not oversights:** `resolveCSSVariables` (juice
   defaults it **true**; mjmx behaves as `false`) and `inlinePseudoElements`. Both are
   refused rather than faked; see the `juiceOptions` table above for what implementing
   them would cost.
 - **Won't port:** `skeleton`, `preprocessors`, `presets` — JS function / `require()` semantics.
+  Also `mjmlConfigPath` / `useMjmlConfigOptions` (was Tier 3): their *primary* purpose is
+  loading **custom components** from a `.mjmlconfig` via JS `require()`, which a Rust
+  compiler with no JS runtime cannot execute — the same boundary as `preprocessors` /
+  `skeleton`. The `options`-merge half alone (reading an `options` block out of
+  `.mjmlconfig` and folding it into `RenderOptions`) is not worth a bespoke config reader,
+  so the pair is dropped rather than half-implemented.
 - Upstream oddities deliberately not copied: `--config.*` booleans don't coerce `"false"`;
   `juicePreserveTags` mutates the global juice module (mjmx's is per-render);
   `...juiceOptions` is spread last, letting a caller delete a document's own inline CSS
@@ -305,9 +310,34 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
      examples, keywords).
    - Python: **new binding** (pyo3/maturin). This reverses the earlier "wasm + napi only, no
      python" decision recorded under Prior art.
-2. **CLI parity audit** — walk the mjml README's CLI section and verify every argument has an
-   `mjmx` equivalent (`-r`, `-w`/`--watch`, `-s`, `-m`, …); fill the gaps. Partially done:
-   `dev --breakpoint` and `fmt`/`migrate --indent-width` were added during the options pass.
+2. **CLI parity audit — done for 4.18.0.** Walked mjml 4.18.0's `mjml-cli/src/client.js`
+   (NOT master — see below) and closed the render-path gaps:
+   - `-w`/`--watch` (`apps/mjmx-cli/src/watch.rs`): recompiles the file on every change
+     until Ctrl-C. Matches mjml: watch output is **always a file, never stdout** — `-o` if
+     given, else `<stem>.html` (basename, `.mjml`→`.html`) in the **cwd**, not beside the
+     source. Requires a file input (stdin unwatchable; clap rejects `--watch --stdin` and
+     `--watch --stdout`). Per-rebuild status to **stderr**. Reuses the `notify` crate with
+     a minimal copy of the dev-server watcher's three anti-self-feed guards (event kind /
+     path / re-arm); the `.html` output can't match the `.mjml` path filter, so no output
+     fingerprint is needed. Folder-watch is **not** ported (mjmx's model is single-file;
+     the initial build is an intentional, friendlier divergence — mjml compiles on change
+     only).
+   - Stdout file comment (`RenderArgs::stdout_file_comment`): mjml prepends
+     `<!-- FILE: {path} -->\n` before the HTML when writing to **stdout** for a **file**
+     input — the path *as given* (not basename), verified byte-for-byte against
+     `npx mjml@4.18.0`. `--no-stdout-file-comment` (alias `--noStdoutFileComment`)
+     suppresses it. Never present with `-o` (file write); suppressed for stdin (mjml prints
+     a nonsensical `<!-- FILE: undefined -->` there — mjmx omits it, a deliberate fix).
+   - Compat alias flags `-r`/`--read`, `-i`/`--stdin`, `-s`/`--stdout`: name the input/output
+     modes that are otherwise mjmx's defaults, for drop-in familiarity. Idiomatic clap
+     conflicts mirror mjml's "too many input/output arguments" errors: `-r`/`-i`/positional
+     are mutually exclusive; `-s`/`-o` are mutually exclusive.
+
+   Earlier passes added `dev --breakpoint` and `fmt`/`migrate --indent-width`. The
+   `--config.*` options stay exposed as flat idiomatic flags (a locked decision, not a gap).
+   **Targets 4.18.0 on purpose:** master's CLI diverged (include-allowlist default flip to
+   `allowIncludes`, htmlnano instead of html-minifier, `sanitizeStyles`/`allowMixedSyntax`
+   CSS sanitization) and is out of scope.
 
 Method reminder: read mjml's actual README/source rather than guessing — that has caught real
 bugs every single time.

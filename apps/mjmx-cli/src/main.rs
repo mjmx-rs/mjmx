@@ -6,7 +6,12 @@
 //!   to HTML with [`mjmx::render`], and writes the result to a file (or stdout). The
 //!   optional `--validate` flag prints the diagnostics the render reported but did not
 //!   fail on; `--validation-level strict` (or its older spelling `--strict`) refuses to
-//!   render when validation found any error-severity diagnostics.
+//!   render when validation found any error-severity diagnostics. `--watch`/`-w`
+//!   recompiles the file to disk on every change until Ctrl-C. When HTML goes to
+//!   stdout for a *file* input, a `<!-- FILE: … -->` line is prepended (mjml's
+//!   behavior), suppressed by `--no-stdout-file-comment`. The mjml-compat aliases
+//!   `-r`/`--read`, `-i`/`--stdin` and `-s`/`--stdout` name the input/output modes
+//!   that are otherwise mjmx's defaults.
 //! - **lint**: `mjmx lint <file>` parses and validates the document with
 //!   [`mjmx::lint`], prints diagnostics to stderr, and exits non-zero if any are
 //!   error-severity. It never renders.
@@ -51,6 +56,8 @@ use mjmx::{
 };
 use mjmx_dev_server::DevOptions;
 use serde::de::{MapAccess, Visitor};
+
+mod watch;
 
 /// Compile or validate an MJML document.
 #[derive(Debug, Parser)]
@@ -234,9 +241,40 @@ struct RenderArgs {
     /// Input `.mjml` file. Reads from stdin when omitted.
     input: Option<PathBuf>,
 
+    /// Compile this `.mjml` file. The explicit form of the positional input, for
+    /// drop-in familiarity with mjml's CLI; may not be combined with a positional
+    /// input or `--stdin`. [mjml: `-r`/`--read`]
+    #[arg(short, long, value_name = "FILE", conflicts_with_all = ["input", "stdin"])]
+    read: Option<PathBuf>,
+
+    /// Read MJML from stdin. Redundant with the mjmx default (stdin is used whenever
+    /// no input file is given); accepted for drop-in familiarity with mjml's CLI.
+    /// [mjml: `-i`/`--stdin`]
+    #[arg(short = 'i', long, conflicts_with_all = ["input", "read"])]
+    stdin: bool,
+
     /// Write HTML to this file instead of stdout.
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
+
+    /// Write HTML to stdout. Redundant with the mjmx default (stdout is used whenever
+    /// `--output` is not given); accepted for drop-in familiarity with mjml's CLI.
+    /// [mjml: `-s`/`--stdout`]
+    #[arg(short = 's', long, conflicts_with = "output")]
+    stdout: bool,
+
+    /// Do not prepend the `<!-- FILE: … -->` comment line when writing HTML to stdout
+    /// for a file input. [mjml: `--noStdoutFileComment`]
+    #[arg(long, alias = "noStdoutFileComment")]
+    no_stdout_file_comment: bool,
+
+    /// Watch the input file and recompile on every change (also re-resolving
+    /// same-directory `<mj-include>` partials). Requires a file input — stdin cannot
+    /// be watched. Output always goes to a file, never stdout: to `--output` if
+    /// given, otherwise to `<stem>.html` in the current directory. Runs until Ctrl-C.
+    /// [mjml: `-w`/`--watch`]
+    #[arg(short = 'w', long, conflicts_with_all = ["stdin", "stdout"])]
+    watch: bool,
 
     /// The mjml2html options.
     #[command(flatten)]
@@ -263,6 +301,31 @@ struct RenderArgs {
     /// connects to. Only enable it for templates you trust.
     #[arg(long)]
     allow_http_includes: bool,
+}
+
+impl RenderArgs {
+    /// The input file, from either the positional argument or `-r`/`--read`.
+    ///
+    /// `None` means stdin: no file was given, or `--stdin` was passed (which conflicts
+    /// with both file forms, so the file forms are already absent when it is set).
+    fn input_file(&self) -> Option<&PathBuf> {
+        self.input.as_ref().or(self.read.as_ref())
+    }
+
+    /// mjml's `<!-- FILE: … -->` stdout header line, or `None` when it is suppressed.
+    ///
+    /// Matches mjml 4.18.0 exactly: the comment is added only when HTML goes to
+    /// **stdout** (no `--output`) for a **file** input, and `--no-stdout-file-comment`
+    /// suppresses it. The name is the input path *as given* (mjml uses the raw path,
+    /// not the basename). Stdin has no filename — mjml prints a nonsensical
+    /// `<!-- FILE: undefined -->` there; mjmx suppresses it instead.
+    fn stdout_file_comment(&self) -> Option<String> {
+        if self.output.is_some() || self.no_stdout_file_comment {
+            return None;
+        }
+        self.input_file()
+            .map(|path| format!("<!-- FILE: {} -->", path.display()))
+    }
 }
 
 /// Arguments for the `lint` subcommand.
@@ -489,14 +552,6 @@ fn run_lint(args: &LintArgs) -> ExitCode {
 
 /// The default render path, with optional `--validate` reporting.
 fn run_render(args: &RenderArgs) -> ExitCode {
-    let source = match read_source(args.input.as_ref()) {
-        Ok(s) => s,
-        Err(err) => {
-            eprintln!("mjmx: error reading input: {err}");
-            return ExitCode::FAILURE;
-        }
-    };
-
     let mut options = match args.options.to_render_options() {
         Ok(options) => options,
         Err(message) => {
@@ -513,9 +568,23 @@ fn run_render(args: &RenderArgs) -> ExitCode {
         options.validation_level = ValidationLevel::Strict;
     }
 
+    // `--watch` is its own long-running mode: it re-reads the file itself and never
+    // writes to stdout, so it does not share the single-shot path below.
+    if args.watch {
+        return run_watch(args, &options);
+    }
+
+    let source = match read_source(args.input_file()) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("mjmx: error reading input: {err}");
+            return ExitCode::FAILURE;
+        }
+    };
+
     // A file input has a base directory, so `<mj-include>` resolves relative to it via
     // `render_file`; stdin has no base directory and uses the plain string renderer.
-    let rendered = match args.input.as_ref() {
+    let rendered = match args.input_file() {
         Some(path) if args.allow_http_includes => render_file_allow_http(path, &options),
         Some(path) => mjmx::render_file_with_diagnostics(path, &options),
         None if args.allow_http_includes => {
@@ -539,12 +608,38 @@ fn run_render(args: &RenderArgs) -> ExitCode {
         print_diagnostics(&reported);
     }
 
-    if let Err(err) = write_output(args.output.as_ref(), &html) {
+    if let Err(err) = write_output(
+        args.output.as_ref(),
+        args.stdout_file_comment().as_deref(),
+        &html,
+    ) {
         eprintln!("mjmx: error writing output: {err}");
         return ExitCode::FAILURE;
     }
 
     ExitCode::SUCCESS
+}
+
+/// The `--watch` mode of the render path: recompile the file to disk on every change.
+///
+/// mjml's watch always writes to a file — to `--output` if given, otherwise to
+/// `<stem>.html` in the current directory (see [`watch::derive_output_path`]) — and
+/// never to stdout, so `--stdout`/`--no-stdout-file-comment` do not apply here (clap
+/// already rejects `--watch --stdout`). Network includes are not supported in watch.
+fn run_watch(args: &RenderArgs, options: &RenderOptions) -> ExitCode {
+    if args.allow_http_includes {
+        eprintln!("mjmx: --watch does not support --allow-http-includes");
+        return ExitCode::FAILURE;
+    }
+    let Some(input) = args.input_file() else {
+        eprintln!("mjmx: --watch requires a file input (cannot watch stdin)");
+        return ExitCode::FAILURE;
+    };
+    let output = match args.output.as_ref() {
+        Some(path) => watch::OutputTarget::File(path.clone()),
+        None => watch::OutputTarget::Derived(watch::derive_output_path(input)),
+    };
+    watch::run(input, output, options)
 }
 
 /// Render with network includes enabled — the `--allow-http-includes` path.
@@ -820,11 +915,24 @@ fn read_source(path: Option<&PathBuf>) -> std::io::Result<String> {
 }
 
 /// Write `html` to `path`, or to stdout when `path` is `None`.
-fn write_output(path: Option<&PathBuf>, html: &str) -> std::io::Result<()> {
+///
+/// `stdout_comment` is mjml's `<!-- FILE: … -->` header line, prepended only on the
+/// stdout branch. It is `Some` exactly when `path` is `None` (see
+/// [`RenderArgs::stdout_file_comment`]), so a file write never carries it. mjml's own
+/// shape is `<comment>\n<html>\n`, matched byte-for-byte here.
+fn write_output(
+    path: Option<&PathBuf>,
+    stdout_comment: Option<&str>,
+    html: &str,
+) -> std::io::Result<()> {
     match path {
         Some(path) => fs::write(path, html),
         None => {
             let mut stdout = std::io::stdout().lock();
+            if let Some(comment) = stdout_comment {
+                stdout.write_all(comment.as_bytes())?;
+                stdout.write_all(b"\n")?;
+            }
             stdout.write_all(html.as_bytes())?;
             stdout.write_all(b"\n")?;
             Ok(())
@@ -1182,6 +1290,95 @@ mod tests {
             options.fonts.unwrap(),
             vec![FontFace::new("Inter", "https://i.example/i.css")]
         );
+    }
+
+    #[test]
+    fn stdout_file_comment_matches_mjml_for_a_file_input() {
+        // mjml prints `<!-- FILE: <path-as-given> -->` — the raw path, not the
+        // basename — on its own line before the HTML.
+        assert_eq!(
+            render_args(&["foo.mjml"]).stdout_file_comment().as_deref(),
+            Some("<!-- FILE: foo.mjml -->")
+        );
+        assert_eq!(
+            render_args(&["sub/foo.mjml"])
+                .stdout_file_comment()
+                .as_deref(),
+            Some("<!-- FILE: sub/foo.mjml -->")
+        );
+        // The `-r`/`--read` form is a file input too, and names the path it was given.
+        assert_eq!(
+            render_args(&["-r", "sub/foo.mjml"])
+                .stdout_file_comment()
+                .as_deref(),
+            Some("<!-- FILE: sub/foo.mjml -->")
+        );
+    }
+
+    #[test]
+    fn stdout_file_comment_is_suppressed_when_it_must_not_appear() {
+        // Writing to a file (`-o`) is not stdout, so no comment.
+        assert_eq!(
+            render_args(&["foo.mjml", "-o", "out.html"]).stdout_file_comment(),
+            None
+        );
+        // Stdin has no filename; mjml prints `<!-- FILE: undefined -->`, mjmx nothing.
+        assert_eq!(render_args(&[]).stdout_file_comment(), None);
+        assert_eq!(render_args(&["-i"]).stdout_file_comment(), None);
+        // Explicitly suppressed.
+        assert_eq!(
+            render_args(&["foo.mjml", "--no-stdout-file-comment"]).stdout_file_comment(),
+            None
+        );
+        // ...including via mjml's own camelCase spelling.
+        assert_eq!(
+            render_args(&["foo.mjml", "--noStdoutFileComment"]).stdout_file_comment(),
+            None
+        );
+    }
+
+    #[test]
+    fn read_flag_is_the_explicit_form_of_the_positional_input() {
+        let args = render_args(&["-r", "foo.mjml"]);
+        assert_eq!(args.input_file(), Some(&PathBuf::from("foo.mjml")));
+        // Long form too.
+        let args = render_args(&["--read", "foo.mjml"]);
+        assert_eq!(args.input_file(), Some(&PathBuf::from("foo.mjml")));
+    }
+
+    #[test]
+    fn stdin_and_stdout_compat_flags_parse_as_the_defaults() {
+        // `-i`/`-s` just name mjmx's existing defaults; they must parse cleanly.
+        let args = render_args(&["-i"]);
+        assert!(args.stdin);
+        assert_eq!(args.input_file(), None);
+
+        let args = render_args(&["foo.mjml", "-s"]);
+        assert!(args.stdout);
+        assert_eq!(
+            args.stdout_file_comment().as_deref(),
+            Some("<!-- FILE: foo.mjml -->")
+        );
+    }
+
+    #[test]
+    fn watch_flag_parses_on_the_render_path() {
+        let args = render_args(&["-w", "foo.mjml"]);
+        assert!(args.watch);
+        assert_eq!(args.input_file(), Some(&PathBuf::from("foo.mjml")));
+    }
+
+    #[test]
+    fn nonsensical_input_output_combinations_are_rejected() {
+        // Two input sources at once.
+        assert!(Cli::try_parse_from(["mjmx", "foo.mjml", "-r", "bar.mjml"]).is_err());
+        assert!(Cli::try_parse_from(["mjmx", "foo.mjml", "-i"]).is_err());
+        assert!(Cli::try_parse_from(["mjmx", "-r", "foo.mjml", "-i"]).is_err());
+        // Two output sinks at once.
+        assert!(Cli::try_parse_from(["mjmx", "foo.mjml", "-s", "-o", "out.html"]).is_err());
+        // Watch cannot read stdin, and never writes stdout.
+        assert!(Cli::try_parse_from(["mjmx", "-w", "-i"]).is_err());
+        assert!(Cli::try_parse_from(["mjmx", "foo.mjml", "-w", "-s"]).is_err());
     }
 
     #[test]

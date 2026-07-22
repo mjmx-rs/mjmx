@@ -903,6 +903,7 @@ dependencies = [
  "mjmx",
  "mjmx-dev-server",
  "mjmx-language-server",
+ "notify",
  "serde",
  "serde_json",
 ]
