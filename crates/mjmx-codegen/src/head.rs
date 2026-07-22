@@ -151,6 +151,27 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
             ));
         }
         h.push_str("</style>");
+
+        // mjml's `printerSupport` (mediaQueries.js:34-42): a third block replaying the
+        // *base* (unprefixed) rules under `@media only print`, right after the
+        // Thunderbird block. Off by default, and — as upstream — only reachable when
+        // there are column rules at all, since the whole helper returns '' otherwise.
+        if ctx.options.printer_support {
+            h.push_str("<style type=\"text/css\">");
+            h.push_str("\n    @media only print {\n");
+            for (i, m) in media_queries.iter().enumerate() {
+                if i > 0 {
+                    h.push('\n');
+                }
+                h.push_str(&format!(
+                    "      .{class} {{\n        {body}\n      }}\n",
+                    class = m.class,
+                    body = m.body,
+                ));
+            }
+            h.push_str("    }\n  ");
+            h.push_str("</style>");
+        }
     }
 
     // Component <style>s. mjml's `buildStyleFromComponents` concatenates *every*

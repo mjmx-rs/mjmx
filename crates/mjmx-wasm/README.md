@@ -74,6 +74,19 @@ interface RenderOptions {
   validationLevel?: 'soft' | 'strict' | 'skip';     // default 'soft'
   filePath?: never;                                 // unsupported here — throws
   fonts?: Record<string, string>;                   // replaces the built-in table
+  minifyOptions?: MinifyOptions;                    // only read when `minify` is true
+  ignoreIncludes?: boolean;                         // default false; true drops them
+  printerSupport?: boolean;                         // default false; @media only print
+}
+// mjml's four html-minifier switches. `removeEmptyAttributes` is the one default that
+// differs from mjml's `true`: mjml's own output carries `<div … style="">`, so `true`
+// removes an attribute while minifying. mjmx keeps `minify` a pure whitespace
+// transform by default; pass `true` for byte parity with mjml.
+interface MinifyOptions {
+  collapseWhitespace?: boolean;                     // default true
+  minifyCSS?: boolean;                              // default false (conservative)
+  caseSensitive?: boolean;                          // default true
+  removeEmptyAttributes?: boolean;                  // default false (mjml: true)
 }
 interface FormatOptions { indentWidth?: number }
 interface DiagnosticLabel { start: number; end: number; message: string }

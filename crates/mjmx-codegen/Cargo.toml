@@ -15,6 +15,9 @@ mjmx-syntax.workspace = true
 mjmx-diagnostics.workspace = true
 mjmx-semantic.workspace = true
 mjmx-sourcemap.workspace = true
+# Only for the `MinifyOptions` type carried on `RenderOptions` (mjml's `minifyOptions`).
+# Codegen never minifies; the umbrella crate applies it after codegen.
+mjmx-minifier.workspace = true
 
 [dev-dependencies]
 mjmx-allocator.workspace = true

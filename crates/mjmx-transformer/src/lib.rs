@@ -94,6 +94,41 @@ pub fn resolve_includes_from<'a>(
     (builder.document(children, document.span), diagnostics)
 }
 
+/// Drop every `<mj-include>` from `document` instead of resolving it — mjml's
+/// `ignoreIncludes`.
+///
+/// This is *removal*, not a no-op: upstream's parser returns before building the node
+/// (`mjml-parser-xml/src/index.js:238`), so an ignored include leaves nothing behind —
+/// neither the tag nor the content it would have pulled in. No I/O happens, and a
+/// document without includes is rebuilt shallowly.
+#[must_use]
+pub fn strip_includes<'a>(builder: &AstBuilder<'a>, document: &Document<'a>) -> Document<'a> {
+    if !contains_include(document) {
+        let children = builder.vec_from_iter(document.children.iter().copied());
+        return builder.document(children, document.span);
+    }
+    let children = strip_nodes(builder, &document.children);
+    builder.document(children, document.span)
+}
+
+/// Rebuild a node list with every `<mj-include>` removed, recursing into elements.
+fn strip_nodes<'a>(builder: &AstBuilder<'a>, nodes: &[Node<'a>]) -> ArenaVec<'a, Node<'a>> {
+    let mut out = builder.vec();
+    for node in nodes {
+        match node {
+            Node::Element(el) if el.tag == MjmlTag::MjInclude => {}
+            Node::Element(el) => {
+                let attributes = builder.vec_from_iter(el.attributes.iter().copied());
+                let children = strip_nodes(builder, &el.children);
+                let rebuilt = builder.element(el.tag, el.raw_tag, attributes, children, el.span);
+                out.push(builder.element_node(rebuilt));
+            }
+            other => out.push(*other),
+        }
+    }
+    out
+}
+
 /// Whether the document contains any `<mj-include>` element (at any depth).
 fn contains_include(document: &Document<'_>) -> bool {
     struct Finder {

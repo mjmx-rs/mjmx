@@ -30,12 +30,35 @@ mjmx.render(source, {
   validationLevel: 'soft',      // 'soft' | 'strict' | 'skip'
   filePath: './partials',       // base dir for <mj-include>, as in mjml
   fonts: { Inter: 'https://fonts.example/inter.css' }, // replaces the built-in table
+  minifyOptions: {},            // only consulted when `minify` is true
+  ignoreIncludes: false,        // true drops <mj-include> instead of resolving it
+  printerSupport: false,        // true adds an `@media only print` block
 });                                       // -> HTML
 mjmx.renderFile('email.mjml', options);   // resolves <mj-include> relative to the file
 mjmx.lint(source);                        // -> Diagnostic[], never throws
 mjmx.format(source, { indentWidth: 2 });  // -> canonical MJML
 mjmx.version();                           // -> "0.1.0"
 ```
+
+`minifyOptions` carries mjml's four html-minifier switches:
+
+```js
+mjmx.render(source, {
+  minify: true,
+  minifyOptions: {
+    collapseWhitespace: true,     // default true (mjml's own)
+    minifyCSS: false,             // default false; a conservative whitespace/comment
+                                  //   pass, not html-minifier's clean-css optimizer
+    caseSensitive: true,          // default true; false lower-cases attribute names
+    removeEmptyAttributes: false, // default false — mjml passes true, see below
+  },
+});
+```
+
+`removeEmptyAttributes` is the one place mjmx's default differs from mjml's. mjml's own
+output carries `<div … style="" role="article">`, so mjml's `true` *removes an
+attribute* while minifying; mjmx defaults it off to keep `minify` a pure whitespace
+transform. Pass `true` for byte parity with mjml.
 
 `render`, `renderFile` and `format` throw an `Error` whose message aggregates the
 diagnostics (`mjmx: error: <first message> (+N more diagnostics)`). The wrapper in

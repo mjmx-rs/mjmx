@@ -45,7 +45,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use mjmx::{Diagnostic, FontFace, FormatOptions, RenderOptions, Severity, ValidationLevel};
+use mjmx::{
+    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+};
 use mjmx_dev_server::DevOptions;
 use serde::de::{MapAccess, Visitor};
 
@@ -95,6 +97,15 @@ struct RenderOptionArgs {
     #[arg(long)]
     minify: bool,
 
+    /// How to minify, as a JSON object in mjml's own shape — e.g.
+    /// `'{"minifyCSS": true, "removeEmptyAttributes": false}'`. Recognised keys are
+    /// the four html-minifier switches mjml sets: `collapseWhitespace` (default
+    /// true), `minifyCSS` (false), `caseSensitive` (true) and
+    /// `removeEmptyAttributes` (true). Only consulted with `--minify`.
+    /// [mjml: `minifyOptions`]
+    #[arg(long, value_name = "JSON")]
+    minify_options: Option<String>,
+
     /// Responsive breakpoint in pixels (columns collapse below this width).
     /// [mjmx extension: mjml hardcodes 480px, only `<mj-breakpoint>` changes it]
     #[arg(long, value_name = "PX", default_value_t = 480)]
@@ -126,6 +137,17 @@ struct RenderOptionArgs {
     /// single `NAME=URL` pair; repeat the flag to declare more. [mjml: `fonts`]
     #[arg(long, value_name = "JSON|NAME=URL")]
     fonts: Vec<String>,
+
+    /// Skip `<mj-include>` tags instead of resolving them. They are *dropped*, along
+    /// with the content they would have pulled in — mjml's own behavior.
+    /// [mjml: `ignoreIncludes`]
+    #[arg(long)]
+    ignore_includes: bool,
+
+    /// Also emit the responsive column rules in an `@media only print` block, so a
+    /// printed email keeps its desktop layout. [mjml: `printerSupport`]
+    #[arg(long)]
+    printer_support: bool,
 }
 
 /// `--validation-level` values, spelled exactly as mjml's `validationLevel` strings.
@@ -163,18 +185,22 @@ impl From<ValidationLevelArg> for ValidationLevel {
 impl RenderOptionArgs {
     /// Build the [`RenderOptions`] these flags describe.
     ///
-    /// Fails only on a malformed `--fonts` spec; every other flag is validated by clap.
+    /// Fails only on a malformed `--fonts` or `--minify-options` spec; every other
+    /// flag is validated by clap.
     fn to_render_options(&self) -> Result<RenderOptions, String> {
         Ok(RenderOptions {
             breakpoint: self.breakpoint,
             beautify: self.beautify,
             minify: self.minify,
+            minify_options: parse_minify_options(self.minify_options.as_deref())?,
             // `--keep-comments` is the default, so the negative flag is what carries
             // information; the positive one exists to override an earlier negative.
             keep_comments: !self.no_keep_comments,
             validation_level: self.validation_level.into(),
             file_path: self.file_path.clone(),
             fonts: parse_fonts(&self.fonts)?,
+            ignore_includes: self.ignore_includes,
+            printer_support: self.printer_support,
         })
     }
 }
@@ -603,6 +629,45 @@ fn parse_font_spec(spec: &str) -> Result<Vec<(String, String)>, String> {
     Ok(vec![(name.to_owned(), href.to_owned())])
 }
 
+/// mjml's `minifyOptions` object, under its own camelCase key names.
+///
+/// `deny_unknown_fields` is deliberate: mjml would silently pass an unrecognised key
+/// through to html-minifier, but this crate implements exactly the four switches mjml
+/// sets, so accepting `removeComments` would promise something that never happens.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MinifyOptionsSpec {
+    collapse_whitespace: Option<bool>,
+    #[serde(rename = "minifyCSS")]
+    minify_css: Option<bool>,
+    case_sensitive: Option<bool>,
+    remove_empty_attributes: Option<bool>,
+}
+
+/// Parse `--minify-options`; `None` (the flag omitted) is mjml's `minifyOptions: {}`.
+fn parse_minify_options(spec: Option<&str>) -> Result<MinifyOptions, String> {
+    let defaults = MinifyOptions::default();
+    let Some(spec) = spec else {
+        return Ok(defaults);
+    };
+    let parsed: MinifyOptionsSpec = serde_json::from_str(spec.trim()).map_err(|err| {
+        format!(
+            "--minify-options: invalid JSON object: {err} (recognised keys: \
+             collapseWhitespace, minifyCSS, caseSensitive, removeEmptyAttributes)"
+        )
+    })?;
+    Ok(MinifyOptions {
+        collapse_whitespace: parsed
+            .collapse_whitespace
+            .unwrap_or(defaults.collapse_whitespace),
+        minify_css: parsed.minify_css.unwrap_or(defaults.minify_css),
+        case_sensitive: parsed.case_sensitive.unwrap_or(defaults.case_sensitive),
+        remove_empty_attributes: parsed
+            .remove_empty_attributes
+            .unwrap_or(defaults.remove_empty_attributes),
+    })
+}
+
 /// Print every diagnostic to stderr using its `Display` formatting.
 fn print_diagnostics(diagnostics: &[Diagnostic]) {
     for diagnostic in diagnostics {
@@ -666,6 +731,68 @@ mod tests {
         assert_eq!(options.validation_level, ValidationLevel::Soft);
         assert_eq!(options.file_path, None);
         assert_eq!(options.fonts, None);
+        assert!(!options.ignore_includes);
+        assert!(!options.printer_support);
+        assert_eq!(options.minify_options, MinifyOptions::default());
+    }
+
+    #[test]
+    fn ignore_includes_and_printer_support_are_plain_switches() {
+        let options = render_options(&["in.mjml", "--ignore-includes", "--printer-support"]);
+        assert!(options.ignore_includes);
+        assert!(options.printer_support);
+    }
+
+    #[test]
+    fn minify_options_json_sets_only_the_keys_it_names() {
+        // mjml spreads `minifyOptions` over the defaults, so omitted keys keep theirs.
+        let options = render_options(&["in.mjml", "--minify-options", r#"{"minifyCSS": true}"#]);
+        let defaults = MinifyOptions::default();
+        assert!(options.minify_options.minify_css);
+        assert_eq!(
+            options.minify_options.collapse_whitespace,
+            defaults.collapse_whitespace
+        );
+        assert_eq!(
+            options.minify_options.remove_empty_attributes,
+            defaults.remove_empty_attributes
+        );
+    }
+
+    #[test]
+    fn minify_options_accepts_every_mjml_key() {
+        let options = render_options(&[
+            "in.mjml",
+            "--minify-options",
+            r#"{"collapseWhitespace": false, "minifyCSS": true,
+                "caseSensitive": false, "removeEmptyAttributes": true}"#,
+        ]);
+        assert_eq!(
+            options.minify_options,
+            MinifyOptions {
+                collapse_whitespace: false,
+                minify_css: true,
+                case_sensitive: false,
+                remove_empty_attributes: true,
+            }
+        );
+    }
+
+    #[test]
+    fn minify_options_rejects_unknown_and_malformed_input() {
+        // An unrecognised html-minifier switch is refused rather than silently
+        // ignored: this build implements exactly the four mjml sets.
+        let err = render_args(&["in.mjml", "--minify-options", r#"{"removeComments": true}"#])
+            .options
+            .to_render_options()
+            .expect_err("unknown key must be refused");
+        assert!(err.contains("removeComments"), "{err}");
+
+        let err = render_args(&["in.mjml", "--minify-options", "not json"])
+            .options
+            .to_render_options()
+            .expect_err("malformed JSON must be refused");
+        assert!(err.contains("--minify-options"), "{err}");
     }
 
     #[test]

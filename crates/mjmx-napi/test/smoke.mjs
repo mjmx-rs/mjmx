@@ -105,6 +105,56 @@ check('render({ filePath }) resolves mj-include from a string', () => {
   assert.ok(out.includes('Included section content.'), 'expected the partial to be inlined');
 });
 
+check('render({ minifyOptions }) matches mjml', () => {
+  const two =
+    '<mjml><mj-body><mj-section><mj-column><mj-text>hello    world</mj-text></mj-column>' +
+    '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
+  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions });
+
+  // Defaults collapse whitespace and keep `style=""` (mjmx's one divergence).
+  assert.ok(!opts({}).includes('hello    world'));
+  assert.ok(opts({}).includes('style=""'));
+
+  // Each switch is observable at its non-default value.
+  assert.ok(opts({ collapseWhitespace: false }).includes('hello    world'));
+  assert.ok(!opts({ removeEmptyAttributes: true }).includes('style=""'));
+  assert.ok(opts({ minifyCSS: true }).length < opts({}).length);
+
+  // minifyOptions is ignored entirely without `minify`, as in mjml.
+  assert.equal(
+    mjmx.render(two, { minifyOptions: { collapseWhitespace: false } }),
+    mjmx.render(two)
+  );
+});
+
+check('render({ ignoreIncludes }) drops mj-include instead of resolving it', () => {
+  const main = readFileSync(join(fixtures, 'include', 'main.mjml'), 'utf8');
+  const base = join(fixtures, 'include');
+  // With a base the partial is inlined; ignoreIncludes wins over filePath.
+  assert.ok(mjmx.render(main, { filePath: base }).includes('Included section content.'));
+  const out = mjmx.render(main, { filePath: base, ignoreIncludes: true });
+  assert.ok(!out.includes('Included section content.'), 'expected the partial to be dropped');
+  assert.ok(out.includes('Before include.') && out.includes('After include.'));
+});
+
+check('renderFile({ ignoreIncludes }) drops mj-include too', () => {
+  const main = join(fixtures, 'include', 'main.mjml');
+  assert.ok(mjmx.renderFile(main).includes('Included section content.'));
+  assert.ok(!mjmx.renderFile(main, { ignoreIncludes: true }).includes('Included section content.'));
+});
+
+check('render({ printerSupport }) adds an @media only print block', () => {
+  const two =
+    '<mjml><mj-body><mj-section><mj-column><mj-text>a</mj-text></mj-column>' +
+    '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
+  assert.ok(!mjmx.render(two).includes('@media only print'));
+  const out = mjmx.render(two, { printerSupport: true });
+  assert.ok(out.includes('@media only print'));
+  // It replays the base rules, after the screen and Thunderbird blocks.
+  assert.ok(out.indexOf('.moz-text-html') < out.indexOf('@media only print'));
+  assert.ok(out.slice(out.indexOf('@media only print')).includes('.mj-column-per-50'));
+});
+
 check('lint() flags a known-bad document', () => {
   const diagnostics = mjmx.lint('<mjml><mj-body><mj-column></mj-column></mj-body></mjml>');
   assert.ok(Array.isArray(diagnostics));

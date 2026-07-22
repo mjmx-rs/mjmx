@@ -48,6 +48,53 @@ export interface RenderOptions {
    * body actually references it. Default: the built-in table.
    */
   fonts?: Record<string, string>;
+  /**
+   * How to minify, consulted only when `minify` is true — mjml likewise only spreads
+   * it into its html-minifier call under `minify`. Matches mjml's `minifyOptions`.
+   * Default: `{}`.
+   */
+  minifyOptions?: MinifyOptions;
+  /**
+   * Skip `<mj-include>` tags rather than resolving them. They are *dropped*, along
+   * with the content they would have pulled in — mjml's parser returns before the
+   * node is built. Matches mjml's `ignoreIncludes`. Default: false.
+   */
+  ignoreIncludes?: boolean;
+  /**
+   * Also emit the responsive column rules inside an `@media only print` block, so a
+   * printed email keeps its desktop layout. Matches mjml's `printerSupport`
+   * (undocumented upstream but present in mjml-core's `helpers/mediaQueries.js`).
+   * Default: false.
+   */
+  printerSupport?: boolean;
+}
+
+/**
+ * mjml's `minifyOptions` — the four html-minifier switches mjml sets. Omitted fields
+ * keep their defaults.
+ */
+export interface MinifyOptions {
+  /** Collapse insignificant whitespace. Default: true (mjml's own). */
+  collapseWhitespace?: boolean;
+  /**
+   * Minify CSS inside `<style>`. Default: false (mjml's own).
+   *
+   * mjmx applies a conservative whitespace/comment pass here, not html-minifier's
+   * full `clean-css` optimizer: declarations and selectors are never rewritten.
+   */
+  minifyCSS?: boolean;
+  /** Treat attribute names case-sensitively; false lower-cases them. Default: true. */
+  caseSensitive?: boolean;
+  /**
+   * Drop empty `class`/`id`/`style`/`title`/`lang`/`dir`, empty event handlers and
+   * `value=""` on `<input>` — html-minifier's exact allow-list.
+   *
+   * **Default: false, where mjml passes true.** mjml's own output carries
+   * `<div … style="" role="article">`, so mjml's default removes an attribute during
+   * minification; mjmx keeps `minify` semantics-preserving by default. Set this to
+   * `true` for byte parity with mjml.
+   */
+  removeEmptyAttributes?: boolean;
 }
 
 /** Options controlling `format`. */

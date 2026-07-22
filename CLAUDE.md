@@ -74,6 +74,34 @@ wasm and napi. Tier 1 is **shipped**:
 | `file_path: Option<PathBuf>` | `filePath` | None | include base for **string** input; dir → itself, file → parent |
 | `fonts: Option<Vec<FontFace>>` | `fonts` | None | **replaces** the built-in map, never merges; key order decides `<link>` order (hence `indexmap`) |
 
+Tier 2 is **shipped** (3 of 5; two were dead ends, see below):
+
+| field | mjml option | default | note |
+| --- | --- | --- | --- |
+| `minify_options: MinifyOptions` | `minifyOptions` | `{}` | only read when `minify`; new `MinifyOptions` struct + `mjmx_minifier::minify_with` |
+| `ignore_includes: bool` | `ignoreIncludes` | false | **drops** `<mj-include>`, does not merely skip resolution; wins over `file_path` and a file render's own base |
+| `printer_support: bool` | `printerSupport` | false | third `<style>` replaying the base column rules under `@media only print`, after the screen + Thunderbird blocks; suppressed when there are no column rules, as upstream |
+
+`MinifyOptions` = the four html-minifier switches mjml hardcodes
+(`mjml-core/src/index.js:419-425`): `collapse_whitespace` (true), `minify_css` (false),
+`case_sensitive` (true), `remove_empty_attributes` (**false — mjml passes true**).
+`minify_css` is a conservative whitespace/comment pass, *not* clean-css.
+
+**The one deliberate default divergence:** mjml passes `removeEmptyAttributes: true`, and
+mjml's own output carries `<div … style="" role="article">` — so mjml's default *removes
+an attribute* while minifying. Honoring it by default broke `mjmx-minifier`'s semantic
+invariance guarantee (`minify(x)` is html-compare-equal to `x`) and shifted 54/56
+fixtures' `--minify` bytes. Defaulted off; pass `--minify-options
+'{"removeEmptyAttributes": true}'` for byte parity with mjml. Reconsider if parity is
+judged to outweigh the invariant.
+
+Real bug caught by reading html-minifier's source: `reEmptyAttribute` is
+`^(?:class|id|style|title|lang|dir|on(focus|blur|change|click|dblclick|mouse…|key…))$`
+plus `<input value>` — *not* "every empty attribute" and *not* "every `on*` handler".
+
+CLI: `--minify-options <JSON>` (mjml's own camelCase keys, unknown keys rejected),
+`--ignore-includes`, `--printer-support`.
+
 `render_with_diagnostics` / `render_file_with_diagnostics` mirror mjml's `{ html, errors }`.
 
 Decisions taken: CLI uses idiomatic flags (`--keep-comments/--no-keep-comments`,
@@ -90,8 +118,23 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
 
 ### Still open
 
-- **Tier 2:** `minifyOptions` (`mjmx-minifier` has no options struct at all), `actualPath`,
-  `ignoreIncludes`, `printerSupport` (extra `@media print` block), `noMigrateWarn`.
+- **Tier 2 dead ends — deliberately *not* implemented as fields:**
+  - `noMigrateWarn` is a **no-op for mjmx**. Upstream calls `handleMjml3(mjml, …)`
+    unconditionally inside `mjml2html` (`mjml-core/src/index.js:151`) and logs "MJML v3
+    syntax detected, migrating…" unless suppressed. mjmx's render path never migrates —
+    `mjmx::migrate` is an explicit, separate entry point that returns *source*, and it
+    reports via `Diagnostic`s, not a console warning. There is nothing to suppress, so a
+    field would be dead. Revisit only if render ever auto-migrates.
+  - `actualPath` has **nowhere to land**. `mjmx_diagnostics::Diagnostic` is
+    `{severity, message, labels, help}` — no file provenance anywhere, and neither do AST
+    nodes. Upstream sets `node.file` / `node.absoluteFilePath` *per node at parse time*,
+    and crucially passes `actualPath: partialPath` for each included partial
+    (`mjml-parser-xml/src/index.js:163-164`), so nodes from a partial report the
+    partial's path. Bolting a single flat `file` onto `Diagnostic` would report the
+    top-level path for include-sourced diagnostics — exactly the lie `actualPath` exists
+    to prevent. Per-node file provenance (which would also fix the existing gap that
+    spans from an included partial are meaningless in the main source) is a
+    parser/AST milestone, not an option.
 - **Tier 3:** `mjmlConfigPath` / `useMjmlConfigOptions` — needs a `.mjmlconfig` reader.
 - **Blocked:** `juiceOptions` / `juicePreserveTags` — CSS inlining is not implemented at all
   (`has_inline_styles` is recorded in semantic; `mj-style inline` currently emits CSS verbatim).

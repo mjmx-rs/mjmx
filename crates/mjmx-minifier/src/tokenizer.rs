@@ -43,8 +43,15 @@ pub(crate) enum Token {
     /// layout and may be collapsed or dropped by the serializer.
     Text(String),
     /// Verbatim inner content of a raw-text element (`<style>`, `<pre>`, …).
-    /// Preserved byte-for-byte — never rewritten.
-    RawText(String),
+    /// Preserved byte-for-byte unless the serializer was explicitly asked to
+    /// rewrite it (see `minify_css`).
+    RawText {
+        /// The exact inner source text of the element.
+        text: String,
+        /// The lower-cased name of the enclosing element, e.g. `style`. Kept so a
+        /// serializer can treat `<style>` bodies differently from `<pre>` ones.
+        tag: String,
+    },
 }
 
 /// Elements whose content is captured verbatim rather than parsed as markup.
@@ -250,7 +257,10 @@ pub(crate) fn tokenize(input: &str) -> Vec<Token> {
         if is_raw_text(&tag) && !self_closing {
             let close = find_raw_close(&chars, i, &tag).unwrap_or(n);
             if close > i {
-                tokens.push(Token::RawText(chars[i..close].iter().collect()));
+                tokens.push(Token::RawText {
+                    text: chars[i..close].iter().collect(),
+                    tag: tag.clone(),
+                });
             }
             i = close;
         }

@@ -28,9 +28,88 @@
 //! content is collapsed and placed on its own line. Exact indentation style is
 //! this crate's own — byte-parity with mjml's `js-beautify` is a non-goal.
 
+mod css;
+mod tag;
 mod tokenizer;
 
 use tokenizer::{Token, tokenize};
+
+/// Knobs on [`minify_with`], mirroring mjml's `minifyOptions`.
+///
+/// mjml spreads `minifyOptions` over the four html-minifier switches it hardcodes
+/// (`mjml-core/src/index.js:419-425`), so those four — and only those four — are what
+/// a `minifyOptions` object can meaningfully change in an mjml pipeline. The defaults
+/// here are mjml's, with one deliberate exception noted on
+/// [`remove_empty_attributes`](Self::remove_empty_attributes); [`minify`] and
+/// `minify_with(_, &MinifyOptions::default())` always produce identical bytes.
+///
+/// Any other html-minifier switch (`removeComments`, `collapseBooleanAttributes`, …)
+/// is deliberately absent: mjml never sets it, and honoring it would mean claiming
+/// html-minifier parity this crate does not have.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MinifyOptions {
+    /// Collapse insignificant whitespace. `// html-minifier default: false;
+    /// mjml sets true`.
+    ///
+    /// This is the crate's historical behavior: whitespace-only text nodes are
+    /// dropped and content-bearing ones have their internal runs collapsed. With
+    /// `false`, text nodes are emitted byte-for-byte and `minify` only ever removes
+    /// what the other switches remove.
+    pub collapse_whitespace: bool,
+    /// Minify the CSS inside `<style>` elements. `// html-minifier default: false;
+    /// mjml also sets false`.
+    ///
+    /// **Divergence, deliberate:** html-minifier delegates this to `clean-css`, a full
+    /// CSS parser/optimizer. This crate instead applies a *conservative whitespace and
+    /// comment* pass ([`css`]): comments are dropped, whitespace runs collapse, and
+    /// whitespace around `{`, `}`, `;` and `,` is trimmed. Declarations, selectors,
+    /// colors and shorthands are never rewritten, and string/`url()` contents are left
+    /// alone. Since mjml defaults this off, the default output is unaffected either way.
+    pub minify_css: bool,
+    /// Treat attribute names case-sensitively. `// html-minifier default: false;
+    /// mjml sets true`.
+    ///
+    /// `true` — the default — leaves every tag byte-for-byte. `false` lower-cases
+    /// attribute *names* (html-minifier's behavior for non-custom markup). Tag names
+    /// are never rewritten: mjmx only ever emits lower-case ones, and the mixed-case
+    /// markup in an MJML document (`<o:OfficeDocumentSettings>`) lives inside MSO
+    /// conditional comments, which this crate preserves verbatim by design.
+    pub case_sensitive: bool,
+    /// Drop attributes whose value is empty. `// html-minifier default: false;
+    /// mjml sets true`.
+    ///
+    /// Follows html-minifier's `canDeleteEmptyAttribute` and its `reEmptyAttribute`
+    /// allow-list exactly: empty `class`/`id`/`style`/`title`/`lang`/`dir`, a specific
+    /// set of `on*` handlers, and `value=""` on `<input>`. Every other empty attribute
+    /// (`alt=""`, `href=""`) is meaningful and is kept. A tag with nothing to drop
+    /// keeps its exact source bytes.
+    ///
+    /// **Divergence, deliberate:** this defaults to `false`, where mjml passes `true`.
+    /// mjml's own rendered output carries `<div … style="" role="article">`, so mjml's
+    /// default silently *removes an attribute* during minification — which would break
+    /// this crate's semantic-invariance guarantee (a minified document is
+    /// [`mjmx_html_compare`]-equal to its input) and would shift the bytes of every
+    /// existing `minify` caller. Pass `remove_empty_attributes: true` — or
+    /// `--minify-options '{"removeEmptyAttributes": true}'`, or `minifyOptions:
+    /// { removeEmptyAttributes: true }` from a binding — for byte parity with mjml.
+    pub remove_empty_attributes: bool,
+}
+
+impl Default for MinifyOptions {
+    fn default() -> Self {
+        Self {
+            // mjml passes collapseWhitespace: true.
+            collapse_whitespace: true,
+            // mjml passes minifyCSS: false.
+            minify_css: false,
+            // mjml passes caseSensitive: true.
+            case_sensitive: true,
+            // mjml passes removeEmptyAttributes: true; we default to false to keep
+            // minify semantics-preserving. See the field docs.
+            remove_empty_attributes: false,
+        }
+    }
+}
 
 /// Minify `html`: strip insignificant inter-tag and intra-text whitespace while
 /// preserving the doctype, comments (incl. MSO conditionals), and raw-text
@@ -38,16 +117,36 @@ use tokenizer::{Token, tokenize};
 ///
 /// The result is [`mjmx_html_compare`]-equal to the input and, for a typical
 /// multi-line document, strictly shorter.
+///
+/// Equivalent to [`minify_with`] under [`MinifyOptions::default`].
 #[must_use]
 pub fn minify(html: &str) -> String {
+    minify_with(html, &MinifyOptions::default())
+}
+
+/// [`minify`] under caller-chosen [`MinifyOptions`] — mjml's `minifyOptions`.
+#[must_use]
+pub fn minify_with(html: &str, options: &MinifyOptions) -> String {
     let tokens = tokenize(html);
     let mut out = String::with_capacity(html.len());
     for token in &tokens {
         match token {
-            Token::Doctype(s) | Token::Comment(s) | Token::RawText(s) => out.push_str(s),
-            Token::Open { text, .. } | Token::Close { text, .. } => out.push_str(text),
+            Token::Doctype(s) | Token::Comment(s) => out.push_str(s),
+            Token::RawText { text, tag } => {
+                if options.minify_css && tag == "style" {
+                    out.push_str(&css::minify_css(text));
+                } else {
+                    out.push_str(text);
+                }
+            }
+            Token::Open { text, tag, .. } => {
+                out.push_str(tag::rewrite(text, tag, options).as_deref().unwrap_or(text));
+            }
+            Token::Close { text, .. } => out.push_str(text),
             Token::Text(s) => {
-                if !s.trim().is_empty() {
+                if !options.collapse_whitespace {
+                    out.push_str(s);
+                } else if !s.trim().is_empty() {
                     out.push_str(&collapse_ws(s));
                 }
             }
@@ -75,7 +174,7 @@ pub fn beautify(html: &str) -> String {
             // The doctype always sits flush-left and never affects indentation.
             Token::Doctype(s) => push_line(&mut out, 0, s),
             Token::Comment(s) => push_line(&mut out, indent, s),
-            Token::RawText(s) => {
+            Token::RawText { text: s, .. } => {
                 // Verbatim inner content of a raw-text element, kept byte-for-byte.
                 out.push_str(s);
                 if !s.ends_with('\n') {
@@ -231,6 +330,73 @@ mod tests {
     fn minify_shrinks_indented_document() {
         let input = "<ul>\n  <li>one</li>\n  <li>two</li>\n  <li>three</li>\n</ul>\n";
         assert!(minify(input).len() < input.len());
+    }
+
+    /// [`MinifyOptions`] with one switch flipped away from mjml's defaults.
+    fn with(f: impl FnOnce(&mut MinifyOptions)) -> MinifyOptions {
+        let mut options = MinifyOptions::default();
+        f(&mut options);
+        options
+    }
+
+    #[test]
+    fn default_options_are_mjmls_except_remove_empty_attributes() {
+        let options = MinifyOptions::default();
+        assert!(options.collapse_whitespace);
+        assert!(!options.minify_css);
+        assert!(options.case_sensitive);
+        // Deliberately `false` where mjml passes `true`: dropping `style=""` is an
+        // attribute removal, and `minify` promises semantic invariance.
+        assert!(!options.remove_empty_attributes);
+    }
+
+    #[test]
+    fn minify_with_defaults_equals_minify() {
+        let input = "<div>\n  <span>a  b</span>\n  <style>.x { color: red }</style>\n</div>";
+        assert_eq!(minify_with(input, &MinifyOptions::default()), minify(input));
+    }
+
+    #[test]
+    fn collapse_whitespace_off_keeps_text_verbatim() {
+        let input = "<div>\n  <span>a    b</span>\n</div>";
+        let out = minify_with(input, &with(|o| o.collapse_whitespace = false));
+        assert_eq!(out, input);
+    }
+
+    #[test]
+    fn minify_css_on_rewrites_only_style_bodies() {
+        let input = "<style>\n  .a {\n    color: red;\n  }\n</style><pre>\n  keep  me\n</pre>";
+        let out = minify_with(input, &with(|o| o.minify_css = true));
+        assert!(out.starts_with("<style>.a{color: red}</style>"), "{out}");
+        // <pre> is a raw-text element too, and is never touched.
+        assert!(out.ends_with("<pre>\n  keep  me\n</pre>"), "{out}");
+    }
+
+    #[test]
+    fn minify_css_off_keeps_style_bodies_verbatim() {
+        let input = "<style>\n  .a {\n    color: red;\n  }\n</style>";
+        assert_eq!(minify_with(input, &MinifyOptions::default()), input);
+    }
+
+    #[test]
+    fn remove_empty_attributes_drops_empty_class_and_style() {
+        let input = r#"<div class="" style="" align="center">x</div>"#;
+        // Off by default (mjmx divergence): the tag survives byte-for-byte.
+        assert_eq!(minify_with(input, &MinifyOptions::default()), input);
+        assert_eq!(
+            minify_with(input, &with(|o| o.remove_empty_attributes = true)),
+            r#"<div align="center">x</div>"#
+        );
+    }
+
+    #[test]
+    fn case_sensitive_off_lower_cases_attribute_names() {
+        let input = r#"<td vAlign="top">x</td>"#;
+        assert_eq!(minify_with(input, &MinifyOptions::default()), input);
+        assert_eq!(
+            minify_with(input, &with(|o| o.case_sensitive = false)),
+            r#"<td valign="top">x</td>"#
+        );
     }
 
     #[test]

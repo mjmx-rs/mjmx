@@ -31,7 +31,9 @@
 //! they had been resolved. Every other `mjml2html` option is supported, under mjml's
 //! own name.
 
-use mjmx::{Diagnostic, FontFace, FormatOptions, RenderOptions, Severity, ValidationLevel};
+use mjmx::{
+    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+};
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -88,6 +90,54 @@ export interface RenderOptions {
    * body actually references it. Default: the built-in table.
    */
   fonts?: Record<string, string>;
+  /**
+   * How to minify, only consulted when `minify` is true. Matches mjml's
+   * `minifyOptions`: the four html-minifier switches mjml hardcodes, spread over
+   * mjml's own defaults. Any other html-minifier key is ignored — this build
+   * implements exactly these four. Default: `{}`.
+   */
+  minifyOptions?: MinifyOptions;
+  /**
+   * Skip `<mj-include>` tags rather than resolving them; they are *dropped*, along
+   * with what they would have pulled in. Matches mjml's `ignoreIncludes`.
+   * Default: false.
+   *
+   * Note that WebAssembly resolves no includes in the first place, so the only thing
+   * this changes here is whether the tags survive into the parsed document.
+   */
+  ignoreIncludes?: boolean;
+  /**
+   * Also emit the responsive column rules inside an `@media only print` block.
+   * Matches mjml's `printerSupport` (undocumented upstream but present in
+   * mjml-core's `helpers/mediaQueries.js`). Default: false.
+   */
+  printerSupport?: boolean;
+}
+
+/**
+ * mjml's `minifyOptions` — the html-minifier switches mjml sets. Omitted fields keep
+ * mjml's own defaults.
+ */
+export interface MinifyOptions {
+  /** Collapse insignificant whitespace. Default: true. */
+  collapseWhitespace?: boolean;
+  /**
+   * Minify CSS inside `<style>`. Default: false. mjmx applies a conservative
+   * whitespace/comment pass here, not html-minifier's full `clean-css` optimizer.
+   */
+  minifyCSS?: boolean;
+  /** Treat attribute names case-sensitively; false lower-cases them. Default: true. */
+  caseSensitive?: boolean;
+  /**
+   * Drop empty `class`/`id`/`style`/`title`/`lang`/`dir`, empty event handlers, and
+   * `value=""` on `<input>` — html-minifier's exact allow-list.
+   *
+   * **Default: false, where mjml passes true.** mjml's own output carries
+   * `<div … style="" role="article">`, so mjml's default removes an attribute during
+   * minification; mjmx keeps `minify` semantics-preserving by default. Set this to
+   * `true` for byte parity with mjml.
+   */
+  removeEmptyAttributes?: boolean;
 }
 
 /** Options controlling `format`. */
@@ -150,6 +200,41 @@ struct JsRenderOptions {
     /// see [`JsRenderOptions::into_render_options`].
     file_path: Option<String>,
     fonts: Option<FontTable>,
+    minify_options: Option<JsMinifyOptions>,
+    ignore_includes: Option<bool>,
+    printer_support: Option<bool>,
+}
+
+/// mjml's `minifyOptions` object. Every field is optional; omitted ones keep
+/// [`MinifyOptions::default`], which is mjml's own default for that switch.
+///
+/// `deny_unknown_fields` mirrors the CLI: this crate implements exactly the four
+/// switches mjml sets, so an unrecognised html-minifier key is an error rather than a
+/// promise that is never kept.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JsMinifyOptions {
+    collapse_whitespace: Option<bool>,
+    #[serde(rename = "minifyCSS")]
+    minify_css: Option<bool>,
+    case_sensitive: Option<bool>,
+    remove_empty_attributes: Option<bool>,
+}
+
+impl From<JsMinifyOptions> for MinifyOptions {
+    fn from(value: JsMinifyOptions) -> Self {
+        let defaults = Self::default();
+        Self {
+            collapse_whitespace: value
+                .collapse_whitespace
+                .unwrap_or(defaults.collapse_whitespace),
+            minify_css: value.minify_css.unwrap_or(defaults.minify_css),
+            case_sensitive: value.case_sensitive.unwrap_or(defaults.case_sensitive),
+            remove_empty_attributes: value
+                .remove_empty_attributes
+                .unwrap_or(defaults.remove_empty_attributes),
+        }
+    }
 }
 
 /// mjml's `validationLevel` string union, as an enum.
@@ -241,6 +326,9 @@ impl JsRenderOptions {
                 .map_or(defaults.validation_level, Into::into),
             file_path: None,
             fonts: self.fonts.map(FontTable::into_faces),
+            minify_options: self.minify_options.map(Into::into).unwrap_or_default(),
+            ignore_includes: self.ignore_includes.unwrap_or(defaults.ignore_includes),
+            printer_support: self.printer_support.unwrap_or(defaults.printer_support),
         })
     }
 }
@@ -424,6 +512,9 @@ mod tests {
         assert_eq!(options.validation_level, ValidationLevel::Soft);
         assert_eq!(options.file_path, None);
         assert_eq!(options.fonts, None);
+        assert!(!options.ignore_includes);
+        assert!(!options.printer_support);
+        assert_eq!(options.minify_options, MinifyOptions::default());
     }
 
     #[test]
@@ -435,7 +526,15 @@ mod tests {
                 "minify": true,
                 "keepComments": false,
                 "validationLevel": "strict",
-                "fonts": {"Zeta": "https://z.example/z.css", "Alpha": "https://a.example/a.css"}
+                "fonts": {"Zeta": "https://z.example/z.css", "Alpha": "https://a.example/a.css"},
+                "minifyOptions": {
+                    "collapseWhitespace": false,
+                    "minifyCSS": true,
+                    "caseSensitive": false,
+                    "removeEmptyAttributes": true
+                },
+                "ignoreIncludes": true,
+                "printerSupport": true
             }"#,
         )
         .unwrap();
@@ -450,6 +549,44 @@ mod tests {
                 FontFace::new("Zeta", "https://z.example/z.css"),
                 FontFace::new("Alpha", "https://a.example/a.css"),
             ]
+        );
+        assert!(options.ignore_includes);
+        assert!(options.printer_support);
+        assert_eq!(
+            options.minify_options,
+            MinifyOptions {
+                collapse_whitespace: false,
+                minify_css: true,
+                case_sensitive: false,
+                remove_empty_attributes: true,
+            }
+        );
+    }
+
+    #[test]
+    fn omitted_minify_switches_keep_their_defaults() {
+        // mjml spreads `minifyOptions` over the defaults; a partial object only
+        // changes the keys it names.
+        let options = options(r#"{"minifyOptions": {"minifyCSS": true}}"#).unwrap();
+        let defaults = MinifyOptions::default();
+        assert!(options.minify_options.minify_css);
+        assert_eq!(
+            options.minify_options.collapse_whitespace,
+            defaults.collapse_whitespace
+        );
+        assert_eq!(
+            options.minify_options.remove_empty_attributes,
+            defaults.remove_empty_attributes
+        );
+    }
+
+    #[test]
+    fn an_unknown_minify_switch_is_a_deserialization_error() {
+        // This crate implements exactly mjml's four switches; accepting
+        // `removeComments` would promise something that never happens.
+        assert!(
+            serde_json::from_str::<JsRenderOptions>(r#"{"minifyOptions":{"removeComments":true}}"#)
+                .is_err()
         );
     }
 

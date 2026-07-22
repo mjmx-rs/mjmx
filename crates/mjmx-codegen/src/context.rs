@@ -13,6 +13,7 @@
 
 use std::path::PathBuf;
 
+use mjmx_minifier::MinifyOptions;
 use mjmx_semantic::{FontFace, Semantic};
 use mjmx_sourcemap::SourceMapBuilder;
 
@@ -50,6 +51,13 @@ pub struct RenderOptions {
     /// post-process (`mjmx_minifier::minify`) after codegen produces the HTML.
     /// Takes precedence over `beautify` when both are set.
     pub minify: bool,
+    /// How to minify, when [`minify`](Self::minify) is on. `// mjml default: {}`.
+    ///
+    /// Matches mjml's `minifyOptions`, which is spread over the four html-minifier
+    /// switches mjml hardcodes — so the defaults here (see [`MinifyOptions`]) are
+    /// mjml's own. Like mjml, this is **only consulted when `minify` is set**; with
+    /// `minify: false` it has no effect at all.
+    pub minify_options: MinifyOptions,
     /// Keep MJML source comments in the output HTML. `// mjml default: true`.
     ///
     /// Matches mjml's `keepComments`. mjml's parser turns every comment into an
@@ -78,6 +86,23 @@ pub struct RenderOptions {
     /// built-ins. A `<mj-font>` still extends (or overrides by name) whatever is seeded,
     /// and either way a face is only emitted when the body actually references it.
     pub fonts: Option<Vec<FontFace<'static>>>,
+    /// Skip `<mj-include>` entirely instead of resolving it. `// mjml default: false`.
+    ///
+    /// Matches mjml's `ignoreIncludes`, including its *drop, do not keep* semantics:
+    /// mjml's parser `return`s on an `mj-include` before the node is built
+    /// (`mjml-parser-xml/src/index.js:238`), so the tag and everything it would have
+    /// pulled in simply vanish from the tree. Honored by the umbrella crate, which owns
+    /// include resolution; codegen never sees the tag either way.
+    pub ignore_includes: bool,
+    /// Also emit the responsive column rules inside an `@media only print` block.
+    /// `// mjml default: false`.
+    ///
+    /// Matches mjml's `printerSupport` (undocumented in mjml's README, but read off
+    /// `mjml-core/src/helpers/mediaQueries.js:13,34-42`): when set, a third `<style>`
+    /// replaying the *base* media queries under `@media only print` follows the screen
+    /// and Thunderbird blocks. Like upstream, it is emitted only when there are column
+    /// rules to replay.
+    pub printer_support: bool,
 }
 
 impl Default for RenderOptions {
@@ -87,6 +112,9 @@ impl Default for RenderOptions {
             breakpoint: 480,
             beautify: false,
             minify: false,
+            // mjml default: `minifyOptions: {}`, i.e. html-minifier's four hardcoded
+            // switches unchanged.
+            minify_options: MinifyOptions::default(),
             // mjml default: comments are kept.
             keep_comments: true,
             // mjml default: soft validation.
@@ -95,6 +123,10 @@ impl Default for RenderOptions {
             file_path: None,
             // mjml default: the built-in font table.
             fonts: None,
+            // mjml default: includes are resolved.
+            ignore_includes: false,
+            // mjml default: no @media print block.
+            printer_support: false,
         }
     }
 }

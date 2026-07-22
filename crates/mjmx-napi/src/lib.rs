@@ -27,7 +27,9 @@
 //! [`render_file`].
 
 use indexmap::IndexMap;
-use mjmx::{Diagnostic, FontFace, FormatOptions, RenderOptions, Severity, ValidationLevel};
+use mjmx::{
+    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 
@@ -57,6 +59,52 @@ pub struct JsRenderOptions {
     /// Web fonts as mjml's `{ name: url }` object, *replacing* the built-in table
     /// rather than extending it. Key order is preserved. [mjml: `fonts`]
     pub fonts: Option<IndexMap<String, String>>,
+    /// How to minify, consulted only when `minify` is true. Omitted switches keep
+    /// mjml's defaults. [mjml: `minifyOptions`]
+    pub minify_options: Option<JsMinifyOptions>,
+    /// Skip `<mj-include>` tags instead of resolving them; they are *dropped*, along
+    /// with the content they would have pulled in. [mjml: `ignoreIncludes`]
+    pub ignore_includes: Option<bool>,
+    /// Also emit the responsive column rules inside an `@media only print` block.
+    /// [mjml: `printerSupport`]
+    pub printer_support: Option<bool>,
+}
+
+/// mjml's `minifyOptions` — the four html-minifier switches mjml hardcodes.
+///
+/// Only these four exist: mjml never sets another one, and this crate implements
+/// exactly what it exposes. `minifyCss` is spelled `minifyCSS` on the JS side, as mjml
+/// spells it.
+#[napi(object)]
+#[derive(Default)]
+pub struct JsMinifyOptions {
+    /// Collapse insignificant whitespace (default: true).
+    pub collapse_whitespace: Option<bool>,
+    /// Minify CSS inside `<style>` (default: false). A conservative whitespace and
+    /// comment pass, not html-minifier's full `clean-css` optimizer.
+    #[napi(js_name = "minifyCSS")]
+    pub minify_css: Option<bool>,
+    /// Treat attribute names case-sensitively; `false` lower-cases them (default: true).
+    pub case_sensitive: Option<bool>,
+    /// Drop empty `class`/`id`/`style`/`title`/`lang`/`dir`, empty event handlers and
+    /// `value=""` on `<input>` — html-minifier's exact list (default: true).
+    pub remove_empty_attributes: Option<bool>,
+}
+
+impl From<JsMinifyOptions> for MinifyOptions {
+    fn from(value: JsMinifyOptions) -> Self {
+        let defaults = Self::default();
+        Self {
+            collapse_whitespace: value
+                .collapse_whitespace
+                .unwrap_or(defaults.collapse_whitespace),
+            minify_css: value.minify_css.unwrap_or(defaults.minify_css),
+            case_sensitive: value.case_sensitive.unwrap_or(defaults.case_sensitive),
+            remove_empty_attributes: value
+                .remove_empty_attributes
+                .unwrap_or(defaults.remove_empty_attributes),
+        }
+    }
 }
 
 /// Build the [`RenderOptions`] a JS options object describes; `None` is the defaults.
@@ -82,6 +130,9 @@ fn to_render_options(
             .map_or(Ok(defaults.validation_level), parse_validation_level)?,
         file_path: options.file_path.map(std::path::PathBuf::from),
         fonts: options.fonts.map(to_font_faces),
+        minify_options: options.minify_options.map(Into::into).unwrap_or_default(),
+        ignore_includes: options.ignore_includes.unwrap_or(defaults.ignore_includes),
+        printer_support: options.printer_support.unwrap_or(defaults.printer_support),
     })
 }
 
@@ -280,6 +331,9 @@ mod tests {
             assert_eq!(options.validation_level, ValidationLevel::Soft);
             assert_eq!(options.file_path, None);
             assert_eq!(options.fonts, None);
+            assert!(!options.ignore_includes);
+            assert!(!options.printer_support);
+            assert_eq!(options.minify_options, MinifyOptions::default());
         }
     }
 
@@ -297,6 +351,14 @@ mod tests {
             validation_level: Some("strict".to_owned()),
             file_path: Some("./partials".to_owned()),
             fonts: Some(fonts),
+            minify_options: Some(JsMinifyOptions {
+                collapse_whitespace: Some(false),
+                minify_css: Some(true),
+                case_sensitive: Some(false),
+                remove_empty_attributes: Some(true),
+            }),
+            ignore_includes: Some(true),
+            printer_support: Some(true),
         }))
         .unwrap();
 
@@ -316,6 +378,41 @@ mod tests {
                 FontFace::new("Zeta", "https://z.example/z.css"),
                 FontFace::new("Alpha", "https://a.example/a.css"),
             ]
+        );
+        assert!(options.ignore_includes);
+        assert!(options.printer_support);
+        assert_eq!(
+            options.minify_options,
+            MinifyOptions {
+                collapse_whitespace: false,
+                minify_css: true,
+                case_sensitive: false,
+                remove_empty_attributes: true,
+            }
+        );
+    }
+
+    #[test]
+    fn omitted_minify_switches_keep_their_defaults() {
+        // mjml spreads `minifyOptions` over the defaults, so a partial object only
+        // changes the keys it names.
+        let options = convert(Some(JsRenderOptions {
+            minify_options: Some(JsMinifyOptions {
+                minify_css: Some(true),
+                ..JsMinifyOptions::default()
+            }),
+            ..JsRenderOptions::default()
+        }))
+        .unwrap();
+        let defaults = MinifyOptions::default();
+        assert!(options.minify_options.minify_css);
+        assert_eq!(
+            options.minify_options.collapse_whitespace,
+            defaults.collapse_whitespace
+        );
+        assert_eq!(
+            options.minify_options.remove_empty_attributes,
+            defaults.remove_empty_attributes
         );
     }
 

@@ -133,6 +133,56 @@ check('render({ filePath }) is rejected: wasm has no filesystem', () => {
   );
 });
 
+check('render({ minifyOptions }) matches mjml', () => {
+  const two =
+    '<mjml><mj-body><mj-section><mj-column><mj-text>hello    world</mj-text></mj-column>' +
+    '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
+  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions });
+
+  // Defaults collapse whitespace and keep `style=""` (mjmx's one divergence).
+  assert.ok(!opts({}).includes('hello    world'));
+  assert.ok(opts({}).includes('style=""'));
+
+  // Each switch is observable at its non-default value.
+  assert.ok(opts({ collapseWhitespace: false }).includes('hello    world'));
+  assert.ok(!opts({ removeEmptyAttributes: true }).includes('style=""'));
+  assert.ok(opts({ minifyCSS: true }).length < opts({}).length);
+
+  // minifyOptions is ignored entirely without `minify`, as in mjml.
+  assert.equal(
+    mjmx.render(two, { minifyOptions: { collapseWhitespace: false } }),
+    mjmx.render(two)
+  );
+
+  // Unknown html-minifier switches have no effect. (The Rust `deny_unknown_fields`
+  // does reject them, but serde-wasm-bindgen resolves struct fields by lookup rather
+  // than by iterating the JS object, so extra keys never reach the deserializer.)
+  assert.equal(opts({ removeComments: true }), opts({}));
+});
+
+check('render({ ignoreIncludes }) drops mj-include', () => {
+  const withInclude =
+    '<mjml><mj-body><mj-include path="./_section.mjml" /><mj-section><mj-column>' +
+    '<mj-text>after</mj-text></mj-column></mj-section></mj-body></mjml>';
+  // Without it the unresolvable include is an error; with it the tag simply vanishes.
+  assert.throws(() => mjmx.render(withInclude), /mj-include/);
+  const out = mjmx.render(withInclude, { ignoreIncludes: true });
+  assert.ok(out.includes('after'), 'expected the rest of the document to render');
+  assert.ok(!out.includes('mj-include'));
+});
+
+check('render({ printerSupport }) adds an @media only print block', () => {
+  const two =
+    '<mjml><mj-body><mj-section><mj-column><mj-text>a</mj-text></mj-column>' +
+    '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
+  assert.ok(!mjmx.render(two).includes('@media only print'));
+  const out = mjmx.render(two, { printerSupport: true });
+  assert.ok(out.includes('@media only print'));
+  // It replays the base rules, after the screen and Thunderbird blocks.
+  assert.ok(out.indexOf('.moz-text-html') < out.indexOf('@media only print'));
+  assert.ok(out.slice(out.indexOf('@media only print')).includes('.mj-column-per-50'));
+});
+
 check('lint() flags a known-bad document', () => {
   const diagnostics = mjmx.lint('<mjml><mj-body><mj-column></mj-column></mj-body></mjml>');
   assert.ok(Array.isArray(diagnostics), 'expected a JS array');

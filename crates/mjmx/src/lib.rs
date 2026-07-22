@@ -21,6 +21,7 @@ pub use mjmx_codegen::{
 };
 pub use mjmx_diagnostics::{Diagnostic, Severity};
 pub use mjmx_formatter::FormatOptions;
+pub use mjmx_minifier::MinifyOptions;
 
 use std::path::Path;
 
@@ -80,18 +81,30 @@ fn render_source(
     let mut soft = Vec::new();
 
     let builder = mjmx_ast::AstBuilder::new(&allocator);
-    let document = match base.or_else(|| options.file_path.as_deref().map(include_base)) {
-        Some(root_dir) => {
-            let (document, include_diags) =
-                mjmx_transformer::resolve_includes(&builder, &parsed.document, loader, root_dir);
-            // Any error-severity include diagnostic blocks rendering (missing file, cycle).
-            if include_diags.iter().any(|d| d.severity == Severity::Error) {
-                return Err(include_diags);
+    // mjml's `ignoreIncludes` short-circuits include handling entirely: its parser
+    // drops every `<mj-include>` before the node exists, so nothing is resolved *and*
+    // nothing is left behind. Checked before the base lookup, so it wins over both an
+    // explicit `base` and `file_path`.
+    let document = if options.ignore_includes {
+        mjmx_transformer::strip_includes(&builder, &parsed.document)
+    } else {
+        match base.or_else(|| options.file_path.as_deref().map(include_base)) {
+            Some(root_dir) => {
+                let (document, include_diags) = mjmx_transformer::resolve_includes(
+                    &builder,
+                    &parsed.document,
+                    loader,
+                    root_dir,
+                );
+                // Any error-severity include diagnostic blocks rendering (missing file, cycle).
+                if include_diags.iter().any(|d| d.severity == Severity::Error) {
+                    return Err(include_diags);
+                }
+                soft.extend(include_diags);
+                document
             }
-            soft.extend(include_diags);
-            document
+            None => parsed.document,
         }
-        None => parsed.document,
     };
 
     // mjml's `validationLevel`, applied to the post-include tree exactly as mjml
@@ -147,7 +160,10 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
 /// is returned untouched — the default render path is unchanged.
 fn post_process(html: String, options: &RenderOptions) -> String {
     if options.minify {
-        mjmx_minifier::minify(&html)
+        // `minify_options` is mjml's `minifyOptions`: consulted only on this branch,
+        // exactly as mjml only spreads it into the html-minifier call when `minify` is
+        // truthy.
+        mjmx_minifier::minify_with(&html, &options.minify_options)
     } else if options.beautify {
         mjmx_minifier::beautify(&html)
     } else {
