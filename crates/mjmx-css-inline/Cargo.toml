@@ -1,0 +1,19 @@
+[package]
+name = "mjmx-css-inline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Applies `<mj-style inline=\"inline\">` CSS to rendered HTML as style attributes, as mjml's juice pass does."
+
+[dependencies]
+mjmx-html-tokenizer.workspace = true
+cssparser.workspace = true
+
+[dev-dependencies]
+mjmx-html-compare.workspace = true
+
+[lints]
+workspace = true

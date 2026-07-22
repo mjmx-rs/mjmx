@@ -6,10 +6,14 @@
 //! tolerant of insignificant layout differences, strict about anything that
 //! changes what the email renders as.
 //!
-//! The pipeline is: [`tokenizer::tokenize`] each input into a flat event stream,
-//! normalize that stream (drop insignificant whitespace, canonicalize
-//! attributes/`style`/`class`), then walk the two normalized streams in
-//! lock-step. The first divergence becomes a readable [`Mismatch`].
+//! The pipeline is: [`mjmx_html_tokenizer::tokenize`] each input into a flat
+//! event stream, normalize that stream (drop insignificant whitespace,
+//! canonicalize attributes/`style`/`class`), then walk the two normalized
+//! streams in lock-step. The first divergence becomes a readable [`Mismatch`].
+//!
+//! The tokenizer is shared with [`mjmx_css_inline`](../mjmx_css_inline/index.html)
+//! so there is exactly one description of mjml's HTML shapes in the workspace.
+//! Its byte spans are of no interest here and are simply ignored.
 //!
 //! ## Equivalence rules
 //! - **Whitespace**: all-whitespace text nodes are ignored; other text collapses
@@ -22,12 +26,10 @@
 //! - **Comments** (incl. MSO conditionals): inner content compared after
 //!   whitespace-collapse — they are structural and must match.
 
-mod tokenizer;
-
 use std::collections::BTreeMap;
 use std::fmt;
 
-use tokenizer::{Event, tokenize};
+use mjmx_html_tokenizer::{Event, tokenize};
 
 /// A single semantic difference between two documents, pointing at the first
 /// divergence with a tag-path breadcrumb and expected-vs-actual snippets.
@@ -186,22 +188,24 @@ fn normalize(events: &[Event]) -> Vec<NEvent> {
     let mut out = Vec::with_capacity(events.len());
     for ev in events {
         match ev {
-            Event::DocType(s) => out.push(NEvent::DocType(collapse_ws(s).to_ascii_lowercase())),
-            Event::Text(s) => {
-                let collapsed = collapse_ws(s);
+            Event::DocType { text, .. } => {
+                out.push(NEvent::DocType(collapse_ws(text).to_ascii_lowercase()));
+            }
+            Event::Text { text, .. } => {
+                let collapsed = collapse_ws(text);
                 if !collapsed.is_empty() {
                     out.push(NEvent::Text(collapsed));
                 }
             }
-            Event::Comment(s) => out.push(NEvent::Comment(collapse_ws(s))),
-            Event::Close { tag } => out.push(NEvent::Close {
+            Event::Comment { text, .. } => out.push(NEvent::Comment(collapse_ws(text))),
+            Event::Close { tag, .. } => out.push(NEvent::Close {
                 tag: tag.to_ascii_lowercase(),
             }),
-            Event::Open { tag, attrs } => {
+            Event::Open { tag, attrs, .. } => {
                 let mut map = BTreeMap::new();
-                for (name, value) in attrs {
-                    let name = name.to_ascii_lowercase();
-                    let canon = canon_attr(&name, value);
+                for attr in attrs {
+                    let name = attr.name.to_ascii_lowercase();
+                    let canon = canon_attr(&name, attr.value);
                     map.insert(name, canon);
                 }
                 out.push(NEvent::Open {

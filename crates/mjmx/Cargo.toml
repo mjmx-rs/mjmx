@@ -22,6 +22,7 @@ mjmx-codegen.workspace = true
 mjmx-linter.workspace = true
 mjmx-transformer.workspace = true
 mjmx-minifier.workspace = true
+mjmx-css-inline.workspace = true
 mjmx-formatter.workspace = true
 mjmx-ast.workspace = true
 mjmx-diagnostics.workspace = true

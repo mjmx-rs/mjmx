@@ -120,8 +120,26 @@ fn render_source(
         }
     }
 
-    let html = mjmx_codegen::render_document(&document, options)?;
-    Ok((post_process(html, options), soft))
+    let (html, inline_css) = mjmx_codegen::render_document_with_inline_css(&document, options)?;
+    Ok((
+        post_process(inline_css_into(html, &inline_css), options),
+        soft,
+    ))
+}
+
+/// Apply the `<mj-style inline="inline">` bucket to the rendered HTML, mjml's juice pass.
+///
+/// Runs on the assembled document and **before** [`post_process`], matching mjml's order:
+/// inlining reads the markup codegen produced, and minify/beautify then run over the
+/// result. With an empty bucket there is nothing to do and the HTML is returned untouched
+/// — the default render path is unchanged, byte for byte.
+fn inline_css_into(html: String, inline_css: &[String]) -> String {
+    if inline_css.is_empty() {
+        return html;
+    }
+    // Concatenated in source order, so a later `<mj-style inline="inline">` wins ties
+    // against an earlier one exactly as it would inside a single stylesheet.
+    mjmx_css_inline::inline(&html, &inline_css.join("\n"))
 }
 
 /// [`render_source`] with no caller-supplied base: the only base, if any, is
@@ -195,21 +213,19 @@ fn post_process(html: String, options: &RenderOptions) -> String {
 ///
 /// # Errors
 ///
-/// As [`render`], plus a diagnostic if `options` requests `minify` or `beautify`: those
-/// are whitespace rewrites applied *after* codegen, and they would silently invalidate
-/// every recorded offset. Render with a sourcemap first, then post-process if you must
-/// (and discard the map).
+/// As [`render`], plus a refusal for any render whose HTML is rewritten after codegen,
+/// which would silently invalidate every recorded offset:
+///
+/// - `options` requests `minify` or `beautify` — whitespace rewrites;
+/// - the document has a `<mj-style inline="inline">` — CSS inlining rewrites `style`
+///   attributes and inserts new ones. This one is a property of the *document*, not of
+///   the options, so it is only detected once the source has been parsed and analyzed.
+///
+/// Render with a sourcemap first, then post-process if you must (and discard the map).
 pub fn render_with_sourcemap(
     source: &str,
     options: &RenderOptions,
 ) -> Result<(String, SourceMap), Vec<Diagnostic>> {
-    if options.minify || options.beautify {
-        return Err(vec![
-            Diagnostic::error("sourcemap collection is incompatible with minify/beautify").with_help(
-                "minify and beautify rewrite whitespace after codegen, which shifts every mapped offset; render with a sourcemap using the default whitespace options",
-            ),
-        ]);
-    }
     let allocator = Allocator::new();
     let parsed = mjmx_parser::parse(source, &allocator);
     if !parsed.errors.is_empty() {

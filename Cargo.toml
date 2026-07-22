@@ -24,7 +24,9 @@ mjmx-sourcemap = { version = "0.1.0", path = "crates/mjmx-sourcemap" }
 mjmx-linter = { version = "0.1.0", path = "crates/mjmx-linter" }
 mjmx-traverse = { version = "0.1.0", path = "crates/mjmx-traverse" }
 mjmx-transformer = { version = "0.1.0", path = "crates/mjmx-transformer" }
+mjmx-html-tokenizer = { version = "0.1.0", path = "crates/mjmx-html-tokenizer" }
 mjmx-html-compare = { version = "0.1.0", path = "crates/mjmx-html-compare" }
+mjmx-css-inline = { version = "0.1.0", path = "crates/mjmx-css-inline" }
 mjmx-minifier = { version = "0.1.0", path = "crates/mjmx-minifier" }
 mjmx-formatter = { version = "0.1.0", path = "crates/mjmx-formatter" }
 mjmx-dev-server = { version = "0.1.0", path = "crates/mjmx-dev-server" }

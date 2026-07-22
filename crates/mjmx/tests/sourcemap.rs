@@ -31,6 +31,20 @@ fn all_fixtures() -> Vec<(String, String)> {
     out
 }
 
+/// [`all_fixtures`] minus the documents a source map is *refused* for.
+///
+/// A `<mj-style inline="inline">` makes the CSS inliner run after codegen, rewriting
+/// `style` attributes and inserting new ones — every recorded offset would be wrong, so
+/// `render_with_sourcemap` returns a diagnostic instead (see
+/// [`sourcemap_is_rejected_for_an_inlined_document`]). The sweeps below are about
+/// mappings being *right*, so they run over the documents that have them.
+fn mappable_fixtures() -> Vec<(String, String)> {
+    let mut out = all_fixtures();
+    out.retain(|(_, source)| !source.contains("inline=\"inline\""));
+    assert!(out.len() >= 50, "expected the full fixture corpus");
+    out
+}
+
 /// Render a fixture by name with a source map.
 fn render_fixture(name: &str) -> (String, String, SourceMap) {
     let source = std::fs::read_to_string(fixtures_dir().join(format!("{name}.mjml")))
@@ -60,7 +74,7 @@ fn source_at<'s>(source: &'s str, html: &str, map: &SourceMap, needle: &str) -> 
 #[test]
 fn sourcemap_collection_does_not_change_the_html() {
     let options = RenderOptions::default();
-    for (name, source) in all_fixtures() {
+    for (name, source) in mappable_fixtures() {
         let plain = mjmx::render(&source, &options)
             .unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
         let (mapped, _) = mjmx::render_with_sourcemap(&source, &options)
@@ -74,7 +88,7 @@ fn sourcemap_collection_does_not_change_the_html() {
 
 #[test]
 fn every_fixture_produces_mappings_inside_the_html() {
-    for (name, source) in all_fixtures() {
+    for (name, source) in mappable_fixtures() {
         let (html, map) = mjmx::render_with_sourcemap(&source, &RenderOptions::default())
             .unwrap_or_else(|e| panic!("{name}.mjml should render: {e:?}"));
         assert!(!map.is_empty(), "{name}: no mappings recorded");
@@ -259,6 +273,23 @@ fn sourcemap_is_rejected_with_whitespace_post_processing() {
             .expect_err("minify/beautify should be refused, not silently mis-mapped");
         assert!(err[0].message.contains("sourcemap"), "{err:?}");
     }
+}
+
+/// Unlike minify/beautify, this refusal is a property of the *document*: the same
+/// options render fine for a document with no inline style block, so the check can only
+/// happen after the source has been parsed and its `<mj-style>` buckets partitioned.
+#[test]
+fn sourcemap_is_rejected_for_an_inlined_document() {
+    let options = RenderOptions::default();
+    let source =
+        std::fs::read_to_string(fixtures_dir().join("mj_style_inline_basic.mjml")).unwrap();
+    let err = mjmx::render_with_sourcemap(&source, &options)
+        .expect_err("CSS inlining should be refused, not silently mis-mapped");
+    assert!(err[0].message.contains("inline=\"inline\""), "{err:?}");
+
+    // The plain bucket does not inline, so it still maps.
+    let plain = std::fs::read_to_string(fixtures_dir().join("mj_style_plain.mjml")).unwrap();
+    assert!(mjmx::render_with_sourcemap(&plain, &options).is_ok());
 }
 
 #[test]

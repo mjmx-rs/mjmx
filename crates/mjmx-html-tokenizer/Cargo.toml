@@ -1,0 +1,14 @@
+[package]
+name = "mjmx-html-tokenizer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Forgiving, span-carrying HTML tokenizer shared by mjmx's comparator and CSS inliner."
+
+[dependencies]
+
+[lints]
+workspace = true

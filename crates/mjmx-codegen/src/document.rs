@@ -27,7 +27,26 @@ pub fn render_document<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
-    render_impl(document, options, false).map(|(html, _)| html)
+    render_impl(document, options, false).map(|rendered| rendered.html)
+}
+
+/// [`render_document`], also returning the `<mj-style inline="inline">` CSS bodies.
+///
+/// The HTML is byte-identical to [`render_document`]'s: that bucket is *never* emitted
+/// as a `<style>` tag (mjml passes it to juice as `extraCss` with
+/// `insertPreservedExtraCss: false`), so it leaves codegen as data rather than markup.
+/// The caller — [`mjmx`](../mjmx/index.html) — feeds it to `mjmx_css_inline` after
+/// rendering and before any whitespace post-processing. An empty vector means there is
+/// nothing to inline and the HTML is final.
+///
+/// # Errors
+///
+/// As [`render_document`].
+pub fn render_document_with_inline_css<'a>(
+    document: &Document<'a>,
+    options: &RenderOptions,
+) -> Result<(String, Vec<String>), Vec<Diagnostic>> {
+    render_impl(document, options, false).map(|rendered| (rendered.html, rendered.inline_css))
 }
 
 /// Render a parsed [`Document`], also collecting an output → source [`SourceMap`].
@@ -43,16 +62,52 @@ pub fn render_document<'a>(
 ///
 /// # Errors
 ///
-/// As [`render_document`].
+/// As [`render_document`], plus a refusal when the render would be post-processed at
+/// all — see [`sourcemap_refusal`].
 pub fn render_document_with_sourcemap<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<(String, SourceMap), Vec<Diagnostic>> {
-    let (html, map) = render_impl(document, options, true)?;
-    Ok((html, map.unwrap_or_default()))
+    let rendered = render_impl(document, options, true)?;
+    Ok((rendered.html, rendered.sourcemap.unwrap_or_default()))
 }
 
-/// The shared body of [`render_document`] and [`render_document_with_sourcemap`].
+/// Everything a render produces, before any post-processing.
+struct Rendered {
+    html: String,
+    /// Present only on the [`render_document_with_sourcemap`] path.
+    sourcemap: Option<SourceMap>,
+    /// The `<mj-style inline="inline">` bodies, in source order.
+    inline_css: Vec<String>,
+}
+
+/// Why a source map cannot be produced for this render, if it cannot.
+///
+/// Both reasons are the same reason: something rewrites the HTML *after* codegen has
+/// recorded its offsets, so every mapping would silently point at the wrong bytes. The
+/// check cannot live at the API boundary, because whether CSS inlining runs is a
+/// property of the **document** (does it have an inline `<mj-style>`?) and is only known
+/// once semantic analysis has partitioned the style buckets.
+fn sourcemap_refusal(options: &RenderOptions, inline_css: &[String]) -> Option<Diagnostic> {
+    if options.minify || options.beautify {
+        return Some(
+            Diagnostic::error("sourcemap collection is incompatible with minify/beautify").with_help(
+                "minify and beautify rewrite whitespace after codegen, which shifts every mapped offset; render with a sourcemap using the default whitespace options",
+            ),
+        );
+    }
+    if !inline_css.is_empty() {
+        return Some(
+            Diagnostic::error("sourcemap collection is incompatible with <mj-style inline=\"inline\">").with_help(
+                "CSS inlining runs after codegen: it rewrites style attributes and inserts new ones, which shifts every mapped offset; remove the inline style block, or render without a sourcemap",
+            ),
+        );
+    }
+    None
+}
+
+/// The shared body of [`render_document`], [`render_document_with_inline_css`] and
+/// [`render_document_with_sourcemap`].
 ///
 /// `sourcemap` gates collection only; every byte written into the output is produced by
 /// the same code on both paths.
@@ -60,7 +115,7 @@ fn render_impl<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
     sourcemap: bool,
-) -> Result<(String, Option<SourceMap>), Vec<Diagnostic>> {
+) -> Result<Rendered, Vec<Diagnostic>> {
     let root = document.root_element().ok_or_else(|| {
         vec![
             Diagnostic::error("no <mjml> root element found")
@@ -78,6 +133,12 @@ fn render_impl<'a>(
     // warnings are non-fatal and do not abort the render. A caller-supplied font table
     // replaces the built-in one before any <mj-font> is folded in.
     let (semantic, _diagnostics) = Semantic::build_with_fonts(document, options.fonts.as_deref());
+
+    // The one head bucket that leaves codegen as data rather than markup.
+    let inline_css = semantic.head().inline_styles.clone();
+    if sourcemap && let Some(diagnostic) = sourcemap_refusal(options, &inline_css) {
+        return Err(vec![diagnostic]);
+    }
 
     let mut ctx = RenderContext::new(options.clone(), semantic);
     if sourcemap {
@@ -143,7 +204,11 @@ fn render_impl<'a>(
         builder.remap_deletions(&deletions);
         builder.finish()
     });
-    Ok((html, map))
+    Ok(Rendered {
+        html,
+        sourcemap: map,
+        inline_css,
+    })
 }
 
 /// Fuse adjacent Outlook conditional comments, mirroring mjml's

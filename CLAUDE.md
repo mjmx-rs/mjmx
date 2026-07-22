@@ -32,14 +32,22 @@ Core pipeline: `mjmx-allocator` · `mjmx-span` · `mjmx-diagnostics` · `mjmx-sy
 · `mjmx-codegen` (renderer) · `mjmx-linter` · `mjmx` (umbrella) · `apps/mjmx-cli`.
 
 Tools: `mjmx-traverse` · `mjmx-transformer` (mj-include, v3→v4 migrate) · `mjmx-minifier`
-· `mjmx-formatter` (`mjmx fmt`).
+· `mjmx-formatter` (`mjmx fmt`) · `mjmx-css-inline` (`mj-style inline`).
+
+HTML support: `mjmx-html-tokenizer` (one forgiving, span-carrying HTML tokenizer for the
+whole workspace) · `mjmx-html-compare` (test-support only — production code must never
+depend on it).
 
 Surfaces: `mjmx-sourcemap` · `mjmx-language-server` (LSP) · `mjmx-wasm` + `mjmx-napi`
 (wasm = drop-in for JS mjml) · `mjmx-dev-server` (`mjmx dev`, hot-reload preview,
 axum + tokio-tungstenite + notify).
 
-CSS inlining (`mj-style inline`) lives in semantic/codegen. `mj-include` resolution via
-`mjmx-transformer` (+ a loader abstraction: local + http).
+**Superseded:** this map used to say CSS inlining "lives in semantic/codegen". It does
+not. Semantic partitions the two `<mj-style>` buckets and codegen hands the inline one
+back as data; the inliner itself is `mjmx-css-inline`, a separate crate run by the
+umbrella *after* codegen — because it is an HTML→HTML pass over the assembled document,
+not a rendering decision. `mj-include` resolution via `mjmx-transformer` (+ a loader
+abstraction: local + http).
 
 ## Roadmap (milestones)
 
@@ -57,8 +65,46 @@ Phase 2 — toolchain: M8 traverse + transformer · M9 minifier + formatter · M
 Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 
 All of the above is **complete**, plus css-class, HTTP include loader (opt-in), v3→v4
-migrate, `mjmx lsp`, incremental LSP sync, and wasm-opt. Rendering parity has **zero known
-divergences** from mjml 4.18.0 across 56 fixtures / 58 golden tests.
+migrate, `mjmx lsp`, incremental LSP sync, wasm-opt, and CSS inlining. Rendering parity has
+**zero known divergences** from mjml 4.18.0 across 68 fixtures / 70 golden tests.
+
+## CSS inlining (`mjmx-css-inline`, done)
+
+Hand-rolled, no new third-party dep: `css-inline` costs +812 KB on the wasm artifact
+(a 3.5x blow-up), so the project owns ~1000 LoC instead. Tokenizing uses `cssparser`
+(already paid for by the minifier); HTML tokenizing uses `mjmx-html-tokenizer`.
+
+Runs in `mjmx::render_source`, between `render_document_with_inline_css` and
+`post_process` — after codegen, before minify/beautify — and only when the inline bucket
+is non-empty. Behaviour was derived from mjml 4.18.0's *output*, not from juice's source,
+and several points contradict what juice's source appears to say:
+
+- only `<mj-style inline="inline">` is inlined, and it is **never** also a `<style>` tag;
+  plain `<mj-style>` is a `<style>` tag and is never inlined (`applyStyleTags:false`);
+- non-inlinable rules **vanish**: at-rules, `:hover/:active/:focus/:visited/:link`,
+  `::before`/`::after` — not inlined, not preserved, not re-emitted;
+- a pre-existing `style` attribute **beats** a plain inlined rule (and mjml puts one on
+  nearly every element, so plain rules usually lose);
+- `!important` deletes the original declaration and re-appends it *unmarked* at the end;
+  non-conflicting rule declarations are **prepended**;
+- only elements a rule matched are rewritten, in `prop: value; ` form — untouched
+  elements keep mjml's compact `font-size:0px;`, so both spellings coexist in one document;
+- `width`/`height` become **unitless** attributes on `table`/`td`/`th`/`img`, and only
+  from an integral px value (`100%`, `auto` are left alone); on `<table>`,
+  `background-color`→`bgcolor`, `background-image`→`background`, `text-align`→`align`,
+  `vertical-align`→`valign`, **additively** (declaration kept too).
+
+**Hard invariant:** the inliner must never descend into conditional comments. mjmx merges
+Outlook conditionals inside `render_document`, i.e. *before* the inliner, where upstream
+runs juice first; the two orders agree only because juice never sees inside `<!--[if …]>`.
+`fixtures/mj_style_conditional_order` is the regression test.
+
+`render_with_sourcemap` **refuses** a document with an inline bucket (inlining shifts every
+recorded offset). The refusal lives in codegen's `sourcemap_refusal`, after semantic
+analysis, because it is a property of the document rather than of the options.
+
+Known gap: functional/structural pseudo-classes (`:nth-child`, `:not`, …) and CSS Nesting
+are dropped rather than mis-applied.
 
 ## Options parity (audit done 2026-07-22 against mjml 4.18.0 source)
 
@@ -136,9 +182,11 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
     spans from an included partial are meaningless in the main source) is a
     parser/AST milestone, not an option.
 - **Tier 3:** `mjmlConfigPath` / `useMjmlConfigOptions` — needs a `.mjmlconfig` reader.
-- **Blocked:** `juiceOptions` / `juicePreserveTags` — CSS inlining is not implemented at all
-  (`has_inline_styles` is recorded in semantic; `mj-style inline` currently emits CSS verbatim).
-  That is a milestone, not an option.
+- **Unblocked, not implemented:** `juiceOptions` / `juicePreserveTags`. These were blocked
+  on CSS inlining, which now exists (`mjmx-css-inline`), so they are ordinary options
+  again — deliberately deferred to a later pass, not part of the inlining milestone.
+  `juicePreserveTags` in particular mutates the global juice module upstream, so mjmx will
+  need its own shape for it rather than a port.
 - **Won't port:** `skeleton`, `preprocessors`, `presets` — JS function / `require()` semantics.
 - Upstream oddities deliberately not copied: `--config.*` booleans don't coerce `"false"`;
   `juicePreserveTags` mutates the global juice module; mjml-cli's README documents a `-l` flag

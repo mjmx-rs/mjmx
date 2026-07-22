@@ -44,7 +44,9 @@ mod render;
 pub use context::{MediaQuery, RenderContext, RenderOptions, ValidationLevel};
 // Re-exported so a caller can build a `RenderOptions::fonts` table without depending on
 // `mjmx-semantic` directly.
-pub use document::{render_document, render_document_with_sourcemap};
+pub use document::{
+    render_document, render_document_with_inline_css, render_document_with_sourcemap,
+};
 pub use mjmx_semantic::FontFace;
 pub use mjmx_sourcemap::{Mapping, SourceMap, Span};
 pub use render::{Render, RenderResult, render_element};

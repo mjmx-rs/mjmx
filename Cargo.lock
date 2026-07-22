@@ -869,6 +869,7 @@ dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
  "mjmx-codegen",
+ "mjmx-css-inline",
  "mjmx-diagnostics",
  "mjmx-formatter",
  "mjmx-html-compare",
@@ -922,6 +923,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mjmx-css-inline"
+version = "0.1.0"
+dependencies = [
+ "cssparser",
+ "mjmx-html-compare",
+ "mjmx-html-tokenizer",
+]
+
+[[package]]
 name = "mjmx-dev-server"
 version = "0.1.0"
 dependencies = [
@@ -956,6 +966,13 @@ dependencies = [
 
 [[package]]
 name = "mjmx-html-compare"
+version = "0.1.0"
+dependencies = [
+ "mjmx-html-tokenizer",
+]
+
+[[package]]
+name = "mjmx-html-tokenizer"
 version = "0.1.0"
 
 [[package]]

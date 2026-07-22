@@ -499,16 +499,9 @@ fn css_class_multi_matches_mjml_reference() {
 // inline="inline">`), which is *never* emitted as a tag — it is handed to juice as
 // `extraCss` and applied to the markup as `style=""` attributes.
 //
-// The plain-bucket fixtures pass today. The inline-bucket ones are the explicit TODO
-// list for the css-inline milestone: they carry the vendored mjml 4.18.0 output that the
-// inliner has to reproduce, and are `#[ignore]`d (not weakened, not deleted) until it
-// exists. Run them with `cargo test -p mjmx --test golden -- --ignored`.
-macro_rules! pending_inliner {
-    () => {
-        "pending the css-inline milestone: <mj-style inline=\"inline\"> is collected but \
-         not yet applied to the markup"
-    };
-}
+// Both buckets are covered here. The inline-bucket fixtures were written first and run
+// `#[ignore]`d as the specification of the css-inline milestone; `mjmx_css_inline` now
+// implements it, so they run by default like every other golden test.
 
 #[test]
 fn mj_style_plain_matches_mjml_reference() {
@@ -532,7 +525,6 @@ fn mj_style_inline_not_literal_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_inline_basic_matches_mjml_reference() {
     assert_golden(
         "mj_style_inline_basic",
@@ -542,7 +534,6 @@ fn mj_style_inline_basic_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_both_buckets_matches_mjml_reference() {
     assert_golden(
         "mj_style_both_buckets",
@@ -552,7 +543,6 @@ fn mj_style_both_buckets_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_important_matches_mjml_reference() {
     assert_golden(
         "mj_style_important",
@@ -562,7 +552,6 @@ fn mj_style_important_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_specificity_conflict_matches_mjml_reference() {
     assert_golden(
         "mj_style_specificity_conflict",
@@ -572,7 +561,6 @@ fn mj_style_specificity_conflict_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_specificity_order_matches_mjml_reference() {
     assert_golden(
         "mj_style_specificity_order",
@@ -582,7 +570,6 @@ fn mj_style_specificity_order_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_non_inlinable_matches_mjml_reference() {
     assert_golden(
         "mj_style_non_inlinable",
@@ -592,7 +579,6 @@ fn mj_style_non_inlinable_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_dimensions_matches_mjml_reference() {
     assert_golden(
         "mj_style_dimensions",
@@ -602,7 +588,6 @@ fn mj_style_dimensions_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_table_attrs_matches_mjml_reference() {
     assert_golden(
         "mj_style_table_attrs",
@@ -612,7 +597,6 @@ fn mj_style_table_attrs_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_combinators_matches_mjml_reference() {
     assert_golden(
         "mj_style_combinators",
@@ -622,7 +606,6 @@ fn mj_style_combinators_matches_mjml_reference() {
 }
 
 #[test]
-#[ignore = pending_inliner!()]
 fn mj_style_conditional_order_matches_mjml_reference() {
     assert_golden(
         "mj_style_conditional_order",

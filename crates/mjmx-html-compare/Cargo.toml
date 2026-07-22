@@ -9,6 +9,7 @@ authors.workspace = true
 description = "Semantic (structure/CSS-aware) HTML comparator for mjmx golden tests."
 
 [dependencies]
+mjmx-html-tokenizer.workspace = true
 
 [lints]
 workspace = true
