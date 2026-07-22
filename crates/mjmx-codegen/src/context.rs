@@ -223,6 +223,20 @@ pub struct RenderContext<'a> {
     /// `<body style>` (`word-spacing:normal;background-color:…;`). `None` when unset,
     /// which is mjml's default (no `background-color` default attribute on `mj-body`).
     pub body_background_color: Option<String>,
+    /// The `<mj-body css-class>`, once resolved by the body renderer.
+    ///
+    /// Only [`MjmlCompat::V5`] reads it: mjml 5 moved the class off the wrapper `<div>`
+    /// and onto the `<body>` tag, which document assembly emits, so the value has to
+    /// travel out of the body renderer the same way `background-color` already does.
+    /// Under V4 the body renderer writes the class on the `<div>` itself and this stays
+    /// `None`.
+    pub body_css_class: Option<String>,
+    /// The `<mj-body id>`, once resolved by the body renderer.
+    ///
+    /// mjml 5 added `id` to `mj-body` and emits it on the `<body>` tag; mjml 4 has no
+    /// such attribute and ignores it. Like [`body_css_class`](Self::body_css_class),
+    /// only V5 populates this.
+    pub body_id: Option<String>,
     /// Aggregated head data and the attribute resolver.
     pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
@@ -251,6 +265,8 @@ impl<'a> RenderContext<'a> {
             // mjml default: <mj-body width> is 600px.
             container_width: 600,
             body_background_color: None,
+            body_css_class: None,
+            body_id: None,
             semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),

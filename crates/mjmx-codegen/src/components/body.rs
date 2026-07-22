@@ -57,19 +57,41 @@ impl<'a> Render<'a> for Body<'a> {
             Some(title) => format!("aria-label=\"{title}\" "),
             None => String::new(),
         };
-        let class = match css_class {
-            Some(class) => format!("class=\"{class}\" "),
-            None => String::new(),
-        };
-        let style = match &background_color {
-            Some(color) => format!("background-color:{color};"),
-            None => String::new(),
-        };
-        buf.push_str(&format!(
-            "<div {aria_label}aria-roledescription=\"email\" {class}style=\"{style}\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\">",
-            lang = ctx.lang,
-            dir = ctx.dir,
-        ));
+        if ctx.options.compat.is_v5() {
+            // mjml 5 rebuilt this tag: `class` moved to the <body> element, `style` moved
+            // to the end and now repeats the *whole* body style rather than carrying the
+            // background-color alone (so the empty `style=""` mjml 4 always emitted is
+            // gone). `id` is new in 5 and also lands on <body>. Both travel to document
+            // assembly through the context, since <body> is written there.
+            ctx.body_css_class = css_class.map(str::to_string);
+            ctx.body_id = ctx
+                .semantic
+                .attribute(self.element, "id", None)
+                .map(str::to_string);
+            let style = match &background_color {
+                Some(color) => format!("word-spacing:normal;background-color:{color};"),
+                None => "word-spacing:normal;".to_owned(),
+            };
+            buf.push_str(&format!(
+                "<div {aria_label}aria-roledescription=\"email\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\" style=\"{style}\">",
+                lang = ctx.lang,
+                dir = ctx.dir,
+            ));
+        } else {
+            let class = match css_class {
+                Some(class) => format!("class=\"{class}\" "),
+                None => String::new(),
+            };
+            let style = match &background_color {
+                Some(color) => format!("background-color:{color};"),
+                None => String::new(),
+            };
+            buf.push_str(&format!(
+                "<div {aria_label}aria-roledescription=\"email\" {class}style=\"{style}\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\">",
+                lang = ctx.lang,
+                dir = ctx.dir,
+            ));
+        }
 
         // Only element children (sections) and comments render; whitespace text between
         // body-level components is not significant and is skipped.

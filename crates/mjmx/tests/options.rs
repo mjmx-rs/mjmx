@@ -407,9 +407,16 @@ const MINIFIABLE: &str = "<mjml><mj-body><mj-section><mj-column>\
 
 /// Render `MINIFIABLE` with `minify` on and the given minify options.
 fn minified(minify_options: MinifyOptions) -> String {
+    minified_as(minify_options, RenderOptions::default().compat)
+}
+
+/// [`minified`], pinned to an mjml release — for assertions about markup only one of
+/// them produces.
+fn minified_as(minify_options: MinifyOptions, compat: mjmx::MjmlCompat) -> String {
     let options = RenderOptions {
         minify: true,
         minify_options,
+        compat,
         ..RenderOptions::default()
     };
     mjmx::render(MINIFIABLE, &options).expect("renders")
@@ -449,16 +456,29 @@ fn minify_options_are_ignored_when_minify_is_off() {
 
 #[test]
 fn remove_empty_attributes_drops_the_empty_style_attribute() {
-    // mjml's own output carries `<div … style="" role="article">`. Off by default
+    // mjml 4's own output carries `<div … style="" role="article">`. Off by default
     // here, so the attribute survives; turning it on reproduces mjml's minified bytes.
-    assert!(minified(MinifyOptions::default()).contains("style=\"\""));
+    // Pinned to V4: mjml 5 rebuilt that tag and emits no empty `style` for the switch
+    // to remove, which is what `no_empty_style_attribute_to_remove_under_v5` asserts.
+    let v4 = mjmx::MjmlCompat::V4;
+    assert!(minified_as(MinifyOptions::default(), v4).contains("style=\"\""));
     assert!(
-        !minified(MinifyOptions {
-            remove_empty_attributes: true,
-            ..MinifyOptions::default()
-        })
+        !minified_as(
+            MinifyOptions {
+                remove_empty_attributes: true,
+                ..MinifyOptions::default()
+            },
+            v4,
+        )
         .contains("style=\"\"")
     );
+}
+
+#[test]
+fn no_empty_style_attribute_to_remove_under_v5() {
+    // mjml 5 moved the wrapper div's `style` to the end of the tag and fills it with the
+    // whole body style, so the empty one is gone at the source rather than minified away.
+    assert!(!minified_as(MinifyOptions::default(), mjmx::MjmlCompat::V5).contains("style=\"\""));
 }
 
 #[test]

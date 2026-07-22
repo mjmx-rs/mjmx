@@ -895,9 +895,12 @@ mod tests {
 
     #[test]
     fn an_unknown_mjml_version_is_a_deserialization_error() {
-        // Falling back to the default would render 5.x for a caller who asked for 3.
-        let err = options(r#"{"mjmlVersion": 3}"#).unwrap_err();
-        assert!(err.contains('3'), "{err}");
+        // Falling back to the default would render 5.x for a caller who asked for 3, so
+        // the version is validated while decoding rather than clamped afterwards.
+        let err = serde_json::from_str::<JsRenderOptions>(r#"{"mjmlVersion": 3}"#)
+            .map(|_| ())
+            .expect_err("an unknown major should be refused");
+        assert!(err.to_string().contains('3'), "{err}");
     }
 
     #[test]

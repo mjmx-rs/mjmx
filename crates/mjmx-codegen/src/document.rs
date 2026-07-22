@@ -212,9 +212,28 @@ fn render_impl<'a>(
         Some(color) => format!("background-color:{color};"),
         None => String::new(),
     };
-    out.push_str(&format!(
-        "<body style=\"word-spacing:normal;{body_background}\">"
-    ));
+    if ctx.options.compat.is_v5() {
+        // mjml 5 generates <body> from mj-body rather than the global skeleton, so the
+        // element's own `id` and `css-class` land here. The two spaces after `<body` are
+        // upstream's: its template interpolates an `id` slot that is empty when unset,
+        // and mjmx reproduces the byte rather than tidying it, so output stays diffable
+        // against mjml's.
+        let id = match &ctx.body_id {
+            Some(id) => format!("id=\"{id}\" "),
+            None => String::new(),
+        };
+        let class = match &ctx.body_css_class {
+            Some(class) => format!("class=\"{class}\" "),
+            None => String::new(),
+        };
+        out.push_str(&format!(
+            "<body  {id}{class}style=\"word-spacing:normal;{body_background}\">"
+        ));
+    } else {
+        out.push_str(&format!(
+            "<body style=\"word-spacing:normal;{body_background}\">"
+        ));
+    }
     // Where the body buffer lands in the assembled document: mappings were recorded
     // against `body_buf`, so this is the delta that rebases them.
     let body_offset = out.len();
