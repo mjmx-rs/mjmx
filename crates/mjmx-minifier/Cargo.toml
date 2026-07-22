@@ -9,6 +9,7 @@ authors.workspace = true
 description = "Whitespace minifier and beautifier for mjmx's rendered HTML output."
 
 [dependencies]
+cssparser.workspace = true
 
 [dev-dependencies]
 mjmx-html-compare.workspace = true

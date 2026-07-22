@@ -60,11 +60,19 @@ pub struct MinifyOptions {
     /// mjml also sets false`.
     ///
     /// **Divergence, deliberate:** html-minifier delegates this to `clean-css`, a full
-    /// CSS parser/optimizer. This crate instead applies a *conservative whitespace and
-    /// comment* pass ([`css`]): comments are dropped, whitespace runs collapse, and
-    /// whitespace around `{`, `}`, `;` and `,` is trimmed. Declarations, selectors,
-    /// colors and shorthands are never rewritten, and string/`url()` contents are left
-    /// alone. Since mjml defaults this off, the default output is unaffected either way.
+    /// CSS *optimizer* — it shortens colors, merges shorthands and reorders
+    /// declarations. This crate instead parses the stylesheet with `cssparser` and
+    /// re-serializes it with only its insignificant whitespace and comments removed
+    /// ([`css`]). Because it is a real parse it knows a selector from a declaration,
+    /// so `color: red` collapses to `color:red` while the descendant combinator in
+    /// `a :hover` is preserved. Every emitted byte comes from the source: values,
+    /// selectors, strings, `url()`s, custom properties and `!important` are never
+    /// rewritten, and unparseable CSS is passed through verbatim.
+    ///
+    /// Since mjml defaults this off, the default output is unaffected either way — and
+    /// only the default path carries this crate's semantic-invariance guarantee, since
+    /// rewriting a `<style>` body necessarily changes the text
+    /// [`mjmx_html_compare`] sees there.
     pub minify_css: bool,
     /// Treat attribute names case-sensitively. `// html-minifier default: false;
     /// mjml sets true`.
@@ -367,9 +375,28 @@ mod tests {
     fn minify_css_on_rewrites_only_style_bodies() {
         let input = "<style>\n  .a {\n    color: red;\n  }\n</style><pre>\n  keep  me\n</pre>";
         let out = minify_with(input, &with(|o| o.minify_css = true));
-        assert!(out.starts_with("<style>.a{color: red}</style>"), "{out}");
+        assert!(out.starts_with("<style>.a{color:red}</style>"), "{out}");
         // <pre> is a raw-text element too, and is never touched.
         assert!(out.ends_with("<pre>\n  keep  me\n</pre>"), "{out}");
+    }
+
+    /// The semantic-invariance guarantee is a property of the *default* options,
+    /// and `minifyCSS` is off there — a `<style>` body is raw text to
+    /// [`mjmx_html_compare`], so any rewrite of it would be a visible difference.
+    #[test]
+    fn default_minify_of_a_document_with_css_is_semantically_invariant() {
+        let input = concat!(
+            "<html>\n  <head>\n    <style type=\"text/css\">\n",
+            "      /* c */\n      .a :hover { color : red; }\n",
+            "      @media only screen and (min-width:480px) { .b { width: 50% } }\n",
+            "    </style>\n  </head>\n  <body>\n    <p>hi   there</p>\n  </body>\n</html>\n"
+        );
+        let out = minify(input);
+        assert!(
+            mjmx_html_compare::compare(input, &out).is_ok(),
+            "minify changed the document: {out}"
+        );
+        assert!(out.len() < input.len());
     }
 
     #[test]

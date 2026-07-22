@@ -33,6 +33,14 @@ mjmx-napi = { version = "0.1.0", path = "crates/mjmx-napi" }
 mjmx-wasm = { version = "0.1.0", path = "crates/mjmx-wasm" }
 mjmx ={ version = "0.1.0", path = "crates/mjmx" }
 bumpalo = { version = "3", features = ["collections", "boxed"] }
+# CSS Syntax Level 3 tokenizer/parser, behind `mjmx-minifier`'s opt-in `minifyCSS`
+# pass (see `crates/mjmx-minifier/src/css.rs`). Chosen over a full optimizer:
+# lightningcss does not build for wasm32-unknown-unknown (getrandom via ahash) and
+# costs +3.68 MB, where this costs +42 KiB on the shipped, wasm-opt'd artifact.
+# Default features off: `fast_match_byte` (cssparser-macros) and `fast_match_color`
+# (phf, a named-color table this crate never queries) only trade size for tokenizer
+# speed that an opt-in pass over an email's few KB of CSS cannot notice.
+cssparser = { version = "0.37", default-features = false }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "signal"] }
 axum = { version = "0.8", features = ["ws"] }
