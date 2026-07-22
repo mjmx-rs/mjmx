@@ -1,13 +1,16 @@
-//! Start-tag rewriting for the two [`MinifyOptions`] switches that act on
-//! attributes: `case_sensitive` and `remove_empty_attributes`.
+//! Start-tag rewriting for the [`MinifyOptions`] switches that act on attributes:
+//! `case_sensitive`, `remove_empty_attributes` and `minify_css` (which reaches
+//! `style="…"` as well as `<style>`).
 //!
 //! The tokenizer keeps every tag's exact source bytes, and [`rewrite`] preserves that
 //! guarantee: it returns `Some(new_text)` **only** when a switch actually applies to
 //! this tag, and `None` — meaning "emit the original bytes" — otherwise. So a document
-//! with no empty `class=""`/`style=""` and no upper-case attribute names comes out
-//! byte-identical whatever the switches are set to.
+//! with no empty `class=""`/`style=""`, no upper-case attribute names and no
+//! shortenable `style` value comes out byte-identical whatever the switches are set to.
 
-use crate::MinifyOptions;
+use std::borrow::Cow;
+
+use crate::{MinifyOptions, css};
 
 /// One parsed attribute of a start tag.
 struct Attr<'a> {
@@ -74,15 +77,15 @@ fn can_delete_empty(tag: &str, name: &str, value: &str) -> bool {
 /// Rewrite the start tag `text` (whose lower-cased name is `tag`) under `options`,
 /// or `None` when nothing needs changing and the source bytes should be kept.
 pub(crate) fn rewrite(text: &str, tag: &str, options: &MinifyOptions) -> Option<String> {
-    if options.case_sensitive && !options.remove_empty_attributes {
-        // Neither switch touches attributes.
+    if options.case_sensitive && !options.remove_empty_attributes && !options.minify_css {
+        // No switch touches attributes.
         return None;
     }
 
     let (name, attrs, self_closing) = parse(text)?;
 
     let mut changed = false;
-    let mut kept: Vec<(String, Option<&str>)> = Vec::with_capacity(attrs.len());
+    let mut kept: Vec<(String, Option<Cow<'_, str>>)> = Vec::with_capacity(attrs.len());
     for attr in &attrs {
         if options.remove_empty_attributes && can_delete_empty(tag, attr.name, attr.unquoted()) {
             changed = true;
@@ -95,7 +98,23 @@ pub(crate) fn rewrite(text: &str, tag: &str, options: &MinifyOptions) -> Option<
             changed |= lowered != attr.name;
             lowered
         };
-        kept.push((out_name, attr.value));
+        // Both upstream minifiers run their CSS pass over `style` attributes too, not
+        // only `<style>` bodies. A tag inside an Outlook conditional never reaches here
+        // — it is comment text to the tokenizer — which is exactly where upstream's
+        // parser stops as well.
+        let out_value = match attr.value {
+            Some(value) if options.minify_css && attr.name.eq_ignore_ascii_case("style") => {
+                let minified = css::minify_declarations(attr.unquoted(), options.css_dialect);
+                if minified == attr.unquoted() {
+                    Some(Cow::Borrowed(value))
+                } else {
+                    changed = true;
+                    Some(Cow::Owned(format!("\"{minified}\"")))
+                }
+            }
+            other => other.map(Cow::Borrowed),
+        };
+        kept.push((out_name, out_value));
     }
 
     if !changed {
@@ -110,7 +129,7 @@ pub(crate) fn rewrite(text: &str, tag: &str, options: &MinifyOptions) -> Option<
         out.push_str(&attr_name);
         if let Some(value) = value {
             out.push('=');
-            out.push_str(value);
+            out.push_str(&value);
         }
     }
     if self_closing {

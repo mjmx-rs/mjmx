@@ -89,13 +89,23 @@ fn minify_core_is_idempotent() {
 fn umbrella_render_honors_minify_and_beautify() {
     let mjml = fixture!("slice.mjml");
 
-    let default = mjmx::render_default(mjml).expect("slice renders");
+    // Pinned to V4. mjml 5 minifies CSS by default, and rewriting a `<style>` body
+    // necessarily changes the text `mjmx_html_compare` sees there — so the semantic
+    // equality asserted below is a V4 property, not a V5 one.
+    // `v5_minifies_css_by_default` covers the other side.
+    let base = || mjmx::RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
+        minify_options: mjmx::MinifyOptions::default(),
+        ..Default::default()
+    };
+
+    let default = mjmx::render(mjml, &base()).expect("slice renders");
 
     let minified = mjmx::render(
         mjml,
         &mjmx::RenderOptions {
             minify: true,
-            ..Default::default()
+            ..base()
         },
     )
     .expect("slice renders (minify)");
@@ -111,7 +121,7 @@ fn umbrella_render_honors_minify_and_beautify() {
         mjml,
         &mjmx::RenderOptions {
             beautify: true,
-            ..Default::default()
+            ..base()
         },
     )
     .expect("slice renders (beautify)");
@@ -123,9 +133,36 @@ fn umbrella_render_honors_minify_and_beautify() {
         &mjmx::RenderOptions {
             minify: true,
             beautify: true,
-            ..Default::default()
+            ..base()
         },
     )
     .expect("slice renders (both)");
     assert_eq!(both, minified, "minify must take precedence over beautify");
+}
+
+#[test]
+fn v5_minifies_css_by_default_and_v4_does_not() {
+    let mjml = fixture!("slice.mjml");
+    let render = |compat| {
+        let options = mjmx::RenderOptions {
+            minify: true,
+            minify_options: if compat == mjmx::MjmlCompat::V5 {
+                mjmx::MinifyOptions::for_mjml5()
+            } else {
+                mjmx::MinifyOptions::default()
+            },
+            compat,
+            ..Default::default()
+        };
+        mjmx::render(mjml, &options).expect("slice renders")
+    };
+
+    // mjml 5.4.0 emits `#outlook a{padding:0}`.
+    let v5 = render(mjmx::MjmlCompat::V5);
+    assert!(v5.contains("#outlook a{padding:0}"), "{v5}");
+
+    // 4.18.0 leaves the `<style>` body exactly as rendered, newlines included.
+    let v4 = render(mjmx::MjmlCompat::V4);
+    assert!(v4.contains("#outlook a {\n"), "{v4}");
+    assert!(v4.contains("padding: 0;\n"), "{v4}");
 }

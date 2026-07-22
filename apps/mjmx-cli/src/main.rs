@@ -260,7 +260,10 @@ impl RenderOptionArgs {
             breakpoint: self.breakpoint,
             beautify: self.beautify,
             minify: self.minify,
-            minify_options: parse_minify_options(self.minify_options.as_deref())?,
+            minify_options: parse_minify_options(
+                self.minify_options.as_deref(),
+                minify_defaults(self.mjml_version.into()),
+            )?,
             // `--keep-comments` is the default, so the negative flag is what carries
             // information; the positive one exists to override an earlier negative.
             keep_comments: !self.no_keep_comments,
@@ -801,8 +804,22 @@ struct MinifyOptionsSpec {
 }
 
 /// Parse `--minify-options`; `None` (the flag omitted) is mjml's `minifyOptions: {}`.
-fn parse_minify_options(spec: Option<&str>) -> Result<MinifyOptions, String> {
-    let defaults = MinifyOptions::default();
+/// The minify defaults of the mjml release being reproduced.
+///
+/// mjml 5 minifies CSS by default and does it with cssnano; 4.18.0 leaves CSS alone and
+/// would use clean-css. An explicit `--minify-options` key still wins over both.
+fn minify_defaults(compat: MjmlCompat) -> MinifyOptions {
+    if compat.is_v5() {
+        MinifyOptions::for_mjml5()
+    } else {
+        MinifyOptions::default()
+    }
+}
+
+fn parse_minify_options(
+    spec: Option<&str>,
+    defaults: MinifyOptions,
+) -> Result<MinifyOptions, String> {
     let Some(spec) = spec else {
         return Ok(defaults);
     };
@@ -821,6 +838,8 @@ fn parse_minify_options(spec: Option<&str>) -> Result<MinifyOptions, String> {
         remove_empty_attributes: parsed
             .remove_empty_attributes
             .unwrap_or(defaults.remove_empty_attributes),
+        // Not one of mjml's four switches; it comes from the release being reproduced.
+        css_dialect: defaults.css_dialect,
     })
 }
 
@@ -1019,7 +1038,8 @@ mod tests {
         assert_eq!(options.fonts, None);
         assert!(!options.ignore_includes);
         assert!(!options.printer_support);
-        assert_eq!(options.minify_options, MinifyOptions::default());
+        // The CLI defaults to `--mjml-version 5`, so these are 5.4.0's minify defaults.
+        assert_eq!(options.minify_options, MinifyOptions::for_mjml5());
         assert_eq!(options.inline_options, InlineOptions::default());
     }
 
@@ -1145,8 +1165,27 @@ mod tests {
                 minify_css: true,
                 case_sensitive: false,
                 remove_empty_attributes: true,
+                // No `--mjml-version`, so the default release's minifier.
+                css_dialect: mjmx::CssDialect::Cssnano,
             }
         );
+    }
+
+    #[test]
+    fn minify_defaults_follow_the_mjml_version() {
+        // mjml 5 minifies CSS by default and does it with cssnano; 4.18.0 does neither.
+        let v5 = render_options(&["in.mjml"]).minify_options;
+        assert!(v5.minify_css);
+        assert_eq!(v5.css_dialect, mjmx::CssDialect::Cssnano);
+
+        let v4 = render_options(&["in.mjml", "--mjml-version", "4"]).minify_options;
+        assert!(!v4.minify_css);
+        assert_eq!(v4.css_dialect, mjmx::CssDialect::CleanCss);
+
+        // An explicit switch still wins over the release default.
+        let forced = render_options(&["in.mjml", "--minify-options", r#"{"minifyCSS": false}"#])
+            .minify_options;
+        assert!(!forced.minify_css);
     }
 
     #[test]

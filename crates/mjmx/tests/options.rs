@@ -424,10 +424,19 @@ fn minified_as(minify_options: MinifyOptions, compat: mjmx::MjmlCompat) -> Strin
 
 #[test]
 fn minify_options_default_to_mjmls() {
+    // `RenderOptions::default` is mjml 5, so its minify defaults are 5.4.0's: CSS is
+    // minified, with cssnano. 4.18.0's are `MinifyOptions::default`.
     let defaults = RenderOptions::default().minify_options;
-    assert_eq!(defaults, MinifyOptions::default());
+    assert_eq!(defaults, MinifyOptions::for_mjml5());
+    assert!(defaults.minify_css);
+    assert_eq!(defaults.css_dialect, mjmx::CssDialect::Cssnano);
+
+    let v4 = MinifyOptions::default();
+    assert!(!v4.minify_css);
+    assert_eq!(v4.css_dialect, mjmx::CssDialect::CleanCss);
+
+    // Unchanged across both releases.
     assert!(defaults.collapse_whitespace);
-    assert!(!defaults.minify_css);
     assert!(defaults.case_sensitive);
     // The one deliberate divergence: mjml passes `removeEmptyAttributes: true`, but
     // that removes `style=""` from mjml's own output, which would make `minify` no
@@ -445,6 +454,7 @@ fn minify_options_are_ignored_when_minify_is_off() {
             minify_css: true,
             case_sensitive: false,
             remove_empty_attributes: false,
+            ..MinifyOptions::default()
         },
         ..RenderOptions::default()
     };

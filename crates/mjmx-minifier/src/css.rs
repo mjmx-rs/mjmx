@@ -70,15 +70,17 @@ use cssparser::{
     serialize_identifier,
 };
 
+use crate::CssDialect;
+
 /// Minify a `<style>` body under the rules in the [module docs](self).
-pub(crate) fn minify_css(css: &str) -> String {
+pub(crate) fn minify_css(css: &str, dialect: CssDialect) -> String {
     // `StyleSheetParser` swallows a leading `@charset` rule instead of yielding it,
     // so it is split off and re-emitted verbatim rather than silently lost.
     let (charset, rest) = split_charset(css);
 
     let mut input = ParserInput::new(rest);
     let mut parser = Parser::new(&mut input);
-    let mut rules = RuleParser;
+    let mut rules = RuleParser { dialect };
 
     let mut pieces = Vec::new();
     for result in StyleSheetParser::new(&mut parser, &mut rules) {
@@ -159,7 +161,10 @@ fn split_charset(css: &str) -> (&str, &str) {
 // --- rule walk ---------------------------------------------------------------
 
 /// The one parser used at every level: stylesheet, at-rule body, and rule body.
-struct RuleParser;
+struct RuleParser {
+    /// Which upstream minifier's output shape to reproduce.
+    dialect: CssDialect,
+}
 
 /// A parsed at-rule prelude: the serialized `@name` plus its minified prelude.
 struct AtPrelude {
@@ -228,7 +233,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
         Ok(Piece::Rule(format!(
             "{}{{{}}}",
             prelude.head(),
-            parse_body(input)
+            parse_body(input, self.dialect)
         )))
     }
 }
@@ -242,7 +247,14 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
         &mut self,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
-        Ok(minify_fragment(drain(input), Ctx::Selector))
+        let prelude = drain(input);
+        Ok(match self.dialect {
+            // cssnano does not touch selector preludes: `.a, .b` keeps its space and
+            // `.c   >   .d` keeps all three. Only the surrounding whitespace goes, and
+            // that is the caller's `trim`.
+            CssDialect::Cssnano => prelude.trim().to_owned(),
+            CssDialect::CleanCss => minify_fragment(prelude, Ctx::Selector),
+        })
     }
 
     fn parse_block<'t>(
@@ -251,7 +263,10 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
         _start: &ParserState,
         input: &mut Parser<'i, 't>,
     ) -> Result<Self::QualifiedRule, ParseError<'i, Self::Error>> {
-        Ok(Piece::Rule(format!("{prelude}{{{}}}", parse_body(input))))
+        Ok(Piece::Rule(format!(
+            "{prelude}{{{}}}",
+            parse_body(input, self.dialect)
+        )))
     }
 }
 
@@ -280,7 +295,13 @@ impl<'i> DeclarationParser<'i> for RuleParser {
             // legal but `--x:` is not universally accepted; emit `--x: `.
             if raw.is_empty() { " " } else { raw }.to_owned()
         } else {
-            minify_fragment(raw, Ctx::Value)
+            let value = minify_fragment(raw, Ctx::Value);
+            match self.dialect {
+                // cssnano closes the gap `!important` is written with; clean-css keeps
+                // it. The keyword itself is never rewritten under either.
+                CssDialect::Cssnano => value.replace(" !important", "!important"),
+                CssDialect::CleanCss => value,
+            }
         };
         Ok(Piece::Decl(format!("{property}:{value}")))
     }
@@ -299,10 +320,20 @@ impl<'i> RuleBodyItemParser<'i, Piece, ()> for RuleParser {
     }
 }
 
+/// Minify a bare declaration list — the contents of a `style="…"` attribute.
+///
+/// Both upstreams run their CSS minifier over style attributes as well as `<style>`
+/// bodies, which is mostly visible as the trailing `;` disappearing.
+pub(crate) fn minify_declarations(css: &str, dialect: CssDialect) -> String {
+    let mut input = ParserInput::new(css);
+    let mut parser = Parser::new(&mut input);
+    parse_body(&mut parser, dialect)
+}
+
 /// Serialize the `{ … }` body of a rule: a mixed list of declarations and nested
 /// rules, with unparseable items copied through as raw source.
-fn parse_body(input: &mut Parser<'_, '_>) -> String {
-    let mut rules = RuleParser;
+fn parse_body(input: &mut Parser<'_, '_>, dialect: CssDialect) -> String {
+    let mut rules = RuleParser { dialect };
     let mut pieces = Vec::new();
     for result in RuleBodyParser::<_, Piece, ()>::new(input, &mut rules) {
         match result {
@@ -457,7 +488,13 @@ fn drops_space(prev: char, next: char, ctx: Ctx) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::minify_css;
+    use super::CssDialect;
+
+    /// These cases predate the dialect split and describe clean-css's shape, which is
+    /// the default; [`cssnano_dialect`] covers where the other one differs.
+    fn minify_css(css: &str) -> String {
+        super::minify_css(css, CssDialect::CleanCss)
+    }
 
     #[test]
     fn collapses_whitespace_and_punctuation() {
@@ -747,5 +784,41 @@ mod tests {
                 assert!(input.contains(c), "{input:?} -> {out:?} invented {c:?}");
             }
         }
+    }
+
+    /// cssnano's shape, as mjml 5.4.0 emits it.
+    ///
+    /// Every expectation here was read off `mjml@5.4.0`'s own minified output for the
+    /// same stylesheet, not derived from cssnano's source.
+    #[test]
+    fn cssnano_dialect() {
+        let nano = |css: &str| super::minify_css(css, CssDialect::Cssnano);
+
+        // Selector preludes are left byte-for-byte: the comma keeps its space and
+        // `.c   >   .d` keeps all three.
+        assert_eq!(nano(".a, .b { color: red; }"), ".a, .b{color:red}");
+        assert_eq!(nano(".c   >   .d { margin: 0 ; }"), ".c   >   .d{margin:0}");
+        // ... where clean-css collapses both.
+        assert_eq!(minify_css(".a, .b { color: red; }"), ".a,.b{color:red}");
+        assert_eq!(minify_css(".c   >   .d { margin: 0 ; }"), ".c>.d{margin:0}");
+
+        // The space before `!important` closes.
+        assert_eq!(
+            nano(".a { width: 100%   !important; }"),
+            ".a{width:100%!important}"
+        );
+        assert_eq!(
+            minify_css(".a { width: 100%   !important; }"),
+            ".a{width:100% !important}"
+        );
+
+        // Commas *inside a value* lose their space under both.
+        assert_eq!(
+            nano(".a { font-family: Helvetica, Arial, sans-serif; }"),
+            ".a{font-family:Helvetica,Arial,sans-serif}"
+        );
+
+        // Values are still never rewritten: `0px` does not become `0`.
+        assert_eq!(nano(".a { margin: 0px auto; }"), ".a{margin:0px auto}");
     }
 }

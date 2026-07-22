@@ -24,7 +24,7 @@ pub use mjmx_css_inline::{
 };
 pub use mjmx_diagnostics::{Diagnostic, Severity};
 pub use mjmx_formatter::FormatOptions;
-pub use mjmx_minifier::MinifyOptions;
+pub use mjmx_minifier::{CssDialect, MinifyOptions};
 
 use std::path::Path;
 

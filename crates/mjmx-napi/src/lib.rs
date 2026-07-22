@@ -180,19 +180,32 @@ pub struct JsMinifyOptions {
     pub remove_empty_attributes: Option<bool>,
 }
 
-impl From<JsMinifyOptions> for MinifyOptions {
-    fn from(value: JsMinifyOptions) -> Self {
-        let defaults = Self::default();
-        Self {
-            collapse_whitespace: value
-                .collapse_whitespace
-                .unwrap_or(defaults.collapse_whitespace),
-            minify_css: value.minify_css.unwrap_or(defaults.minify_css),
-            case_sensitive: value.case_sensitive.unwrap_or(defaults.case_sensitive),
-            remove_empty_attributes: value
-                .remove_empty_attributes
-                .unwrap_or(defaults.remove_empty_attributes),
-        }
+/// Layer a JS `minifyOptions` object over the defaults of the mjml release being
+/// reproduced, so an explicit switch wins but an omitted one follows the release.
+fn to_minify_options(value: Option<JsMinifyOptions>, defaults: MinifyOptions) -> MinifyOptions {
+    let Some(value) = value else {
+        return defaults;
+    };
+    MinifyOptions {
+        collapse_whitespace: value
+            .collapse_whitespace
+            .unwrap_or(defaults.collapse_whitespace),
+        minify_css: value.minify_css.unwrap_or(defaults.minify_css),
+        case_sensitive: value.case_sensitive.unwrap_or(defaults.case_sensitive),
+        remove_empty_attributes: value
+            .remove_empty_attributes
+            .unwrap_or(defaults.remove_empty_attributes),
+        // Not one of mjml's four switches; it comes from the release being reproduced.
+        css_dialect: defaults.css_dialect,
+    }
+}
+
+/// The minify defaults of the mjml release being reproduced.
+fn minify_defaults(compat: MjmlCompat) -> MinifyOptions {
+    if compat.is_v5() {
+        MinifyOptions::for_mjml5()
+    } else {
+        MinifyOptions::default()
     }
 }
 
@@ -208,10 +221,11 @@ fn to_render_options(
     let Some(options) = options else {
         return Ok(defaults);
     };
+    let compat = options
+        .mjml_version
+        .map_or(Ok(defaults.compat), parse_mjml_version)?;
     Ok(RenderOptions {
-        compat: options
-            .mjml_version
-            .map_or(Ok(defaults.compat), parse_mjml_version)?,
+        compat,
         breakpoint: options.breakpoint.unwrap_or(defaults.breakpoint),
         beautify: options.beautify.unwrap_or(defaults.beautify),
         minify: options.minify.unwrap_or(defaults.minify),
@@ -222,7 +236,7 @@ fn to_render_options(
             .map_or(Ok(defaults.validation_level), parse_validation_level)?,
         file_path: options.file_path.map(std::path::PathBuf::from),
         fonts: options.fonts.map(to_font_faces),
-        minify_options: options.minify_options.map(Into::into).unwrap_or_default(),
+        minify_options: to_minify_options(options.minify_options, minify_defaults(compat)),
         ignore_includes: options.ignore_includes.unwrap_or(defaults.ignore_includes),
         printer_support: options.printer_support.unwrap_or(defaults.printer_support),
         // `juicePreserveTags` adds to the built-ins rather than replacing them, so the
@@ -463,7 +477,8 @@ mod tests {
             assert_eq!(options.fonts, None);
             assert!(!options.ignore_includes);
             assert!(!options.printer_support);
-            assert_eq!(options.minify_options, MinifyOptions::default());
+            // No `mjmlVersion`, so 5.4.0's minify defaults.
+            assert_eq!(options.minify_options, MinifyOptions::for_mjml5());
         }
     }
 
@@ -532,6 +547,8 @@ mod tests {
                 minify_css: true,
                 case_sensitive: false,
                 remove_empty_attributes: true,
+                // `mjmlVersion: 4` above, so the 4.18.0 minifier.
+                css_dialect: mjmx::CssDialect::CleanCss,
             }
         );
         // `juiceOptions` names only what it changes; the rest keep juice's defaults.

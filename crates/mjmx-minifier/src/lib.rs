@@ -101,6 +101,32 @@ pub struct MinifyOptions {
     /// `--minify-options '{"removeEmptyAttributes": true}'`, or `minifyOptions:
     /// { removeEmptyAttributes: true }` from a binding — for byte parity with mjml.
     pub remove_empty_attributes: bool,
+    /// Which upstream CSS minifier's output shape to reproduce, when
+    /// [`minify_css`](Self::minify_css) is on. `// mjmx extension`.
+    ///
+    /// mjml has no such option: 4.x minifies CSS with html-minifier's `clean-css` and
+    /// 5.x with htmlnano's `cssnano`, and the two disagree in ways that are visible in
+    /// the output. Neither is "more correct", so the release being reproduced picks one
+    /// — see [`CssDialect`].
+    pub css_dialect: CssDialect,
+}
+
+/// Which upstream CSS minifier's output shape [`minify_with`] reproduces.
+///
+/// Both dialects are whitespace-and-comments-only passes over a real parse: mjmx never
+/// adopts either optimizer's *rewriting* (shortening colours, merging shorthands,
+/// reordering declarations), so `0px` stays `0px` under both. They differ only in which
+/// insignificant bytes each upstream chooses to drop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CssDialect {
+    /// html-minifier's `clean-css`, as mjml 4.18.0 uses it. Collapses selector
+    /// preludes (`.a, .b` → `.a,.b`) and keeps the space before `!important`.
+    #[default]
+    CleanCss,
+    /// htmlnano's `cssnano`, as mjml 5.4.0 uses it. Leaves selector preludes
+    /// byte-for-byte — `.c   >   .d` keeps all three spaces — and closes the gap
+    /// before `!important`.
+    Cssnano,
 }
 
 impl Default for MinifyOptions {
@@ -115,6 +141,27 @@ impl Default for MinifyOptions {
             // mjml passes removeEmptyAttributes: true; we default to false to keep
             // minify semantics-preserving. See the field docs.
             remove_empty_attributes: false,
+            // mjml 4.18.0's minifier. `for_mjml5` selects the other one.
+            css_dialect: CssDialect::CleanCss,
+        }
+    }
+}
+
+impl MinifyOptions {
+    /// The defaults mjml **5.x** minifies with, rather than 4.18.0's.
+    ///
+    /// Two differ from [`Default`]: 5.x minifies CSS by default (`minifyCSS` still
+    /// exists there and still turns it off), and it does so with cssnano rather than
+    /// clean-css. The other two switches are unchanged.
+    ///
+    /// Callers that layer a user's `minifyOptions` over a base pick the base from the
+    /// mjml release being reproduced, so an explicit switch still wins.
+    #[must_use]
+    pub fn for_mjml5() -> Self {
+        Self {
+            minify_css: true,
+            css_dialect: CssDialect::Cssnano,
+            ..Self::default()
         }
     }
 }
@@ -142,7 +189,7 @@ pub fn minify_with(html: &str, options: &MinifyOptions) -> String {
             Token::Doctype(s) | Token::Comment(s) => out.push_str(s),
             Token::RawText { text, tag } => {
                 if options.minify_css && tag == "style" {
-                    out.push_str(&css::minify_css(text));
+                    out.push_str(&css::minify_css(text, options.css_dialect));
                 } else {
                     out.push_str(text);
                 }

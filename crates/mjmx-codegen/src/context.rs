@@ -166,9 +166,12 @@ impl Default for RenderOptions {
             breakpoint: 480,
             beautify: false,
             minify: false,
-            // mjml default: `minifyOptions: {}`, i.e. html-minifier's four hardcoded
-            // switches unchanged.
-            minify_options: MinifyOptions::default(),
+            // mjml default: `minifyOptions: {}`, i.e. the minifier's switches
+            // unchanged. Which minifier that is follows `compat`, so this tracks the
+            // `V5` above. A caller that flips `compat` to `V4` on a `..Default::default()`
+            // literal and also minifies should pass `MinifyOptions::default()` with it;
+            // the CLI and both bindings pick the pair together from `--mjml-version`.
+            minify_options: MinifyOptions::for_mjml5(),
             // mjml default: comments are kept.
             keep_comments: true,
             // mjml default: soft validation.
