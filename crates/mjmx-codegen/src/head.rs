@@ -90,14 +90,20 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     h.push_str(MSO_GROUP_FIX);
 
     // Web fonts: a face from the head's font table (mjml built-ins + <mj-font>) is
-    // imported only if its family name appears in the rendered body. Guarded from
-    // Outlook.
+    // imported only if its family name appears in the rendered body — or in the
+    // `<mj-style inline="inline">` CSS, which mjml's `buildFontsTags(content,
+    // inlineStyle, fonts)` scans as a second source (helpers/fonts.js:11). That bucket
+    // is never emitted as a `<style>` tag, so it has to be checked separately.
+    let inline_styles = &ctx.semantic.head().inline_styles;
     let fonts: Vec<_> = ctx
         .semantic
         .head()
         .fonts
         .iter()
-        .filter(|f| body.contains(f.name.as_ref()))
+        .filter(|f| {
+            body.contains(f.name.as_ref())
+                || inline_styles.iter().any(|s| s.contains(f.name.as_ref()))
+        })
         .collect();
     if !fonts.is_empty() {
         h.push_str("<!--[if !mso]><!-->");
@@ -187,8 +193,10 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     }
 
     // Document <mj-style> CSS, emitted verbatim (mjml's `buildStyleFromTags`, likewise
-    // a single block). Inline `<mj-style inline>` injection is deferred to the
-    // css-inline milestone; here the CSS is emitted as-is.
+    // a single block). Only the *plain* bucket appears here: mjml feeds
+    // `globalData.inlineStyle` to juice with `insertPreservedExtraCss:false`, so inline
+    // CSS never reaches a `<style>` tag. Applying it to the markup is deferred to the
+    // css-inline milestone.
     if !ctx.semantic.head().styles.is_empty() {
         h.push_str("<style type=\"text/css\">");
         for style in &ctx.semantic.head().styles {

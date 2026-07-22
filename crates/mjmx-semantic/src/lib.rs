@@ -117,11 +117,16 @@ impl<'a> Semantic<'a> {
             }
             MjmlTag::MjTitle => head.title = Some(inner_text(child)),
             MjmlTag::MjPreview => head.preview = Some(inner_text(child)),
+            // mjml-head-style: `add(this.getAttribute('inline') === 'inline' ? 'inlineStyle'
+            // : 'style', ...)`. The comparison is against the *literal* string `inline`, so
+            // `inline="true"` and a bare `inline` are plain styles, not inline ones. The two
+            // buckets are disjoint: only `styles` becomes a head `<style>` tag.
             MjmlTag::MjStyle => {
-                if child.has_attr("inline") {
-                    head.has_inline_styles = true;
+                if child.attr("inline") == Some("inline") {
+                    head.inline_styles.push(inner_text(child));
+                } else {
+                    head.styles.push(inner_text(child));
                 }
-                head.styles.push(inner_text(child));
             }
             // mjml renders a head `<mj-raw>` like any body component (it is a
             // `BodyComponent`), so its content lands in `globalData.headRaw` and is
@@ -427,6 +432,39 @@ mod tests {
             &alloc,
         );
         assert!(sem.head().has_inline_styles());
-        assert_eq!(sem.head().styles, vec![".a{color:red}".to_string()]);
+        // The two buckets are disjoint: an inline style is *not* also a plain style.
+        assert_eq!(sem.head().inline_styles, vec![".a{color:red}".to_string()]);
+        assert!(sem.head().styles.is_empty());
+    }
+
+    #[test]
+    fn mj_style_inline_requires_the_literal_string() {
+        // mjml compares `getAttribute('inline') === 'inline'`, so anything else — a bare
+        // `inline`, or `inline="true"` — is an ordinary (head `<style>`) block.
+        for markup in [
+            "<mjml><mj-head><mj-style inline=\"true\">.a{color:red}</mj-style></mj-head><mj-body></mj-body></mjml>",
+            "<mjml><mj-head><mj-style inline>.a{color:red}</mj-style></mj-head><mj-body></mj-body></mjml>",
+        ] {
+            let alloc = Allocator::new();
+            let sem = analyse(markup, &alloc);
+            assert!(!sem.head().has_inline_styles(), "{markup}");
+            assert_eq!(
+                sem.head().styles,
+                vec![".a{color:red}".to_string()],
+                "{markup}"
+            );
+            assert!(sem.head().inline_styles.is_empty(), "{markup}");
+        }
+    }
+
+    #[test]
+    fn mj_style_buckets_are_disjoint() {
+        let alloc = Allocator::new();
+        let sem = analyse(
+            "<mjml><mj-head><mj-style>.p{color:red}</mj-style><mj-style inline=\"inline\">.i{color:blue}</mj-style></mj-head><mj-body></mj-body></mjml>",
+            &alloc,
+        );
+        assert_eq!(sem.head().styles, vec![".p{color:red}".to_string()]);
+        assert_eq!(sem.head().inline_styles, vec![".i{color:blue}".to_string()]);
     }
 }

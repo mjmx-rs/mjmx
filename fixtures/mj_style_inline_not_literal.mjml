@@ -1,0 +1,18 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="true">
+      .truthy { color: #ff0000; }
+    </mj-style>
+    <mj-style inline>
+      .bare { color: #0000ff; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="truthy">inline="true"</mj-text>
+        <mj-text css-class="bare">bare inline</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

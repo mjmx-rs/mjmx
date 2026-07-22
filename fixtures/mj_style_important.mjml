@@ -1,0 +1,14 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .imp { padding: 0 !important; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="imp">important beats the pre-existing style attribute</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -89,17 +89,23 @@ pub struct HeadData<'a> {
     pub preview: Option<String>,
     /// The font table: mjml's built-in fonts followed by any `<mj-font>` additions.
     pub fonts: Vec<FontFace<'a>>,
-    /// Raw `<mj-style>` CSS bodies, in source order, for verbatim head emission.
+    /// Raw *plain* `<mj-style>` CSS bodies, in source order, for verbatim head emission.
+    ///
+    /// mjml keeps two disjoint buckets (`globalData.style` / `globalData.inlineStyle`);
+    /// this is the former — the only one that becomes a `<style>` tag.
     pub styles: Vec<String>,
+    /// Raw `<mj-style inline="inline">` CSS bodies, in source order.
+    ///
+    /// mjml's `globalData.inlineStyle`: **never** emitted as a `<style>` tag (juice runs
+    /// with `insertPreservedExtraCss:false`); it exists only to be fed to the CSS inliner
+    /// as `extraCss`, and to be scanned by the web-font detector.
+    pub inline_styles: Vec<String>,
     /// `<mj-raw>` bodies found under `<mj-head>`, in source order. mjml's `headRaw`:
     /// they are injected verbatim at the very end of the document `<head>`.
     pub raws: Vec<String>,
     /// `<mj-raw position="file-start">` bodies found as *direct children of `<mjml>`*
     /// (mjml's `mjOutsideRaws`). They are emitted before the doctype.
     pub file_start_raws: Vec<String>,
-    /// Whether any `<mj-style inline>` was seen. Injection is deferred to the
-    /// css-inline milestone; this only records that inlining was requested.
-    pub has_inline_styles: bool,
 }
 
 impl<'a> HeadData<'a> {
@@ -129,9 +135,9 @@ impl<'a> HeadData<'a> {
             preview: None,
             fonts,
             styles: Vec::new(),
+            inline_styles: Vec::new(),
             raws: Vec::new(),
             file_start_raws: Vec::new(),
-            has_inline_styles: false,
         }
     }
 
@@ -153,10 +159,10 @@ impl<'a> HeadData<'a> {
         }
     }
 
-    /// Whether any `<mj-style inline>` was collected.
+    /// Whether any `<mj-style inline="inline">` was collected.
     #[must_use]
     pub fn has_inline_styles(&self) -> bool {
-        self.has_inline_styles
+        !self.inline_styles.is_empty()
     }
 }
 

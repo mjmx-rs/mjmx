@@ -1,0 +1,20 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .comb span { font-weight: bold; }
+      .comb > div > span { border-left: 9px solid #ff0000; }
+      .comb div > span { font-style: italic; }
+      .comb b + i { text-transform: uppercase; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="comb">
+          <div><span>direct child span</span></div>
+          <b>bee</b><i>eye</i>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -74,10 +74,29 @@ To add a fixture: write `<name>.mjml`, run the command above, commit both files.
 | `css_class_content` | `css-class` on content components — `mj-text`, `mj-button`, `mj-image`, `mj-divider`, `mj-spacer`, `mj-table` — which lands on the `<td>` each renders itself into, between `align` and `style`; plus a two-class value (`"multi-a multi-b"`). |
 | `css_class_composite` | `css-class` on composite components: `mj-social` (+ `mj-social-element`, whose class goes on its `<tr>`), `mj-navbar` (+ `mj-navbar-link`: appended to `mj-link` on the `<a>`, `-outlook`-suffixed on the mso `<td>`), `mj-accordion` (+ element `<tr>`, title `<td>`, text `<td>`), and `mj-hero` (its centered div). |
 | `css_class_carousel` | `css-class` on `mj-carousel` and `mj-carousel-image`: `-thumbnail`-suffixed on the thumbnail `<a>`, raw on each `mj-carousel-image` div (and the mso first-image fallback). |
+| `mj_style_plain` | A plain `<mj-style>`: the verbatim head `<style>` block (mjml's `globalData.style` / `buildStyleFromTags`). |
+| `mj_style_inline_not_literal` | `<mj-style inline="true">` and a bare `<mj-style inline>`. mjml compares `getAttribute('inline') === 'inline'`, so **both are plain** and land in the head `<style>`. |
+| `mj_style_inline_basic` † | `<mj-style inline="inline">` with a `.class` rule matched via `css-class`: the declaration is merged into the element's `style` attribute and **no** `<style>` tag is emitted for it. |
+| `mj_style_both_buckets` † | Plain and inline `<mj-style>` in one document: the buckets are disjoint — only the plain CSS appears in the `<style>` tag. |
+| `mj_style_important` † | An inline `!important` rule beating a declaration mjml already put in the `style` attribute. juice **drops the `!important` keyword** and re-appends the declaration last. |
+| `mj_style_specificity_conflict` † | A plain (non-important) inline rule vs a property already in the `style` attribute: the **pre-existing inline style wins**. A property not already present is *prepended*. |
+| `mj_style_specificity_order` † | `div p` beats `p`; two same-specificity rules resolve by source order. |
+| `mj_style_non_inlinable` † | `@media` and `:hover` inside an inline block **vanish entirely** (`insertPreservedExtraCss:false`, and the inline bucket emits no `<style>`). |
+| `mj_style_dimensions` † | `width`/`height` inlined onto `<table>`/`<img>` also become `width=`/`height=` HTML attributes (juice's `applyWidthAttributes`/`applyHeightAttributes`). |
+| `mj_style_table_attrs` † | On a table element, inlined `background-color`/`text-align`/`vertical-align` also become `bgcolor`/`align`/`valign` (`applyAttributesTableElements`). |
+| `mj_style_combinators` † | Descendant, child (matching and non-matching) and adjacent-sibling selectors. |
+| `mj_style_conditional_order` † | Ordering probe: inline rules matching elements either side of an Outlook conditional. mjml runs juice *before* `mergeOutlookConditionnals`; markup inside the conditional comments is untouched by juice, and the comments still merge. |
 | `css_class_multi` | mjml's one non-last-wins attribute: `css-class` from several `mj-class` names **concatenates** in `mj-class` order (`"a b"` → `one two`, `"b a"` → `two one`), skips classes that set no `css-class`, and still loses to an inline `css-class`. The joined value then flows through the column's class append and the section's `-outlook` suffixing. |
 
 All fixtures render byte-identical (under the whitespace-normalized comparator) to the
-vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs`.
+vendored mjml 4.18.0 output in `crates/mjmx/tests/golden.rs` — **except** the rows marked
+† above, which need the CSS inliner. Their goldens are real mjml 4.18.0 output; their
+tests exist in `golden.rs` but are `#[ignore]`d until the css-inline milestone lands, and
+are the checklist for it:
+
+```sh
+cargo test -p mjmx --test golden -- --ignored   # the pending set, all expected to fail
+```
 
 **`include/` (mj-include).** `include/main.mjml` uses `<mj-include path="./_section.mjml" />`
 to splice a partial (`include/_section.mjml`, a bare `<mj-section>` fragment with no

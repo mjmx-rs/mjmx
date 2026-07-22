@@ -1,0 +1,20 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .probe { color: #ff00ff; }
+      td.probe { letter-spacing: 2px; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section css-class="probe">
+      <mj-column>
+        <mj-text css-class="probe">first section, adjacent to an mso conditional</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section css-class="probe">
+      <mj-column>
+        <mj-text css-class="probe">second section, across the merged conditional boundary</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

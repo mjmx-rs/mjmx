@@ -1,0 +1,18 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .vanish { color: #ff0000; }
+      .vanish:hover { color: #00ff00; }
+      @media only screen and (max-width: 480px) {
+        .vanish { color: #0000ff; }
+      }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="vanish">only the plain rule survives</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

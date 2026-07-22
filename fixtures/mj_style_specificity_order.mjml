@@ -1,0 +1,19 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      div p { color: #111111; }
+      p { color: #222222; }
+      .same-a p { text-decoration: underline; }
+      .same-b p { text-decoration: overline; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="same-a same-b">
+          <p>higher specificity and source order both decide here</p>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

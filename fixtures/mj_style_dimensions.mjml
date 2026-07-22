@@ -1,0 +1,15 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .dim img { width: 123px; height: 45px; }
+      .dim table { width: 321px; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-image css-class="dim" src="https://example.com/a.png" alt="a" width="100px" />
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

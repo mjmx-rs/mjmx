@@ -1,0 +1,17 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .conflict { padding: 0; word-break: normal; }
+      .fresh { letter-spacing: 3px; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="conflict fresh">
+          padding/word-break already exist in the td's style attribute; letter-spacing does not
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

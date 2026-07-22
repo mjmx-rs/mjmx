@@ -33,7 +33,7 @@ mod migrate;
 use std::path::Path;
 
 use mjmx_allocator::Vec as ArenaVec;
-use mjmx_ast::{AstBuilder, Document, Element, Node};
+use mjmx_ast::{AstBuilder, Attribute, Document, Element, Node};
 use mjmx_diagnostics::Diagnostic;
 use mjmx_span::Span;
 use mjmx_syntax::MjmlTag;
@@ -216,20 +216,35 @@ fn resolve_include<'a>(
                 builder,
                 MjmlTag::MjRaw,
                 "mj-raw",
+                builder.vec(),
                 &loaded.contents,
                 el.span,
             ))),
             Err(diag) => diags.push(annotate(diag, el.span, path)),
         },
-        // CSS: wrap in <mj-style> so it lands in the head <style> block.
+        // CSS: wrap in <mj-style> so it lands in the head <style> block — or, when the
+        // include is marked `css-inline="inline"`, in the inline bucket. mjml's parser
+        // does exactly this: `attrs['css-inline'] === 'inline' ? { inline: 'inline' } : {}`
+        // (mjml-parser-xml/index.js), again an exact-string comparison.
         "css" => match loader.load(path, from) {
-            Ok(loaded) => out.push(builder.element_node(wrap_raw_text(
-                builder,
-                MjmlTag::MjStyle,
-                "mj-style",
-                &loaded.contents,
-                el.span,
-            ))),
+            Ok(loaded) => {
+                let mut attributes = builder.vec();
+                if el.attr("css-inline") == Some("inline") {
+                    attributes.push(builder.attribute(
+                        builder.atom("inline"),
+                        Some(builder.atom("inline")),
+                        el.span,
+                    ));
+                }
+                out.push(builder.element_node(wrap_raw_text(
+                    builder,
+                    MjmlTag::MjStyle,
+                    "mj-style",
+                    attributes,
+                    &loaded.contents,
+                    el.span,
+                )))
+            }
             Err(diag) => diags.push(annotate(diag, el.span, path)),
         },
         // Default: an MJML fragment, parsed and spliced (with cycle detection).
@@ -299,12 +314,13 @@ fn wrap_raw_text<'a>(
     builder: &AstBuilder<'a>,
     tag: MjmlTag,
     raw_tag: &str,
+    attributes: ArenaVec<'a, Attribute<'a>>,
     content: &str,
     span: Span,
 ) -> &'a Element<'a> {
     let text = builder.text(builder.atom(content), span);
     let children = builder.vec_from_iter([builder.text_node(text)]);
-    builder.element(tag, builder.atom(raw_tag), builder.vec(), children, span)
+    builder.element(tag, builder.atom(raw_tag), attributes, children, span)
 }
 
 /// Attach the offending include's span to a loader diagnostic.
@@ -393,6 +409,17 @@ mod tests {
                     + count_tag(&el.children.iter().copied().collect::<Vec<_>>(), tag)
             })
             .sum()
+    }
+
+    /// The first element with `tag` anywhere in the tree, depth-first.
+    fn find_tag<'a>(nodes: &[Node<'a>], tag: MjmlTag) -> Option<&'a Element<'a>> {
+        nodes.iter().filter_map(Node::as_element).find_map(|el| {
+            if el.tag == tag {
+                Some(el)
+            } else {
+                find_tag(&el.children.iter().copied().collect::<Vec<_>>(), tag)
+            }
+        })
     }
 
     #[test]
@@ -513,6 +540,36 @@ mod tests {
 
         assert!(diags.is_empty(), "got {diags:?}");
         assert_eq!(count_tag(&doc.children, MjmlTag::MjStyle), 1);
+    }
+
+    #[test]
+    fn css_include_forwards_css_inline() {
+        // mjml's parser: `attrs['css-inline'] === 'inline' ? { inline: 'inline' } : {}`,
+        // so only the literal string marks the synthesised <mj-style> as inline.
+        for (attr, expected) in [
+            ("", None),
+            (" css-inline=\"inline\"", Some("inline")),
+            (" css-inline=\"true\"", None),
+        ] {
+            let alloc = Allocator::new();
+            let builder = AstBuilder::new(&alloc);
+            let root = PathBuf::from("/proj");
+            let files = HashMap::from([(
+                PathBuf::from("/proj/theme.css"),
+                ".a{color:red}".to_string(),
+            )]);
+            let loader = MemLoader { files };
+
+            let src = format!(
+                "<mjml><mj-head><mj-include path=\"./theme.css\" type=\"css\"{attr} /></mj-head><mj-body></mj-body></mjml>"
+            );
+            let ret = mjmx_parser::parse(builder.atom(&src).as_str(), &alloc);
+            let (doc, diags) = resolve_includes(&builder, &ret.document, &loader, &root);
+            assert!(diags.is_empty(), "got {diags:?}");
+
+            let style = find_tag(&doc.children, MjmlTag::MjStyle).expect("an <mj-style>");
+            assert_eq!(style.attr("inline"), expected, "for `{attr}`");
+        }
     }
 
     #[test]

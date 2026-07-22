@@ -491,6 +491,146 @@ fn css_class_multi_matches_mjml_reference() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// <mj-style>
+//
+// mjml keeps two disjoint buckets: `globalData.style` (plain `<mj-style>`), which
+// becomes a head `<style>` tag, and `globalData.inlineStyle` (`<mj-style
+// inline="inline">`), which is *never* emitted as a tag — it is handed to juice as
+// `extraCss` and applied to the markup as `style=""` attributes.
+//
+// The plain-bucket fixtures pass today. The inline-bucket ones are the explicit TODO
+// list for the css-inline milestone: they carry the vendored mjml 4.18.0 output that the
+// inliner has to reproduce, and are `#[ignore]`d (not weakened, not deleted) until it
+// exists. Run them with `cargo test -p mjmx --test golden -- --ignored`.
+macro_rules! pending_inliner {
+    () => {
+        "pending the css-inline milestone: <mj-style inline=\"inline\"> is collected but \
+         not yet applied to the markup"
+    };
+}
+
+#[test]
+fn mj_style_plain_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_plain",
+        fixture!("mj_style_plain.mjml"),
+        fixture!("mj_style_plain.html"),
+    );
+}
+
+#[test]
+fn mj_style_inline_not_literal_matches_mjml_reference() {
+    // Regression test for the `inline` attribute comparison: mjml checks
+    // `getAttribute('inline') === 'inline'`, so `inline="true"` and a bare `inline` are
+    // *plain* styles and must still reach the head `<style>` block.
+    assert_golden(
+        "mj_style_inline_not_literal",
+        fixture!("mj_style_inline_not_literal.mjml"),
+        fixture!("mj_style_inline_not_literal.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_inline_basic_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_inline_basic",
+        fixture!("mj_style_inline_basic.mjml"),
+        fixture!("mj_style_inline_basic.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_both_buckets_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_both_buckets",
+        fixture!("mj_style_both_buckets.mjml"),
+        fixture!("mj_style_both_buckets.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_important_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_important",
+        fixture!("mj_style_important.mjml"),
+        fixture!("mj_style_important.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_specificity_conflict_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_specificity_conflict",
+        fixture!("mj_style_specificity_conflict.mjml"),
+        fixture!("mj_style_specificity_conflict.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_specificity_order_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_specificity_order",
+        fixture!("mj_style_specificity_order.mjml"),
+        fixture!("mj_style_specificity_order.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_non_inlinable_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_non_inlinable",
+        fixture!("mj_style_non_inlinable.mjml"),
+        fixture!("mj_style_non_inlinable.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_dimensions_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_dimensions",
+        fixture!("mj_style_dimensions.mjml"),
+        fixture!("mj_style_dimensions.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_table_attrs_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_table_attrs",
+        fixture!("mj_style_table_attrs.mjml"),
+        fixture!("mj_style_table_attrs.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_combinators_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_combinators",
+        fixture!("mj_style_combinators.mjml"),
+        fixture!("mj_style_combinators.html"),
+    );
+}
+
+#[test]
+#[ignore = pending_inliner!()]
+fn mj_style_conditional_order_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_conditional_order",
+        fixture!("mj_style_conditional_order.mjml"),
+        fixture!("mj_style_conditional_order.html"),
+    );
+}
+
 #[test]
 fn include_matches_mjml_reference() {
     // `render_file` resolves the `<mj-include>` in main.mjml against the file's own

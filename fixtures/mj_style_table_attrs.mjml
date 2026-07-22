@@ -1,0 +1,22 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .tbl table {
+        background-color: #123456;
+        text-align: right;
+        vertical-align: bottom;
+      }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-table css-class="tbl">
+          <tr>
+            <td>cell</td>
+          </tr>
+        </mj-table>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -1,0 +1,14 @@
+<mjml>
+  <mj-head>
+    <mj-style inline="inline">
+      .boxed { border: 2px solid #00ff00; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="boxed">inlined</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

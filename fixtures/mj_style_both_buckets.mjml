@@ -1,0 +1,22 @@
+<mjml>
+  <mj-head>
+    <mj-style>
+      .plain-only { color: #ff0000; }
+    </mj-style>
+    <mj-style inline="inline">
+      .inline-only { color: #0000ff; }
+    </mj-style>
+    <mj-style>
+      .plain-two { font-style: italic; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text css-class="plain-only">plain</mj-text>
+        <mj-text css-class="inline-only">inline</mj-text>
+        <mj-text css-class="plain-two">plain two</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
