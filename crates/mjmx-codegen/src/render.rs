@@ -171,14 +171,24 @@ fn dispatch<'a>(
     }
 }
 
-/// Build the diagnostic for a component not yet supported by the renderer.
+/// Build the diagnostic for a tag the body renderer cannot emit. Two distinct cases,
+/// worded so neither reads as "a feature mjmx has not built yet": an unrecognized tag
+/// does not exist in MJML at all (matching mjml's "Element X doesn't exist or is not
+/// registered"), while a recognized tag reaching this arm is one with no body renderer
+/// (a head-only element misplaced in the body).
 pub(crate) fn unsupported(element: &Element<'_>) -> Diagnostic {
+    if element.tag == MjmlTag::Unknown {
+        return Diagnostic::error(format!(
+            "<{}> is not a recognized MJML component",
+            element.raw_tag.as_str()
+        ))
+        .with_label(element.span(), "unknown component")
+        .with_help("check the spelling; MJML does not define this element");
+    }
     Diagnostic::error(format!(
-        "rendering is not implemented for <{}> yet",
+        "<{}> is not valid inside the body",
         element.raw_tag.as_str()
     ))
-    .with_label(element.span(), "unsupported component in this build")
-    .with_help(
-        "this build renders mj-body, mj-wrapper, mj-section, mj-group, mj-column, mj-text, mj-image, mj-divider, mj-spacer, mj-button, mj-raw, mj-table, mj-social, mj-social-element, mj-navbar, mj-navbar-link, mj-hero, mj-carousel and mj-accordion (with their child elements)",
-    )
+    .with_label(element.span(), "not a body component")
+    .with_help("this element is only valid inside <mj-head>")
 }

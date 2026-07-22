@@ -12,7 +12,7 @@
 //! 1. **Allowed children** — every container permits only certain child tags
 //!    ([`rules::allowed_children`]); a disallowed child is an error on the child.
 //! 2. **Unknown components** — a tag the parser could not recognize
-//!    ([`MjmlTag::Unknown`]) is a warning.
+//!    ([`MjmlTag::Unknown`]) is an error; the renderer rejects it, as does mjml.
 //! 3. **Misplaced elements** — a head-only element in the body subtree (or vice
 //!    versa) is an error with a targeted message.
 //! 4. **Dangling child-only elements** — `mj-social-element`, `mj-navbar-link`,
@@ -114,17 +114,17 @@ fn check_element<'a>(
     check_required_attributes(el, out);
 }
 
-/// Rule 2: an unrecognized component becomes a warning (rendering passes it through).
+/// Rule 2: an unrecognized component is an error. The renderer rejects it — nothing is
+/// passed through — and so does mjml ("Element X doesn't exist or is not registered").
+/// Lint and render agree so both stages tell the same story.
 fn check_unknown<'a>(el: &'a Element<'a>, out: &mut Vec<Diagnostic>) {
     out.push(
-        Diagnostic::warning(format!(
+        Diagnostic::error(format!(
             "unknown mjml component '<{}>'",
             el.raw_tag.as_str()
         ))
         .with_label(el.span, "not a recognized MJML component")
-        .with_help(
-            "check the spelling; unknown tags are rendered as-is and may not display correctly",
-        ),
+        .with_help("check the spelling; MJML does not define this element"),
     );
 }
 
@@ -283,15 +283,15 @@ mod tests {
     }
 
     #[test]
-    fn unknown_tag_is_warning() {
+    fn unknown_tag_is_error() {
         let diags = lint_src(
             "<mjml><mj-body><mj-section><mj-column>\
              <mj-foo>x</mj-foo></mj-column></mj-section></mj-body></mjml>",
         );
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].severity, Severity::Warning);
+        assert_eq!(diags[0].severity, Severity::Error);
         assert!(diags[0].message.contains("mj-foo"));
-        assert_eq!(errors(&diags), 0);
+        assert_eq!(errors(&diags), 1);
     }
 
     #[test]
