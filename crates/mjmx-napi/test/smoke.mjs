@@ -155,6 +155,62 @@ check('render({ printerSupport }) adds an @media only print block', () => {
   assert.ok(out.slice(out.indexOf('@media only print')).includes('.mj-column-per-50'));
 });
 
+const templated =
+  '<mjml><mj-head><mj-style inline="inline">.probe{color:#ff00ff}</mj-style></mj-head>' +
+  '<mj-body><mj-raw><span class="probe">{{ "<div class=\'probe\'>" }}</span></mj-raw>' +
+  '<mj-section><mj-column><mj-text css-class="probe">t</mj-text></mj-column></mj-section>' +
+  '</mj-body></mjml>';
+
+check('inlining masks EJS and Handlebars by default, as juice does', () => {
+  const out = mjmx.render(templated);
+  // The markup inside the Handlebars literal is not markup: it must come back byte
+  // for byte, and must not have collected a style attribute of its own.
+  assert.ok(out.includes('{{ "<div class=\'probe\'>" }}'), 'template expression mangled');
+  assert.equal(out.split('color: #ff00ff').length - 1, 2, 'inlined an element that does not exist');
+});
+
+check('render({ juicePreserveTags }) adds to the built-ins', () => {
+  const custom =
+    '<mjml><mj-head><mj-style inline="inline">.probe{color:#ff00ff}</mj-style></mj-head>' +
+    '<mj-body><mj-raw><span class="probe"><# <i class="probe"> </#</span></mj-raw>' +
+    '</mj-body></mjml>';
+  // Unregistered, the <i> inside the custom delimiters is real markup and gets inlined.
+  assert.equal(mjmx.render(custom).split('color: #ff00ff').length - 1, 2);
+  const out = mjmx.render(custom, { juicePreserveTags: { myTag: { start: '<#', end: '</#' } } });
+  assert.equal(out.split('color: #ff00ff').length - 1, 1);
+  assert.ok(out.includes('<# <i class="probe"> </#'));
+  // Per-call, not global: the next render must not still know about myTag.
+  assert.equal(mjmx.render(custom).split('color: #ff00ff').length - 1, 2);
+});
+
+check('render({ juiceOptions }) switches the attribute mirrors and !important', () => {
+  const src =
+    '<mjml><mj-head><mj-style inline="inline">' +
+    'td.probe{width:123px !important;background-color:#010203}' +
+    '</mj-style></mj-head><mj-body><mj-section><mj-column>' +
+    '<mj-text css-class="probe">t</mj-text></mj-column></mj-section></mj-body></mjml>';
+  const on = mjmx.render(src);
+  assert.ok(on.includes('width="123"'), 'expected the width attribute mirror');
+  // The document's own media queries use `!important`; check the inlined value.
+  assert.ok(on.includes('width: 123px;'), 'the keyword is dropped by default, as in mjml');
+
+  const off = mjmx.render(src, {
+    juiceOptions: { applyWidthAttributes: false, preserveImportant: true },
+  });
+  assert.ok(!off.includes('width="123"'), 'applyWidthAttributes: false still mirrored');
+  assert.ok(off.includes('width: 123px !important'), 'preserveImportant not honoured');
+});
+
+// N-API decodes `juiceOptions` field by field into a typed struct, so — unlike the
+// wasm build, which sees the raw object and throws — an unsupported juice option is
+// caught by the *TypeScript* interface (which is closed) rather than at runtime.
+// Pinned here so the limitation is a decision and not a surprise. Same shape as this
+// binding's long-standing `minifyOptions` behaviour.
+check('an unsupported juiceOption is a type error, not a runtime one', () => {
+  const out = mjmx.render(templated, { juiceOptions: { resolveCSSVariables: true } });
+  assert.equal(out, mjmx.render(templated), 'an ignored key must not change the output');
+});
+
 check('lint() flags a known-bad document', () => {
   const diagnostics = mjmx.lint('<mjml><mj-body><mj-column></mj-column></mj-body></mjml>');
   assert.ok(Array.isArray(diagnostics));

@@ -13,6 +13,7 @@
 
 use std::path::PathBuf;
 
+use mjmx_css_inline::InlineOptions;
 use mjmx_minifier::MinifyOptions;
 use mjmx_semantic::{FontFace, Semantic};
 use mjmx_sourcemap::SourceMapBuilder;
@@ -103,6 +104,19 @@ pub struct RenderOptions {
     /// and Thunderbird blocks. Like upstream, it is emitted only when there are column
     /// rules to replay.
     pub printer_support: bool,
+    /// How to inline `<mj-style inline="inline">`. `// mjml default: {}`.
+    ///
+    /// Carries **both** of mjml's juice-facing options: the struct itself is
+    /// `juiceOptions`, and its [`preserve_tags`](InlineOptions::preserve_tags) field
+    /// is `juicePreserveTags`. One carrier rather than two, because there is no juice
+    /// here to hand two separate objects to — mjmx's inliner is hand-rolled, and
+    /// [`InlineOptions`] is exactly the subset of juice's options that has a meaning
+    /// for it. See `mjmx_css_inline::options` for the option-by-option triage and for
+    /// the ones mjmx refuses rather than silently ignores.
+    ///
+    /// Only consulted when the document has a non-empty inline `<mj-style>` bucket;
+    /// otherwise no inlining runs at all.
+    pub inline_options: InlineOptions,
 }
 
 impl Default for RenderOptions {
@@ -127,6 +141,9 @@ impl Default for RenderOptions {
             ignore_includes: false,
             // mjml default: no @media print block.
             printer_support: false,
+            // mjml default: `juiceOptions: undefined` / `juicePreserveTags: undefined`,
+            // i.e. juice's defaults as mjml configures them.
+            inline_options: InlineOptions::default(),
         }
     }
 }

@@ -77,7 +77,29 @@ interface RenderOptions {
   minifyOptions?: MinifyOptions;                    // only read when `minify` is true
   ignoreIncludes?: boolean;                         // default false; true drops them
   printerSupport?: boolean;                         // default false; @media only print
+  juiceOptions?: JuiceOptions;                      // how to inline <mj-style inline>
+  juicePreserveTags?: Record<string, PreserveTag>;  // extra delimiters to skip
 }
+// mjml's `juiceOptions`, restricted to what mjmx's hand-rolled inliner can honour —
+// there is no juice here to forward an object to. Everything else juice accepts is
+// *refused with the reason*, never accepted and ignored: `extraCss`, `applyStyleTags`,
+// `removeStyleTags` and `insertPreservedExtraCss` describe an arrangement mjmx fixes
+// before rendering; `preserveMediaQueries`/`preserveFontFaces`/`preserveKeyFrames`/
+// `preservePseudos` are unreachable under mjml's own configuration; `xmlMode`, `url`
+// and `webResources` have no analogue; `resolveCSSVariables` and
+// `inlinePseudoElements` are real gaps that cannot be faked.
+interface JuiceOptions {
+  applyWidthAttributes?: boolean;                   // default true
+  applyHeightAttributes?: boolean;                  // default true
+  applyAttributesTableElements?: boolean;           // default true
+  preserveImportant?: boolean;                      // default false (juice's own)
+  styleAttributeName?: string;                      // default "style"
+}
+// Templating delimiters the inliner must not look inside. These *add* to the
+// always-active built-ins — EJS (`<% %>`) and Handlebars (`{{ }}`) — so
+// `{{ "<div class='a'>" }}` is never read as a tag. Per-call, unlike mjml, which
+// writes them into juice's module-global `codeBlocks` and leaks them across renders.
+interface PreserveTag { start: string; end: string }
 // mjml's four html-minifier switches. `removeEmptyAttributes` is the one default that
 // differs from mjml's `true`: mjml's own output carries `<div … style="">`, so `true`
 // removes an attribute while minifying. mjmx keeps `minify` a pure whitespace

@@ -33,6 +33,8 @@ mjmx.render(source, {
   minifyOptions: {},            // only consulted when `minify` is true
   ignoreIncludes: false,        // true drops <mj-include> instead of resolving it
   printerSupport: false,        // true adds an `@media only print` block
+  juiceOptions: {},             // how to inline <mj-style inline="inline">
+  juicePreserveTags: {},        // extra templating delimiters the inliner skips
 });                                       // -> HTML
 mjmx.renderFile('email.mjml', options);   // resolves <mj-include> relative to the file
 mjmx.lint(source);                        // -> Diagnostic[], never throws
@@ -59,6 +61,58 @@ mjmx.render(source, {
 output carries `<div … style="" role="article">`, so mjml's `true` *removes an
 attribute* while minifying; mjmx defaults it off to keep `minify` a pure whitespace
 transform. Pass `true` for byte parity with mjml.
+
+## CSS inlining: `juiceOptions` and `juicePreserveTags`
+
+mjml hands `<mj-style inline="inline">` to [juice]. mjmx has no juice — the inliner is
+hand-rolled — so `juiceOptions` is not a pass-through object. Each juice option was
+classified, and `JuiceOptions` is exactly the set that means something here:
+
+```js
+mjmx.render(source, {
+  juiceOptions: {
+    applyWidthAttributes: true,          // width  -> width  attr on table/td/th/img
+    applyHeightAttributes: true,         // height -> height attr on the same
+    applyAttributesTableElements: true,  // background-color -> bgcolor, etc. on <table>
+    preserveImportant: false,            // keep `!important` in the written value
+    styleAttributeName: 'style',
+  },
+});
+```
+
+Everything else juice accepts is **refused** — the TypeScript interface is closed, so
+passing one in an object literal is a compile error. Note the enforcement is
+compile-time only: N-API decodes this object into a typed Rust struct field by field,
+so from plain JS an unknown key is dropped before mjmx sees it rather than throwing
+(the wasm build, which receives the raw object, throws with the reason). Same
+trade-off as `minifyOptions` here. The reasons, in short: `extraCss`,
+`applyStyleTags`, `removeStyleTags` and `insertPreservedExtraCss` describe an
+arrangement mjmx fixes before rendering (it splits `<mj-style>` into an inline bucket
+and a `<style>` bucket, and the inliner only ever sees the first);
+`preserveMediaQueries` / `preserveFontFaces` / `preserveKeyFrames` / `preservePseudos`
+are unreachable under mjml's own configuration; `xmlMode`, `url` and `webResources`
+have no analogue and the inliner does no I/O; and `resolveCSSVariables` and
+`inlinePseudoElements` are real gaps that cannot be faked (mjmx writes `var(--x)`
+through verbatim and drops `::before`/`::after` rules).
+
+`juicePreserveTags` registers templating delimiters the inliner must not look inside:
+
+```js
+mjmx.render(source, {
+  juicePreserveTags: { myTag: { start: '<#', end: '</#' } },
+});
+```
+
+These **add** to the built-ins, which are always active whether or not you pass
+anything: EJS (`<% %>`) and Handlebars (`{{ }}`), exactly as in juice. That matters —
+without it, `{{ "<div class='a'>" }}` parses as a real tag and the inliner splices a
+`style` attribute into the middle of your template expression.
+
+One deliberate divergence from mjml: upstream assigns your tags into juice's
+module-global `codeBlocks` object, so they leak into every later render in the same
+process. mjmx's are per-call.
+
+[juice]: https://github.com/Automattic/juice
 
 `render`, `renderFile` and `format` throw an `Error` whose message aggregates the
 diagnostics (`mjmx: error: <first message> (+N more diagnostics)`). The wrapper in

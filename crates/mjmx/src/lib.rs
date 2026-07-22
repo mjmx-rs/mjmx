@@ -19,6 +19,9 @@ use mjmx_allocator::Allocator;
 pub use mjmx_codegen::{
     FontFace, Mapping, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
 };
+pub use mjmx_css_inline::{
+    InlineOptions, PreserveTag, SUPPORTED_OPTIONS, refusal, unsupported_option,
+};
 pub use mjmx_diagnostics::{Diagnostic, Severity};
 pub use mjmx_formatter::FormatOptions;
 pub use mjmx_minifier::MinifyOptions;
@@ -122,7 +125,7 @@ fn render_source(
 
     let (html, inline_css) = mjmx_codegen::render_document_with_inline_css(&document, options)?;
     Ok((
-        post_process(inline_css_into(html, &inline_css), options),
+        post_process(inline_css_into(html, &inline_css, options), options),
         soft,
     ))
 }
@@ -133,13 +136,13 @@ fn render_source(
 /// inlining reads the markup codegen produced, and minify/beautify then run over the
 /// result. With an empty bucket there is nothing to do and the HTML is returned untouched
 /// — the default render path is unchanged, byte for byte.
-fn inline_css_into(html: String, inline_css: &[String]) -> String {
+fn inline_css_into(html: String, inline_css: &[String], options: &RenderOptions) -> String {
     if inline_css.is_empty() {
         return html;
     }
     // Concatenated in source order, so a later `<mj-style inline="inline">` wins ties
     // against an earlier one exactly as it would inside a single stylesheet.
-    mjmx_css_inline::inline(&html, &inline_css.join("\n"))
+    mjmx_css_inline::inline_with(&html, &inline_css.join("\n"), &options.inline_options)
 }
 
 /// [`render_source`] with no caller-supplied base: the only base, if any, is

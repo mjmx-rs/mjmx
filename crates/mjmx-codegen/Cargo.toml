@@ -18,6 +18,9 @@ mjmx-sourcemap.workspace = true
 # Only for the `MinifyOptions` type carried on `RenderOptions` (mjml's `minifyOptions`).
 # Codegen never minifies; the umbrella crate applies it after codegen.
 mjmx-minifier.workspace = true
+# Only for the `InlineOptions` type carried on `RenderOptions` (mjml's `juiceOptions`
+# and `juicePreserveTags`). Codegen never inlines; the umbrella crate does, after codegen.
+mjmx-css-inline.workspace = true
 
 [dev-dependencies]
 mjmx-allocator.workspace = true

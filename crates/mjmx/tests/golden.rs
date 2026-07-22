@@ -615,6 +615,15 @@ fn mj_style_conditional_order_matches_mjml_reference() {
 }
 
 #[test]
+fn mj_style_templating_matches_mjml_reference() {
+    assert_golden(
+        "mj_style_templating",
+        fixture!("mj_style_templating.mjml"),
+        fixture!("mj_style_templating.html"),
+    );
+}
+
+#[test]
 fn include_matches_mjml_reference() {
     // `render_file` resolves the `<mj-include>` in main.mjml against the file's own
     // directory (via the LocalLoader), exactly as the mjml CLI did when generating the

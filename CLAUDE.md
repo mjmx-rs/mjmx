@@ -66,7 +66,7 @@ Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 
 All of the above is **complete**, plus css-class, HTTP include loader (opt-in), v3→v4
 migrate, `mjmx lsp`, incremental LSP sync, wasm-opt, and CSS inlining. Rendering parity has
-**zero known divergences** from mjml 4.18.0 across 68 fixtures / 70 golden tests.
+**zero known divergences** from mjml 4.18.0 across 69 fixtures / 71 golden tests.
 
 ## CSS inlining (`mjmx-css-inline`, done)
 
@@ -93,6 +93,10 @@ and several points contradict what juice's source appears to say:
   from an integral px value (`100%`, `auto` are left alone); on `<table>`,
   `background-color`→`bgcolor`, `background-image`→`background`, `text-align`→`align`,
   `vertical-align`→`valign`, **additively** (declaration kept too).
+
+**Second hard invariant:** the inliner must never descend into templating syntax
+either. EJS `<% %>` and Handlebars `{{ }}` are masked before tokenizing, always — juice
+does this and mjmx did not, which was a real bug (see the `juiceOptions` section).
 
 **Hard invariant:** the inliner must never descend into conditional comments. mjmx merges
 Outlook conditionals inside `render_document`, i.e. *before* the inliner, where upstream
@@ -127,6 +131,7 @@ Tier 2 is **shipped** (3 of 5; two were dead ends, see below):
 | `minify_options: MinifyOptions` | `minifyOptions` | `{}` | only read when `minify`; new `MinifyOptions` struct + `mjmx_minifier::minify_with` |
 | `ignore_includes: bool` | `ignoreIncludes` | false | **drops** `<mj-include>`, does not merely skip resolution; wins over `file_path` and a file render's own base |
 | `printer_support: bool` | `printerSupport` | false | third `<style>` replaying the base column rules under `@media only print`, after the screen + Thunderbird blocks; suppressed when there are no column rules, as upstream |
+| `inline_options: InlineOptions` | `juiceOptions` **+** `juicePreserveTags` | juice's, as mjml sets them | one carrier for both, since there is no juice to hand two objects to; `preserve_tags` is `juicePreserveTags`. See "juiceOptions" below |
 
 `MinifyOptions` = the four html-minifier switches mjml hardcodes
 (`mjml-core/src/index.js:419-425`): `collapse_whitespace` (true), `minify_css` (false),
@@ -146,7 +151,57 @@ Real bug caught by reading html-minifier's source: `reEmptyAttribute` is
 plus `<input value>` — *not* "every empty attribute" and *not* "every `on*` handler".
 
 CLI: `--minify-options <JSON>` (mjml's own camelCase keys, unknown keys rejected),
-`--ignore-includes`, `--printer-support`.
+`--ignore-includes`, `--printer-support`, `--juice-options <JSON>`,
+`--juice-preserve-tags <JSON>`.
+
+### `juiceOptions` / `juicePreserveTags` (shipped)
+
+mjml forwards these to juice (`mjml-core/src/index.js:382-396`, with `...juiceOptions`
+spread **last** — so upstream lets a caller override even mjml's own `extraCss`). mjmx
+has no juice, so every option was classified rather than forwarded:
+
+| juice option | mjmx | why |
+| --- | --- | --- |
+| `applyWidthAttributes` (true) | **implemented** | was unconditional; now switchable |
+| `applyHeightAttributes` (true) | **implemented** | same |
+| `applyAttributesTableElements` (true) | **implemented** | same |
+| `preserveImportant` (false) | **implemented** | default unchanged; `true` writes `x: y !important`. Mirrors never carry the keyword, as in juice |
+| `styleAttributeName` ("style") | **implemented** | juice reads *and* writes the same name; two literals in `apply.rs` |
+| `codeBlocks` | **implemented**, as `juicePreserveTags` | see below |
+| `extraCss`, `applyStyleTags`, `removeStyleTags`, `insertPreservedExtraCss` | **refused** | not settings in mjmx but the shape of the pass: semantic splits `<mj-style>` into an inline bucket and a `<style>` bucket, and the inliner only ever sees the first. `extraCss` *is* the `css` argument |
+| `preserveMediaQueries`, `preserveFontFaces`, `preserveKeyFrames`, `preservePseudos` | **refused** | unreachable — juice reads them only from `getPreservedText`, gated on `insertPreservedExtraCss` / `removeStyleTags`, and mjml sets both false |
+| `xmlMode`, `url`, `webResources` | **refused** | no analogue; `url`/`webResources` are `juiceResources`-only and mjml calls plain `juice()`. The inliner does no I/O |
+| `resolveCSSVariables` (**true**) | **refused — real gap** | needs a custom-property cascade with `var()` fallbacks. mjmx writes `var(--x)` through verbatim and keeps the `--x` declaration, i.e. it behaves as `false`, which is *not* juice's default |
+| `inlinePseudoElements` (falsy) | **refused — real gap** | needs `content` parsing (strings, `url()`, `attr()`, counters) and element synthesis; mjmx drops `::before`/`::after` |
+
+Refusals are **errors with the reason**, never silent ignores — `mjmx_css_inline::
+unsupported_option` is the single source of those strings, shared by CLI and wasm.
+**Exception, deliberate:** napi's `#[napi(object)]` decodes field by field, so an
+unsupported key is dropped before mjmx sees it; there the refusal is the closed
+TypeScript interface in the hand-written `index.d.ts` (compile-time only). Same
+limitation `minifyOptions` already had in that binding; wasm throws properly.
+
+**Latent bug found and fixed by this pass.** juice masks its `codeBlocks` — EJS
+`<% %>` and Handlebars `{{ }}` — **on every call**, before cheerio parses, whether or
+not `juicePreserveTags` was passed. mjmx's inliner did not, so a document with an
+inline `<mj-style>` mangled templating syntax: `{{ "<div class='a'>" }}` tokenized as
+a real tag, and the inliner spliced `style="…"` into the middle of the Handlebars
+string literal (verified against mjml 4.18.0). `mjmx-css-inline`'s `mask.rs` now does
+it. Regression tests: `fixtures/mj_style_templating` + crate unit tests.
+
+The mask is **byte-length preserving** (a run of inert ASCII), unlike juice's
+`JUICE_CODE_BLOCK_<n>_`: the inliner addresses the document by byte offset, so a
+length-changing mask would invalidate every offset. The tree is built from the masked
+copy and the edits splice into the *original*, which restores the masked bytes for
+free — no decode pass. The one leak path, an existing `style` attribute whose value
+holds a code block, is closed by reading that value back through its span in the
+original (`apply::attr_value`).
+
+**Divergence from upstream, deliberate:** `juicePreserveTags` mutates the module-global
+`juice.codeBlocks` object upstream, so registered tags leak into every later render in
+the process. mjmx's are per-render data with no global state. (Also: juice interpolates
+`start`/`end` into a `RegExp`, so they are regex source; mjmx treats them as literals,
+which is what the documented `"<#"` / `"</#"` examples mean.)
 
 `render_with_diagnostics` / `render_file_with_diagnostics` mirror mjml's `{ html, errors }`.
 
@@ -182,15 +237,15 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
     spans from an included partial are meaningless in the main source) is a
     parser/AST milestone, not an option.
 - **Tier 3:** `mjmlConfigPath` / `useMjmlConfigOptions` — needs a `.mjmlconfig` reader.
-- **Unblocked, not implemented:** `juiceOptions` / `juicePreserveTags`. These were blocked
-  on CSS inlining, which now exists (`mjmx-css-inline`), so they are ordinary options
-  again — deliberately deferred to a later pass, not part of the inlining milestone.
-  `juicePreserveTags` in particular mutates the global juice module upstream, so mjmx will
-  need its own shape for it rather than a port.
+- **Two juice options are real gaps, not oversights:** `resolveCSSVariables` (juice
+  defaults it **true**; mjmx behaves as `false`) and `inlinePseudoElements`. Both are
+  refused rather than faked; see the `juiceOptions` table above for what implementing
+  them would cost.
 - **Won't port:** `skeleton`, `preprocessors`, `presets` — JS function / `require()` semantics.
 - Upstream oddities deliberately not copied: `--config.*` booleans don't coerce `"false"`;
-  `juicePreserveTags` mutates the global juice module; mjml-cli's README documents a `-l` flag
-  that does not exist in 4.18.0.
+  `juicePreserveTags` mutates the global juice module (mjmx's is per-render);
+  `...juiceOptions` is spread last, letting a caller delete a document's own inline CSS
+  via `extraCss`; mjml-cli's README documents a `-l` flag that does not exist in 4.18.0.
 
 ## Planned next
 

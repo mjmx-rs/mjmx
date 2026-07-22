@@ -28,7 +28,8 @@
 
 use indexmap::IndexMap;
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
+    Severity, ValidationLevel,
 };
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -68,6 +69,90 @@ pub struct JsRenderOptions {
     /// Also emit the responsive column rules inside an `@media only print` block.
     /// [mjml: `printerSupport`]
     pub printer_support: Option<bool>,
+    /// How to inline `<mj-style inline="inline">`, consulted only when the document
+    /// has an inline `<mj-style>` bucket. Omitted switches keep juice's defaults as
+    /// mjml configures them. [mjml: `juiceOptions`]
+    pub juice_options: Option<JsJuiceOptions>,
+    /// Templating delimiters the CSS inliner must not look inside, keyed by name.
+    /// These *add* to the always-active built-ins — EJS (`<% %>`) and Handlebars
+    /// (`{{ }}`) — and a built-in name re-used here replaces it in place. Key order
+    /// is preserved, since masking is order-sensitive.
+    ///
+    /// Per-call, unlike mjml: upstream writes these into juice's module-global
+    /// `codeBlocks` object, so they leak into every later render in the process.
+    /// [mjml: `juicePreserveTags`]
+    pub juice_preserve_tags: Option<IndexMap<String, JsPreserveTag>>,
+}
+
+/// mjml's `juiceOptions`, restricted to what mjmx's hand-rolled inliner can honour.
+///
+/// mjmx has no juice, so this is not a pass-through object: each juice option was
+/// classified, and these five are the ones that mean something here.
+///
+/// The rest are refused by the *TypeScript* interface in `index.d.ts`, which is
+/// closed — not at runtime, because N-API decodes this object field by field and
+/// drops an unknown key before any mjmx code runs. `mjmx-wasm`, which receives the
+/// raw JS object, throws [`mjmx::unsupported_option`] instead; the same limitation
+/// already applies to [`JsMinifyOptions`] here.
+///
+/// The reasons, in order: `extraCss`, `applyStyleTags`, `removeStyleTags` and
+/// `insertPreservedExtraCss` describe an arrangement mjmx fixes before rendering;
+/// `preserveMediaQueries`, `preserveFontFaces`, `preserveKeyFrames` and
+/// `preservePseudos` are unreachable in mjml's own configuration; `xmlMode`, `url`
+/// and `webResources` have no analogue; `resolveCSSVariables` and
+/// `inlinePseudoElements` are real gaps that cannot be faked.
+#[napi(object)]
+#[derive(Default)]
+pub struct JsJuiceOptions {
+    /// Mirror a matched `width` declaration onto the `width` attribute of
+    /// `table`/`td`/`th`/`img` (default: true).
+    pub apply_width_attributes: Option<bool>,
+    /// Mirror a matched `height` declaration onto the `height` attribute of
+    /// `table`/`td`/`th`/`img` (default: true).
+    pub apply_height_attributes: Option<bool>,
+    /// Mirror `background-color`/`background-image`/`text-align`/`vertical-align` onto
+    /// `bgcolor`/`background`/`align`/`valign` on `<table>` (default: true).
+    pub apply_attributes_table_elements: Option<bool>,
+    /// Keep the `!important` keyword on an inlined declaration (default: false, as in
+    /// juice and therefore mjml). It still decides the cascade either way; attribute
+    /// mirrors never carry it.
+    pub preserve_important: Option<bool>,
+    /// The attribute inline declarations are read from and written to
+    /// (default: `"style"`).
+    pub style_attribute_name: Option<String>,
+}
+
+impl From<JsJuiceOptions> for InlineOptions {
+    fn from(value: JsJuiceOptions) -> Self {
+        let defaults = Self::default();
+        Self {
+            apply_width_attributes: value
+                .apply_width_attributes
+                .unwrap_or(defaults.apply_width_attributes),
+            apply_height_attributes: value
+                .apply_height_attributes
+                .unwrap_or(defaults.apply_height_attributes),
+            apply_attributes_table_elements: value
+                .apply_attributes_table_elements
+                .unwrap_or(defaults.apply_attributes_table_elements),
+            preserve_important: value
+                .preserve_important
+                .unwrap_or(defaults.preserve_important),
+            style_attribute_name: value
+                .style_attribute_name
+                .unwrap_or(defaults.style_attribute_name),
+            preserve_tags: defaults.preserve_tags,
+        }
+    }
+}
+
+/// The delimiters of one `juicePreserveTags` entry.
+#[napi(object)]
+pub struct JsPreserveTag {
+    /// The opening delimiter, e.g. `"<#"`.
+    pub start: String,
+    /// The closing delimiter, e.g. `"</#"`.
+    pub end: String,
 }
 
 /// mjml's `minifyOptions` — the four html-minifier switches mjml hardcodes.
@@ -133,7 +218,31 @@ fn to_render_options(
         minify_options: options.minify_options.map(Into::into).unwrap_or_default(),
         ignore_includes: options.ignore_includes.unwrap_or(defaults.ignore_includes),
         printer_support: options.printer_support.unwrap_or(defaults.printer_support),
+        // `juicePreserveTags` adds to the built-ins rather than replacing them, so the
+        // two mjml options fold into the single carrier `RenderOptions` holds.
+        inline_options: InlineOptions::from(options.juice_options.unwrap_or_default())
+            .with_preserve_tags(to_preserve_tags(options.juice_preserve_tags)?),
     })
+}
+
+/// Turn mjml's `{ name: { start, end } }` object into ordered [`PreserveTag`]s.
+///
+/// Order is kept because masking is sequential: an earlier tag's block hides any
+/// delimiter a later one would have matched inside it.
+fn to_preserve_tags(
+    tags: Option<IndexMap<String, JsPreserveTag>>,
+) -> std::result::Result<Vec<PreserveTag>, String> {
+    tags.unwrap_or_default()
+        .into_iter()
+        .map(|(name, tag)| {
+            if tag.start.is_empty() || tag.end.is_empty() {
+                return Err(format!(
+                    "mjmx: juicePreserveTags '{name}' needs a non-empty start and end"
+                ));
+            }
+            Ok(PreserveTag::new(name, tag.start, tag.end))
+        })
+        .collect()
 }
 
 /// [`to_render_options`], with the failure turned into the JS `TypeError` the exported
@@ -359,6 +468,18 @@ mod tests {
             }),
             ignore_includes: Some(true),
             printer_support: Some(true),
+            juice_options: Some(JsJuiceOptions {
+                apply_width_attributes: Some(false),
+                preserve_important: Some(true),
+                ..JsJuiceOptions::default()
+            }),
+            juice_preserve_tags: Some(IndexMap::from([(
+                "myTag".to_owned(),
+                JsPreserveTag {
+                    start: "<#".to_owned(),
+                    end: "</#".to_owned(),
+                },
+            )])),
         }))
         .unwrap();
 
@@ -390,6 +511,36 @@ mod tests {
                 remove_empty_attributes: true,
             }
         );
+        // `juiceOptions` names only what it changes; the rest keep juice's defaults.
+        assert!(!options.inline_options.apply_width_attributes);
+        assert!(options.inline_options.apply_height_attributes);
+        assert!(options.inline_options.preserve_important);
+        // `juicePreserveTags` adds to the built-ins, never replaces them.
+        assert_eq!(
+            options
+                .inline_options
+                .preserve_tags
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
+            ["EJS", "HBS", "myTag"]
+        );
+    }
+
+    #[test]
+    fn an_empty_preserve_tag_delimiter_is_rejected() {
+        let err = convert(Some(JsRenderOptions {
+            juice_preserve_tags: Some(IndexMap::from([(
+                "bad".to_owned(),
+                JsPreserveTag {
+                    start: "<#".to_owned(),
+                    end: String::new(),
+                },
+            )])),
+            ..JsRenderOptions::default()
+        }))
+        .unwrap_err();
+        assert!(err.contains("bad"), "{err}");
     }
 
     #[test]

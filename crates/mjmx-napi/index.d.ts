@@ -67,6 +67,88 @@ export interface RenderOptions {
    * Default: false.
    */
   printerSupport?: boolean;
+  /**
+   * How to inline `<mj-style inline="inline">`, consulted only when the document has
+   * an inline `<mj-style>` bucket. Matches mjml's `juiceOptions` — but only the keys
+   * that mean something for mjmx's hand-rolled inliner, since there is no juice here
+   * to forward an object to. This interface is closed on purpose: an unsupported
+   * juice option is a type error rather than a silently ignored setting.
+   * Default: `{}`.
+   */
+  juiceOptions?: JuiceOptions;
+  /**
+   * Templating delimiters the CSS inliner must not look inside, keyed by name.
+   * Matches mjml's `juicePreserveTags`. These *add* to the built-ins, which are
+   * always active — EJS (`<% %>`) and Handlebars (`{{ }}`) — and re-using a built-in
+   * name replaces it in place. Key order is preserved, since masking is sequential.
+   *
+   * Unlike mjml, which assigns these into juice's module-global `codeBlocks` object,
+   * these are per-call: they never leak into a later `render`. Default: `{}`.
+   */
+  juicePreserveTags?: Record<string, PreserveTag>;
+}
+
+/**
+ * mjml's `juiceOptions`, restricted to what mjmx's inliner can honour. Omitted
+ * fields keep juice's own defaults, as mjml configures them.
+ *
+ * The juice options deliberately **absent** here, each for a stated reason:
+ *
+ * - `extraCss`, `applyStyleTags`, `removeStyleTags`, `insertPreservedExtraCss` —
+ *   in mjmx these are not settings but the shape of the pass. `mjmx` splits
+ *   `<mj-style>` into an inline bucket and a `<style>` bucket before rendering, and
+ *   the inliner only ever sees the first. (Upstream lets you override them only
+ *   because `...juiceOptions` is spread last, which can delete a document's own
+ *   inline CSS.)
+ * - `preserveMediaQueries`, `preserveFontFaces`, `preserveKeyFrames`,
+ *   `preservePseudos` — unreachable: juice reads them only under
+ *   `insertPreservedExtraCss` / `removeStyleTags`, and mjml sets both `false`.
+ * - `xmlMode`, `url`, `webResources` — no mjmx analogue; the inliner does no I/O.
+ * - `resolveCSSVariables`, `inlinePseudoElements` — real gaps that cannot be faked.
+ *   mjmx writes `var(--x)` through verbatim (i.e. behaves as `false`) and drops
+ *   `::before`/`::after` rules.
+ *
+ * **How the refusal is enforced here.** This interface is closed, so passing one of
+ * those keys in an object literal is a compile error. It is *not* a runtime error:
+ * N-API decodes this object field by field into a typed Rust struct, so a key it does
+ * not know is dropped before any mjmx code runs, and plain-JS callers (or a
+ * pre-typed variable, which escapes TypeScript's excess-property check) get it
+ * silently ignored. The wasm build, which sees the raw object, throws instead. Same
+ * trade-off as `minifyOptions` in this binding.
+ */
+export interface JuiceOptions {
+  /**
+   * Mirror a matched `width` declaration onto the `width` attribute of
+   * `table`/`td`/`th`/`img`. Default: true.
+   */
+  applyWidthAttributes?: boolean;
+  /**
+   * Mirror a matched `height` declaration onto the `height` attribute of
+   * `table`/`td`/`th`/`img`. Default: true.
+   */
+  applyHeightAttributes?: boolean;
+  /**
+   * Mirror `background-color`/`background-image`/`text-align`/`vertical-align` onto
+   * `bgcolor`/`background`/`align`/`valign` on `<table>`. Default: true.
+   */
+  applyAttributesTableElements?: boolean;
+  /**
+   * Keep the `!important` keyword on an inlined declaration. Default: false, which is
+   * juice's default and therefore mjml's: `!important` still decides the cascade
+   * (it evicts the element's own declaration), but the keyword is dropped from the
+   * written value. Attribute mirrors never carry it either way.
+   */
+  preserveImportant?: boolean;
+  /** The attribute inline declarations are read from and written to. Default: "style". */
+  styleAttributeName?: string;
+}
+
+/** The delimiters of one `juicePreserveTags` entry. */
+export interface PreserveTag {
+  /** The opening delimiter, e.g. `"<#"`. */
+  start: string;
+  /** The closing delimiter, e.g. `"</#"`. */
+  end: string;
 }
 
 /**

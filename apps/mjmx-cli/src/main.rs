@@ -46,7 +46,8 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
+    Severity, ValidationLevel,
 };
 use mjmx_dev_server::DevOptions;
 use serde::de::{MapAccess, Visitor};
@@ -148,6 +149,23 @@ struct RenderOptionArgs {
     /// printed email keeps its desktop layout. [mjml: `printerSupport`]
     #[arg(long)]
     printer_support: bool,
+
+    /// How to inline `<mj-style inline="inline">`, as a JSON object in juice's own
+    /// shape — e.g. `'{"preserveImportant": true, "applyWidthAttributes": false}'`.
+    /// Recognised keys are `applyWidthAttributes` (default true),
+    /// `applyHeightAttributes` (true), `applyAttributesTableElements` (true),
+    /// `preserveImportant` (false) and `styleAttributeName` ("style"). mjmx has no
+    /// juice, so every other juice option is rejected with the reason rather than
+    /// accepted and ignored. [mjml: `juiceOptions`]
+    #[arg(long, value_name = "JSON")]
+    juice_options: Option<String>,
+
+    /// Templating delimiters the CSS inliner must not look inside, as a JSON object
+    /// in mjml's own shape — e.g. `'{"myTag": {"start": "<#", "end": "</#"}}'`. These
+    /// *add* to the built-ins, which are always active: EJS (`<% %>`) and Handlebars
+    /// (`{{ }}`). [mjml: `juicePreserveTags`]
+    #[arg(long, value_name = "JSON")]
+    juice_preserve_tags: Option<String>,
 }
 
 /// `--validation-level` values, spelled exactly as mjml's `validationLevel` strings.
@@ -185,10 +203,15 @@ impl From<ValidationLevelArg> for ValidationLevel {
 impl RenderOptionArgs {
     /// Build the [`RenderOptions`] these flags describe.
     ///
-    /// Fails only on a malformed `--fonts` or `--minify-options` spec; every other
-    /// flag is validated by clap.
+    /// Fails only on a malformed `--fonts`, `--minify-options`, `--juice-options` or
+    /// `--juice-preserve-tags` spec; every other flag is validated by clap.
     fn to_render_options(&self) -> Result<RenderOptions, String> {
+        let inline_options = parse_juice_options(self.juice_options.as_deref())?
+            .with_preserve_tags(parse_juice_preserve_tags(
+                self.juice_preserve_tags.as_deref(),
+            )?);
         Ok(RenderOptions {
+            inline_options,
             breakpoint: self.breakpoint,
             beautify: self.beautify,
             minify: self.minify,
@@ -668,6 +691,115 @@ fn parse_minify_options(spec: Option<&str>) -> Result<MinifyOptions, String> {
     })
 }
 
+/// Parse `--juice-options`; `None` (the flag omitted) is mjml's `juiceOptions: {}`.
+///
+/// Driven off the raw JSON map rather than a `deny_unknown_fields` struct, so that a
+/// juice option mjmx does not implement is refused *with its reason*
+/// ([`mjmx::unsupported_option`]) instead of a bare "unknown field". Silently
+/// accepting one would promise behaviour that never happens.
+fn parse_juice_options(spec: Option<&str>) -> Result<InlineOptions, String> {
+    let mut options = InlineOptions::default();
+    let Some(spec) = spec else {
+        return Ok(options);
+    };
+    let map: serde_json::Map<String, serde_json::Value> = serde_json::from_str(spec.trim())
+        .map_err(|err| {
+            format!(
+                "--juice-options: invalid JSON object: {err} (supported keys: {})",
+                mjmx::SUPPORTED_OPTIONS.join(", ")
+            )
+        })?;
+
+    let flag = |key: &str, value: &serde_json::Value| {
+        value
+            .as_bool()
+            .ok_or_else(|| format!("--juice-options: `{key}` must be a boolean"))
+    };
+    for (key, value) in &map {
+        match key.as_str() {
+            "applyWidthAttributes" => options.apply_width_attributes = flag(key, value)?,
+            "applyHeightAttributes" => options.apply_height_attributes = flag(key, value)?,
+            "applyAttributesTableElements" => {
+                options.apply_attributes_table_elements = flag(key, value)?;
+            }
+            "preserveImportant" => options.preserve_important = flag(key, value)?,
+            "styleAttributeName" => {
+                options.style_attribute_name = value
+                    .as_str()
+                    .ok_or("--juice-options: `styleAttributeName` must be a string")?
+                    .to_owned();
+            }
+            other => {
+                return Err(format!(
+                    "--juice-options: {}",
+                    mjmx::unsupported_option(other)
+                ));
+            }
+        }
+    }
+    Ok(options)
+}
+
+/// One `juicePreserveTags` entry: the delimiters of a templating construct.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreserveTagSpec {
+    start: String,
+    end: String,
+}
+
+/// `juicePreserveTags` as written, **in key order** — like [`FontTable`], and for
+/// the same reason: `serde_json`'s own map sorts, and masking is order-sensitive.
+/// An earlier tag's block hides any delimiter a later tag would have matched inside
+/// it, exactly as juice's per-key `String.replace` chain does.
+struct PreserveTagTable(Vec<PreserveTag>);
+
+impl<'de> serde::Deserialize<'de> for PreserveTagTable {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TableVisitor;
+
+        impl<'de> Visitor<'de> for TableVisitor {
+            type Value = PreserveTagTable;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object mapping tag names to `{start, end}` delimiters")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<PreserveTagTable, M::Error> {
+                let mut tags = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some((name, spec)) = map.next_entry::<String, PreserveTagSpec>()? {
+                    if spec.start.is_empty() || spec.end.is_empty() {
+                        return Err(serde::de::Error::custom(format!(
+                            "`{name}` needs a non-empty `start` and `end`"
+                        )));
+                    }
+                    tags.push(PreserveTag::new(name, spec.start, spec.end));
+                }
+                Ok(PreserveTagTable(tags))
+            }
+        }
+
+        deserializer.deserialize_map(TableVisitor)
+    }
+}
+
+/// Parse `--juice-preserve-tags`; the tags *add* to the always-active built-ins.
+fn parse_juice_preserve_tags(spec: Option<&str>) -> Result<Vec<PreserveTag>, String> {
+    let Some(spec) = spec else {
+        return Ok(Vec::new());
+    };
+    let PreserveTagTable(tags) = serde_json::from_str(spec.trim()).map_err(|err| {
+        format!(
+            "--juice-preserve-tags: invalid tag table: {err} \
+             (expected `{{\"myTag\": {{\"start\": \"<#\", \"end\": \"</#\"}}}}`)"
+        )
+    })?;
+    Ok(tags)
+}
+
 /// Print every diagnostic to stderr using its `Display` formatting.
 fn print_diagnostics(diagnostics: &[Diagnostic]) {
     for diagnostic in diagnostics {
@@ -720,6 +852,14 @@ mod tests {
             .expect("options should build")
     }
 
+    /// Parse a command line and return the error building its options reports.
+    fn render_options_err(argv: &[&str]) -> String {
+        render_args(argv)
+            .options
+            .to_render_options()
+            .expect_err("options should not build")
+    }
+
     #[test]
     fn defaults_match_mjml() {
         let options = render_options(&["in.mjml"]);
@@ -734,6 +874,91 @@ mod tests {
         assert!(!options.ignore_includes);
         assert!(!options.printer_support);
         assert_eq!(options.minify_options, MinifyOptions::default());
+        assert_eq!(options.inline_options, InlineOptions::default());
+    }
+
+    #[test]
+    fn juice_options_json_sets_only_the_keys_it_names() {
+        let options = render_options(&[
+            "in.mjml",
+            "--juice-options",
+            r#"{"preserveImportant": true, "applyWidthAttributes": false}"#,
+        ]);
+        assert!(options.inline_options.preserve_important);
+        assert!(!options.inline_options.apply_width_attributes);
+        // Untouched keys keep juice's defaults, as mjml's spread does.
+        assert!(options.inline_options.apply_height_attributes);
+        assert!(options.inline_options.apply_attributes_table_elements);
+        assert_eq!(options.inline_options.style_attribute_name, "style");
+    }
+
+    #[test]
+    fn a_refused_juice_option_says_why_it_is_refused() {
+        // The failure mode this exists to avoid is accepting the option and doing
+        // nothing, so the error must name the option *and* the reason.
+        let err = render_options_err(&[
+            "in.mjml",
+            "--juice-options",
+            r#"{"resolveCSSVariables": true}"#,
+        ]);
+        assert!(err.contains("resolveCSSVariables"), "{err}");
+        assert!(err.contains("custom-property cascade"), "{err}");
+
+        let err = render_options_err(&["in.mjml", "--juice-options", r#"{"extraCss": ".a{}"}"#]);
+        assert!(err.contains("not a setting but the CSS itself"), "{err}");
+    }
+
+    #[test]
+    fn an_unknown_juice_option_lists_the_supported_ones() {
+        let err = render_options_err(&["in.mjml", "--juice-options", r#"{"nonsense": true}"#]);
+        assert!(err.contains("unknown option `nonsense`"), "{err}");
+        assert!(err.contains("applyWidthAttributes"), "{err}");
+    }
+
+    #[test]
+    fn a_juice_option_of_the_wrong_type_is_rejected() {
+        let err = render_options_err(&[
+            "in.mjml",
+            "--juice-options",
+            r#"{"preserveImportant": "yes"}"#,
+        ]);
+        assert!(err.contains("must be a boolean"), "{err}");
+    }
+
+    #[test]
+    fn juice_preserve_tags_add_to_the_built_ins_in_order() {
+        let options = render_options(&[
+            "in.mjml",
+            "--juice-preserve-tags",
+            r#"{"zed": {"start": "[[", "end": "]]"}, "abe": {"start": "<#", "end": "</#"}}"#,
+        ]);
+        assert_eq!(
+            options
+                .inline_options
+                .preserve_tags
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
+            // Written order, not sorted: masking is sequential.
+            ["EJS", "HBS", "zed", "abe"]
+        );
+    }
+
+    #[test]
+    fn a_malformed_preserve_tag_table_is_rejected() {
+        let err = render_options_err(&[
+            "in.mjml",
+            "--juice-preserve-tags",
+            r#"{"a": {"start": "<#"}}"#,
+        ]);
+        assert!(err.contains("--juice-preserve-tags"), "{err}");
+
+        let err = render_options_err(&[
+            "in.mjml",
+            "--juice-preserve-tags",
+            r#"{"a": {"start": "", "end": "x"}}"#,
+        ]);
+        assert!(err.contains("non-empty"), "{err}");
     }
 
     #[test]

@@ -22,8 +22,11 @@
 use std::fmt::Write as _;
 use std::ops::Range;
 
+use mjmx_html_tokenizer::Attr;
+
 use crate::css::{Declaration, Rule};
 use crate::dom::{Element, Tree};
+use crate::options::InlineOptions;
 
 /// `style` declarations that also have to be mirrored onto an HTML attribute of
 /// a `<table>`, in the order the attributes are appended. The declaration is
@@ -64,11 +67,22 @@ impl Merged {
 }
 
 /// Apply `rules` to `html`, returning the rewritten document.
-pub(crate) fn apply(html: &str, rules: &[Rule], tree: &Tree<'_>) -> String {
+///
+/// `tree` was built from the *masked* document (see [`mask`](crate::mask)), whose
+/// byte offsets are the same as `html`'s — so the edits it yields splice into the
+/// original, which is what restores every masked templating construct. Attribute
+/// *values* still have to be read back out of `html`, since the tree's borrow
+/// exposes the masked bytes; that is what [`attr_value`] is for.
+pub(crate) fn apply(
+    html: &str,
+    rules: &[Rule],
+    tree: &Tree<'_>,
+    options: &InlineOptions,
+) -> String {
     let mut edits: Vec<Edit> = Vec::new();
     for (index, element) in tree.elements.iter().enumerate() {
         if element.inlinable {
-            rewrite(rules, tree, index, element, &mut edits);
+            rewrite(html, rules, tree, index, element, options, &mut edits);
         }
     }
     splice(html, edits)
@@ -76,17 +90,19 @@ pub(crate) fn apply(html: &str, rules: &[Rule], tree: &Tree<'_>) -> String {
 
 /// Queue the edits for one element, if any rule matched it.
 fn rewrite(
+    html: &str,
     rules: &[Rule],
     tree: &Tree<'_>,
     index: usize,
     element: &Element<'_>,
+    options: &InlineOptions,
     edits: &mut Vec<Edit>,
 ) {
     let winners = winners(rules, tree, index);
     if winners.is_empty() {
         return;
     }
-    let merged = merge(&winners, element);
+    let merged = merge(&winners, element, html, options);
 
     // Attributes that do not exist yet are collected into one insertion at the
     // end of the attribute list, so they land in a stable order.
@@ -96,9 +112,15 @@ fn rewrite(
         declaration.write(&mut style);
     }
     if !style.is_empty() {
-        set_attribute(element, "style", &style, edits, &mut appended);
+        set_attribute(
+            element,
+            &options.style_attribute_name,
+            &style,
+            edits,
+            &mut appended,
+        );
     }
-    for (value, attribute) in mirrored_attributes(element, &merged) {
+    for (value, attribute) in mirrored_attributes(element, &merged, options) {
         set_attribute(element, attribute, &value, edits, &mut appended);
     }
     if !appended.is_empty() {
@@ -150,10 +172,15 @@ fn winners(rules: &[Rule], tree: &Tree<'_>, index: usize) -> Vec<Declaration> {
 }
 
 /// Fold the cascade winners into the element's existing `style` attribute.
-fn merge(winners: &[Declaration], element: &Element<'_>) -> Vec<Merged> {
+fn merge(
+    winners: &[Declaration],
+    element: &Element<'_>,
+    html: &str,
+    options: &InlineOptions,
+) -> Vec<Merged> {
     let mut existing: Vec<Merged> = element
-        .attr("style")
-        .map(|attr| parse_style_attribute(attr.value))
+        .attr(&options.style_attribute_name)
+        .map(|attr| parse_style_attribute(attr_value(html, attr)))
         .unwrap_or_default();
 
     let mut prepended: Vec<Merged> = Vec::new();
@@ -161,7 +188,11 @@ fn merge(winners: &[Declaration], element: &Element<'_>) -> Vec<Merged> {
     for winner in winners {
         let merged = Merged {
             property: winner.property.clone(),
-            value: winner.value.clone(),
+            value: if winner.important && options.preserve_important {
+                format!("{} !important", winner.value)
+            } else {
+                winner.value.clone()
+            },
         };
         let held = existing.iter().any(|d| d.property == winner.property);
         if winner.important {
@@ -177,6 +208,18 @@ fn merge(winners: &[Declaration], element: &Element<'_>) -> Vec<Merged> {
     prepended.extend(existing);
     prepended.extend(appended);
     prepended
+}
+
+/// The attribute's value as it stands in `source`.
+///
+/// [`Attr::value`] borrows whichever string the tree was built from, which is the
+/// *masked* document; the span is valid in both, so reading through it recovers
+/// the real bytes. The value ends just before the closing quote (when there is
+/// one) and is [`Attr::value`]'s own length long.
+fn attr_value<'a>(source: &'a str, attr: &Attr<'_>) -> &'a str {
+    let raw = &source[attr.span.clone()];
+    let end = attr.span.end - usize::from(raw.ends_with(['"', '\'']));
+    &source[end - attr.value.len()..end]
 }
 
 /// Split a `style` attribute value into declarations.
@@ -227,23 +270,41 @@ fn parse_style_attribute(value: &str) -> Vec<Merged> {
 /// Two independent mappings live here. `width`/`height` become **unitless**
 /// attributes on tables and images, and only from a plain pixel or unitless
 /// length — `width: 100%` and `height: auto` have no attribute spelling and are
-/// left alone. The `<table>`-only mirrors ([`TABLE_ATTRIBUTES`]) are unconditional.
-fn mirrored_attributes(element: &Element<'_>, merged: &[Merged]) -> Vec<(String, &'static str)> {
+/// left alone. The `<table>`-only mirrors are [`TABLE_ATTRIBUTES`].
+///
+/// Each mapping is individually switchable, under juice's names:
+/// `applyWidthAttributes`, `applyHeightAttributes` and
+/// `applyAttributesTableElements`. All three default on, as they do in juice, so
+/// this is what mjml does unless a caller says otherwise.
+fn mirrored_attributes(
+    element: &Element<'_>,
+    merged: &[Merged],
+    options: &InlineOptions,
+) -> Vec<(String, &'static str)> {
     let lookup = |property: &str| {
         merged
             .iter()
             .find(|d| d.property == property)
-            .map(|d| d.value.as_str())
+            // An attribute mirror never carries the keyword, whatever
+            // `preserve_important` says — juice strips it here too.
+            .map(|d| without_important(&d.value))
     };
     let mut out = Vec::new();
     if takes_dimension_attributes(&element.tag) {
-        for dimension in ["width", "height"] {
+        let dimensions = [
+            ("width", options.apply_width_attributes),
+            ("height", options.apply_height_attributes),
+        ];
+        for (dimension, enabled) in dimensions {
+            if !enabled {
+                continue;
+            }
             if let Some(value) = lookup(dimension).and_then(as_pixel_length) {
                 out.push((value.to_owned(), dimension));
             }
         }
     }
-    if element.tag == "table" {
+    if options.apply_attributes_table_elements && element.tag == "table" {
         for (property, attribute) in TABLE_ATTRIBUTES {
             if let Some(value) = lookup(property) {
                 out.push((unwrap_url(value).to_owned(), *attribute));
@@ -251,6 +312,13 @@ fn mirrored_attributes(element: &Element<'_>, merged: &[Merged]) -> Vec<(String,
         }
     }
     out
+}
+
+/// A declaration value without its trailing `!important`.
+fn without_important(value: &str) -> &str {
+    value
+        .strip_suffix("!important")
+        .map_or(value, str::trim_end)
 }
 
 /// A length that can be written as an HTML dimension attribute: an integer

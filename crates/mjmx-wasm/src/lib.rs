@@ -32,7 +32,8 @@
 //! own name.
 
 use mjmx::{
-    Diagnostic, FontFace, FormatOptions, MinifyOptions, RenderOptions, Severity, ValidationLevel,
+    Diagnostic, FontFace, FormatOptions, InlineOptions, MinifyOptions, PreserveTag, RenderOptions,
+    Severity, ValidationLevel,
 };
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -112,6 +113,72 @@ export interface RenderOptions {
    * mjml-core's `helpers/mediaQueries.js`). Default: false.
    */
   printerSupport?: boolean;
+  /**
+   * How to inline `<mj-style inline="inline">`. Matches mjml's `juiceOptions`, but
+   * only the keys that mean something for mjmx's hand-rolled inliner — there is no
+   * juice here to forward an object to. Any other juice option throws, with the
+   * reason, rather than being accepted and ignored. Default: `{}`.
+   */
+  juiceOptions?: JuiceOptions;
+  /**
+   * Templating delimiters the CSS inliner must not look inside, keyed by name —
+   * mjml's `juicePreserveTags`. These *add* to the built-ins, which are always
+   * active: EJS (`<% %>`) and Handlebars (`{{ }}`). Key order is preserved, and
+   * re-using a built-in name replaces it in place.
+   *
+   * Unlike mjml, which writes them into juice's module-global `codeBlocks` object,
+   * these are per-call: nothing leaks into a later `render`. Default: `{}`.
+   */
+  juicePreserveTags?: Record<string, PreserveTag>;
+}
+
+/**
+ * mjml's `juiceOptions`, restricted to what mjmx's inliner can honour. Omitted
+ * fields keep juice's own defaults, as mjml configures them.
+ *
+ * The juice options that are **not** here are refused on purpose, each for a stated
+ * reason: `extraCss`, `applyStyleTags`, `removeStyleTags` and
+ * `insertPreservedExtraCss` describe an arrangement mjmx fixes before rendering (it
+ * splits `<mj-style>` into an inline bucket and a `<style>` bucket, and the inliner
+ * only ever sees the first); `preserveMediaQueries`, `preserveFontFaces`,
+ * `preserveKeyFrames` and `preservePseudos` are unreachable in mjml's own
+ * configuration; `xmlMode`, `url` and `webResources` have no mjmx analogue; and
+ * `resolveCSSVariables` and `inlinePseudoElements` are genuine gaps that cannot be
+ * faked. Passing any of them throws a `TypeError` naming the reason.
+ */
+export interface JuiceOptions {
+  /**
+   * Mirror a matched `width` declaration onto the `width` attribute of
+   * `table`/`td`/`th`/`img`. Default: true.
+   */
+  applyWidthAttributes?: boolean;
+  /**
+   * Mirror a matched `height` declaration onto the `height` attribute of
+   * `table`/`td`/`th`/`img`. Default: true.
+   */
+  applyHeightAttributes?: boolean;
+  /**
+   * Mirror `background-color`/`background-image`/`text-align`/`vertical-align` onto
+   * `bgcolor`/`background`/`align`/`valign` on `<table>`. Default: true.
+   */
+  applyAttributesTableElements?: boolean;
+  /**
+   * Keep the `!important` keyword on an inlined declaration. Default: false, which
+   * is juice's default and therefore mjml's: `!important` still decides the cascade,
+   * but the keyword is dropped from the written value. Attribute mirrors never carry
+   * it either way.
+   */
+  preserveImportant?: boolean;
+  /** The attribute inline declarations are read from and written to. Default: "style". */
+  styleAttributeName?: string;
+}
+
+/** The delimiters of one `juicePreserveTags` entry. */
+export interface PreserveTag {
+  /** The opening delimiter, e.g. `"<#"`. */
+  start: string;
+  /** The closing delimiter, e.g. `"</#"`. */
+  end: string;
 }
 
 /**
@@ -203,6 +270,105 @@ struct JsRenderOptions {
     minify_options: Option<JsMinifyOptions>,
     ignore_includes: Option<bool>,
     printer_support: Option<bool>,
+    juice_options: Option<JsJuiceOptions>,
+    juice_preserve_tags: Option<PreserveTagTable>,
+}
+
+/// mjml's `juiceOptions` object, restricted to what mjmx's hand-rolled inliner can
+/// honour. Omitted fields keep [`InlineOptions::default`], i.e. juice's defaults as
+/// mjml configures them.
+///
+/// The keys mjmx refuses are collected into `refused` rather than being rejected by
+/// `deny_unknown_fields`, so the error can name *why* a real juice option is not
+/// accepted ([`mjmx::unsupported_option`]) instead of listing valid fields. Accepting
+/// one silently is the failure mode this whole shape exists to avoid.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JsJuiceOptions {
+    #[serde(default)]
+    apply_width_attributes: Option<bool>,
+    #[serde(default)]
+    apply_height_attributes: Option<bool>,
+    #[serde(default)]
+    apply_attributes_table_elements: Option<bool>,
+    #[serde(default)]
+    preserve_important: Option<bool>,
+    #[serde(default)]
+    style_attribute_name: Option<String>,
+    #[serde(flatten)]
+    refused: std::collections::BTreeMap<String, serde::de::IgnoredAny>,
+}
+
+impl JsJuiceOptions {
+    /// The [`InlineOptions`] this object describes, or the reason it is not accepted.
+    fn into_inline_options(self) -> Result<InlineOptions, String> {
+        if let Some(key) = self.refused.keys().next() {
+            return Err(mjmx::unsupported_option(key));
+        }
+        let defaults = InlineOptions::default();
+        Ok(InlineOptions {
+            apply_width_attributes: self
+                .apply_width_attributes
+                .unwrap_or(defaults.apply_width_attributes),
+            apply_height_attributes: self
+                .apply_height_attributes
+                .unwrap_or(defaults.apply_height_attributes),
+            apply_attributes_table_elements: self
+                .apply_attributes_table_elements
+                .unwrap_or(defaults.apply_attributes_table_elements),
+            preserve_important: self
+                .preserve_important
+                .unwrap_or(defaults.preserve_important),
+            style_attribute_name: self
+                .style_attribute_name
+                .unwrap_or(defaults.style_attribute_name),
+            preserve_tags: defaults.preserve_tags,
+        })
+    }
+}
+
+/// `juicePreserveTags` as written, in key order — masking is order-sensitive, so a
+/// sorted map would be wrong.
+struct PreserveTagTable(Vec<PreserveTag>);
+
+/// One `juicePreserveTags` entry.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JsPreserveTag {
+    start: String,
+    end: String,
+}
+
+impl<'de> Deserialize<'de> for PreserveTagTable {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct TableVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for TableVisitor {
+            type Value = PreserveTagTable;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("an object mapping tag names to `{start, end}` delimiters")
+            }
+
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<PreserveTagTable, M::Error> {
+                let mut tags = Vec::with_capacity(map.size_hint().unwrap_or(0));
+                while let Some((name, tag)) = map.next_entry::<String, JsPreserveTag>()? {
+                    if tag.start.is_empty() || tag.end.is_empty() {
+                        return Err(serde::de::Error::custom(format!(
+                            "juicePreserveTags: `{name}` needs a non-empty `start` and `end`"
+                        )));
+                    }
+                    tags.push(PreserveTag::new(name, tag.start, tag.end));
+                }
+                Ok(PreserveTagTable(tags))
+            }
+        }
+
+        deserializer.deserialize_map(TableVisitor)
+    }
 }
 
 /// mjml's `minifyOptions` object. Every field is optional; omitted ones keep
@@ -315,8 +481,16 @@ impl JsRenderOptions {
                     .to_owned(),
             );
         }
+        // `juicePreserveTags` *adds* to the built-ins rather than replacing them, so
+        // it is folded into the `juiceOptions` struct rather than sitting beside it.
+        let inline_options = self
+            .juice_options
+            .unwrap_or_default()
+            .into_inline_options()?
+            .with_preserve_tags(self.juice_preserve_tags.map_or_else(Vec::new, |t| t.0));
         let defaults = RenderOptions::default();
         Ok(RenderOptions {
+            inline_options,
             breakpoint: self.breakpoint.unwrap_or(defaults.breakpoint),
             beautify: self.beautify.unwrap_or(defaults.beautify),
             minify: self.minify.unwrap_or(defaults.minify),
@@ -515,6 +689,56 @@ mod tests {
         assert!(!options.ignore_includes);
         assert!(!options.printer_support);
         assert_eq!(options.minify_options, MinifyOptions::default());
+        assert_eq!(options.inline_options, InlineOptions::default());
+    }
+
+    #[test]
+    fn juice_options_and_preserve_tags_round_trip() {
+        let options = options(
+            r#"{
+                "juiceOptions": {"preserveImportant": true, "applyWidthAttributes": false},
+                "juicePreserveTags": {"zed": {"start": "[[", "end": "]]"},
+                                      "abe": {"start": "<#", "end": "</#"}}
+            }"#,
+        )
+        .unwrap();
+        assert!(options.inline_options.preserve_important);
+        assert!(!options.inline_options.apply_width_attributes);
+        // Omitted keys keep juice's defaults, as mjml's spread does.
+        assert!(options.inline_options.apply_attributes_table_elements);
+        assert_eq!(
+            options
+                .inline_options
+                .preserve_tags
+                .iter()
+                .map(|t| t.name.as_str())
+                .collect::<Vec<_>>(),
+            // Written order, not sorted: masking is sequential.
+            ["EJS", "HBS", "zed", "abe"]
+        );
+    }
+
+    #[test]
+    fn a_refused_juice_option_says_why_it_is_refused() {
+        let err = options(r#"{"juiceOptions": {"resolveCSSVariables": true}}"#).unwrap_err();
+        assert!(err.contains("resolveCSSVariables"), "{err}");
+        assert!(err.contains("custom-property cascade"), "{err}");
+
+        let err = options(r#"{"juiceOptions": {"applyStyleTags": true}}"#).unwrap_err();
+        assert!(err.contains("inline bucket"), "{err}");
+
+        let err = options(r#"{"juiceOptions": {"nonsense": true}}"#).unwrap_err();
+        assert!(err.contains("unknown option `nonsense`"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_preserve_tag_delimiter_is_a_deserialization_error() {
+        assert!(
+            serde_json::from_str::<JsRenderOptions>(
+                r#"{"juicePreserveTags": {"a": {"start": "<#", "end": ""}}}"#
+            )
+            .is_err()
+        );
     }
 
     #[test]
