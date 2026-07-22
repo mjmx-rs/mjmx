@@ -163,6 +163,21 @@ fn section_attrs_matches_mjml_reference() {
 }
 
 #[test]
+fn section_full_width_bare_matches_mjml_reference() {
+    // A bare valueless attribute (`<mj-section full-width>`) is NOT the same as
+    // `full-width="full-width"`: mjml's htmlparser2 gives the bare form the value `""`
+    // (convertBooleans only maps `"true"`/`"false"`), and `isFullWidth()` checks
+    // `=== 'full-width'`, so the section renders as a normal (non-full-width) section.
+    // mjmx stores a valueless attribute as absent, which fails the same equality check —
+    // so the two agree. This fixture locks that agreement in.
+    assert_golden(
+        "section_full_width_bare",
+        fixture!("section_full_width_bare.mjml"),
+        fixture!("section_full_width_bare.html"),
+    );
+}
+
+#[test]
 fn twocol_matches_mjml_reference() {
     assert_golden("twocol", fixture!("twocol.mjml"), fixture!("twocol.html"));
 }
@@ -232,6 +247,50 @@ fn head_raw_file_start_matches_mjml_reference() {
         "head_raw_file_start",
         fixture!("head_raw_file_start.mjml"),
         fixture!("head_raw_file_start.html"),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// <mj-raw> in a scaffolding parent.
+//
+// mjml's `isRawElement()` branch: a raw child renders its content directly at its
+// document position, exempt from the parent's row/cell scaffolding — inside `<tbody>`
+// (column, hero) or between the opened-and-closed Outlook conditionals (section, group),
+// never wrapped in a `<tr>` or a ghost `<td>`.
+
+#[test]
+fn mj_raw_in_column_matches_mjml_reference() {
+    assert_golden(
+        "mj_raw_in_column",
+        fixture!("mj_raw_in_column.mjml"),
+        fixture!("mj_raw_in_column.html"),
+    );
+}
+
+#[test]
+fn mj_raw_in_group_matches_mjml_reference() {
+    assert_golden(
+        "mj_raw_in_group",
+        fixture!("mj_raw_in_group.mjml"),
+        fixture!("mj_raw_in_group.html"),
+    );
+}
+
+#[test]
+fn mj_raw_in_section_matches_mjml_reference() {
+    assert_golden(
+        "mj_raw_in_section",
+        fixture!("mj_raw_in_section.mjml"),
+        fixture!("mj_raw_in_section.html"),
+    );
+}
+
+#[test]
+fn mj_raw_in_hero_matches_mjml_reference() {
+    assert_golden(
+        "mj_raw_in_hero",
+        fixture!("mj_raw_in_hero.mjml"),
+        fixture!("mj_raw_in_hero.html"),
     );
 }
 
@@ -620,6 +679,34 @@ fn mj_style_templating_matches_mjml_reference() {
         "mj_style_templating",
         fixture!("mj_style_templating.mjml"),
         fixture!("mj_style_templating.html"),
+    );
+}
+
+// ---------------------------------------------------------------------------
+// <mj-html-attributes>
+//
+// mjml collects `(selector, name, value)` triples from `<mj-html-attributes>` and, in a
+// cheerio pass over the assembled body (before juice), adds `name="value"` to every
+// element the CSS `path` matches — overwriting an attribute that already exists, a no-op
+// on no match, and never descending into Outlook conditional comments.
+
+#[test]
+fn mj_html_attributes_matches_mjml_reference() {
+    assert_golden(
+        "mj_html_attributes",
+        fixture!("mj_html_attributes.mjml"),
+        fixture!("mj_html_attributes.html"),
+    );
+}
+
+#[test]
+fn mj_html_attributes_edge_matches_mjml_reference() {
+    // Overwrites `border="0"` in place, appends `data-x`, and the `.nomatchclass`
+    // selector adds nothing (no match).
+    assert_golden(
+        "mj_html_attributes_edge",
+        fixture!("mj_html_attributes_edge.mjml"),
+        fixture!("mj_html_attributes_edge.html"),
     );
 }
 

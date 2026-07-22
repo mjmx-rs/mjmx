@@ -11,7 +11,7 @@ use mjmx_syntax::MjmlTag;
 use crate::components::css_class::{append_css_class, css_class};
 use crate::components::{Column, ColumnWidth};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children};
+use crate::render::{Render, RenderResult, render_children, render_element};
 
 /// Renderer for `<mj-group>`.
 pub struct Group<'a> {
@@ -94,9 +94,11 @@ impl<'a> Render<'a> for Group<'a> {
         let saved = ctx.container_width;
         ctx.container_width = group_width;
         render_children(self.element, ctx, buf, |col, ctx, buf| {
-            // Only columns are laid out in a group; any other element child is skipped.
+            // Only columns are laid out in a group. Any other child is a raw element
+            // (mjml's `isRawElement`, i.e. mj-raw), which mjml's `renderChildren` emits
+            // directly between the group's ghost cells rather than in one of its own.
             if col.tag != MjmlTag::MjColumn {
-                return Ok(());
+                return render_element(col, ctx, buf);
             }
             // mjml's `getElementWidth(component.getWidthAsPixel())`: the column's own
             // width resolved against the *group* box.

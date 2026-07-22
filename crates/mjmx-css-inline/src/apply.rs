@@ -46,9 +46,9 @@ fn takes_dimension_attributes(tag: &str) -> bool {
 }
 
 /// One splice into the document: replace `range` with `text`.
-struct Edit {
-    range: Range<usize>,
-    text: String,
+pub(crate) struct Edit {
+    pub(crate) range: Range<usize>,
+    pub(crate) text: String,
 }
 
 /// A declaration on its way into a `style` attribute.
@@ -348,7 +348,7 @@ fn unwrap_url(value: &str) -> &str {
 
 /// Set `name="value"` on `element`: in place when the attribute already exists,
 /// otherwise queued onto `appended` for insertion after the last attribute.
-fn set_attribute(
+pub(crate) fn set_attribute(
     element: &Element<'_>,
     name: &str,
     value: &str,
@@ -381,7 +381,7 @@ fn escape_attribute(value: &str) -> std::borrow::Cow<'_, str> {
 
 /// Apply every queued edit to `html`. Ranges never overlap: each one is either a
 /// single attribute's span or an empty insertion point past all of them.
-fn splice(html: &str, mut edits: Vec<Edit>) -> String {
+pub(crate) fn splice(html: &str, mut edits: Vec<Edit>) -> String {
     if edits.is_empty() {
         return html.to_owned();
     }

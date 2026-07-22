@@ -47,6 +47,6 @@ pub use context::{MediaQuery, RenderContext, RenderOptions, ValidationLevel};
 pub use document::{
     render_document, render_document_with_inline_css, render_document_with_sourcemap,
 };
-pub use mjmx_semantic::FontFace;
+pub use mjmx_semantic::{FontFace, HtmlAttributeRule};
 pub use mjmx_sourcemap::{Mapping, SourceMap, Span};
 pub use render::{Render, RenderResult, render_element};

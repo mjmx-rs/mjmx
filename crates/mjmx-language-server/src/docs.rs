@@ -44,6 +44,12 @@ pub fn tag_summary(tag: MjmlTag) -> Option<&'static str> {
         MjmlTag::MjHtmlAttributes => {
             "Adds arbitrary HTML attributes to elements matched by a selector."
         }
+        MjmlTag::MjSelector => {
+            "Selects elements by CSS `path` for `<mj-html-attributes>` to annotate."
+        }
+        MjmlTag::MjHtmlAttribute => {
+            "One attribute (`name`) to add to the elements its `<mj-selector>` matches."
+        }
         MjmlTag::MjSection => "A horizontal row of the layout. Contains `mj-column` or `mj-group`.",
         MjmlTag::MjColumn => "A vertical container inside a section; holds content components.",
         MjmlTag::MjGroup => "Keeps its columns side by side on mobile instead of stacking them.",

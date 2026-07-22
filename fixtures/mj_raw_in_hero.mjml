@@ -1,0 +1,8 @@
+<mjml>
+  <mj-body>
+    <mj-hero mode="fixed-height" height="200px" background-color="#333333">
+      <mj-raw><div class="rawinhero">RAWINHERO</div></mj-raw>
+      <mj-text>hero text</mj-text>
+    </mj-hero>
+  </mj-body>
+</mjml>

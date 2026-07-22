@@ -34,6 +34,10 @@ pub enum MjmlTag {
     MjTitle,
     /// `<mj-html-attributes>`.
     MjHtmlAttributes,
+    /// `<mj-selector>` — a `<mj-html-attributes>` child carrying a CSS `path`.
+    MjSelector,
+    /// `<mj-html-attribute>` — a `<mj-selector>` child naming one attribute.
+    MjHtmlAttribute,
     /// `<mj-section>`.
     MjSection,
     /// `<mj-column>`.
@@ -105,6 +109,8 @@ impl MjmlTag {
             MjmlTag::MjStyle => "mj-style",
             MjmlTag::MjTitle => "mj-title",
             MjmlTag::MjHtmlAttributes => "mj-html-attributes",
+            MjmlTag::MjSelector => "mj-selector",
+            MjmlTag::MjHtmlAttribute => "mj-html-attribute",
             MjmlTag::MjSection => "mj-section",
             MjmlTag::MjColumn => "mj-column",
             MjmlTag::MjGroup => "mj-group",
@@ -154,6 +160,8 @@ impl MjmlTag {
             "mj-style" => MjmlTag::MjStyle,
             "mj-title" => MjmlTag::MjTitle,
             "mj-html-attributes" => MjmlTag::MjHtmlAttributes,
+            "mj-selector" => MjmlTag::MjSelector,
+            "mj-html-attribute" => MjmlTag::MjHtmlAttribute,
             "mj-section" => MjmlTag::MjSection,
             "mj-column" => MjmlTag::MjColumn,
             "mj-group" => MjmlTag::MjGroup,
@@ -194,6 +202,8 @@ impl MjmlTag {
                 | MjmlTag::MjStyle
                 | MjmlTag::MjTitle
                 | MjmlTag::MjHtmlAttributes
+                | MjmlTag::MjSelector
+                | MjmlTag::MjHtmlAttribute
         )
     }
 

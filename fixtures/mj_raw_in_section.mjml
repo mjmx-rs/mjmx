@@ -1,0 +1,8 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-raw><div class="rawinsection">RAWINSECTION</div></mj-raw>
+      <mj-column><mj-text>col</mj-text></mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

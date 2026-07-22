@@ -1,0 +1,10 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-group>
+        <mj-column><mj-text>col</mj-text></mj-column>
+        <mj-raw><div class="rawingroup">RAWINGROUP</div></mj-raw>
+      </mj-group>
+    </mj-section>
+  </mj-body>
+</mjml>

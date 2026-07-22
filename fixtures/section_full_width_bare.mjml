@@ -1,0 +1,9 @@
+<mjml>
+  <mj-body>
+    <mj-section full-width>
+      <mj-column>
+        <mj-text>Bare full-width is not full-width</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

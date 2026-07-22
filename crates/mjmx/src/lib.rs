@@ -123,11 +123,42 @@ fn render_source(
         }
     }
 
-    let (html, inline_css) = mjmx_codegen::render_document_with_inline_css(&document, options)?;
+    let (html, inline_css, html_attributes) =
+        mjmx_codegen::render_document_with_inline_css(&document, options)?;
+    // mjml's order: the cheerio `htmlAttributes` pass runs *before* juice, so an
+    // added attribute can be a selector target for the inliner that follows.
+    let html = apply_html_attributes(html, &html_attributes);
     Ok((
         post_process(inline_css_into(html, &inline_css, options), options),
         soft,
     ))
+}
+
+/// Apply the `<mj-html-attributes>` rules to the rendered HTML, mjml's cheerio pass.
+///
+/// Runs on the assembled document, **before** CSS inlining and any whitespace
+/// post-processing, matching mjml's `mjml-core` order (`globalData.htmlAttributes`
+/// before `juice`). With no rules there is nothing to do and the HTML is returned
+/// untouched — the default render path is unchanged, byte for byte.
+fn apply_html_attributes(html: String, rules: &[mjmx_codegen::HtmlAttributeRule]) -> String {
+    if rules.is_empty() {
+        return html;
+    }
+    // Flatten the per-selector rules into the `(selector, name, value)` triples the
+    // pass applies in order.
+    let triples: Vec<mjmx_css_inline::HtmlAttribute<'_>> = rules
+        .iter()
+        .flat_map(|rule| {
+            rule.attributes
+                .iter()
+                .map(move |(name, value)| mjmx_css_inline::HtmlAttribute {
+                    selector: rule.selector.as_str(),
+                    name: name.as_str(),
+                    value: value.as_str(),
+                })
+        })
+        .collect();
+    mjmx_css_inline::apply_html_attributes(&html, &triples)
 }
 
 /// Apply the `<mj-style inline="inline">` bucket to the rendered HTML, mjml's juice pass.

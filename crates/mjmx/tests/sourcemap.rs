@@ -33,14 +33,21 @@ fn all_fixtures() -> Vec<(String, String)> {
 
 /// [`all_fixtures`] minus the documents a source map is *refused* for.
 ///
-/// A `<mj-style inline="inline">` makes the CSS inliner run after codegen, rewriting
-/// `style` attributes and inserting new ones — every recorded offset would be wrong, so
-/// `render_with_sourcemap` returns a diagnostic instead (see
-/// [`sourcemap_is_rejected_for_an_inlined_document`]). The sweeps below are about
-/// mappings being *right*, so they run over the documents that have them.
+/// Two post-codegen passes rewrite the HTML and so invalidate every recorded offset,
+/// making `render_with_sourcemap` return a diagnostic instead of a map:
+///
+/// - a `<mj-style inline="inline">` runs the CSS inliner (see
+///   [`sourcemap_is_rejected_for_an_inlined_document`]);
+/// - an `<mj-html-attributes>` runs the html-attributes pass (see
+///   [`sourcemap_is_rejected_for_an_html_attributes_document`]).
+///
+/// The sweeps below are about mappings being *right*, so they run over the documents
+/// that have them.
 fn mappable_fixtures() -> Vec<(String, String)> {
     let mut out = all_fixtures();
-    out.retain(|(_, source)| !source.contains("inline=\"inline\""));
+    out.retain(|(_, source)| {
+        !source.contains("inline=\"inline\"") && !source.contains("<mj-html-attributes")
+    });
     assert!(out.len() >= 50, "expected the full fixture corpus");
     out
 }
@@ -290,6 +297,18 @@ fn sourcemap_is_rejected_for_an_inlined_document() {
     // The plain bucket does not inline, so it still maps.
     let plain = std::fs::read_to_string(fixtures_dir().join("mj_style_plain.mjml")).unwrap();
     assert!(mjmx::render_with_sourcemap(&plain, &options).is_ok());
+}
+
+/// Same shape as the inline-style refusal: the html-attributes pass mutates the
+/// assembled HTML after codegen, so a source map cannot be honest and is refused —
+/// a property of the document, detectable only after semantic analysis.
+#[test]
+fn sourcemap_is_rejected_for_an_html_attributes_document() {
+    let options = RenderOptions::default();
+    let source = std::fs::read_to_string(fixtures_dir().join("mj_html_attributes.mjml")).unwrap();
+    let err = mjmx::render_with_sourcemap(&source, &options)
+        .expect_err("the html-attributes pass should be refused, not silently mis-mapped");
+    assert!(err[0].message.contains("mj-html-attributes"), "{err:?}");
 }
 
 #[test]

@@ -119,6 +119,16 @@ pub(crate) fn render_children<'a>(
     Ok(())
 }
 
+/// Whether an element is a *raw* element in mjml's sense (`isRawElement()`), i.e. one
+/// that renders its content verbatim and is exempt from a parent's row/cell scaffolding.
+///
+/// Only `<mj-raw>` sets `rawElement = true` in mjml 4.18.0, so a section/column/group/hero
+/// emits a raw child directly at its own position instead of wrapping it in a `<tr>` (or a
+/// ghost `<td>`) — see each container's `renderChildren`/`renderWrappedChildren`.
+pub(crate) fn is_raw_element(element: &Element<'_>) -> bool {
+    element.tag == MjmlTag::MjRaw
+}
+
 /// The tag → component-renderer table, wrapped by [`render_element`].
 fn dispatch<'a>(
     element: &'a Element<'a>,

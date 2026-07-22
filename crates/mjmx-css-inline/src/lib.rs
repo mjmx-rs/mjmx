@@ -68,10 +68,12 @@
 mod apply;
 mod css;
 mod dom;
+mod html_attributes;
 mod mask;
 mod options;
 mod selector;
 
+pub use html_attributes::{HtmlAttribute, apply_html_attributes};
 pub use options::{InlineOptions, PreserveTag, SUPPORTED_OPTIONS, refusal, unsupported_option};
 
 /// Inline `css` into `html` with mjml's own settings, returning the rewritten

@@ -40,9 +40,9 @@ pub fn allowed_children(tag: MjmlTag) -> Option<&'static [MjmlTag]> {
     use MjmlTag::{
         Comment, MjAccordion, MjAccordionElement, MjAccordionText, MjAccordionTitle, MjAttributes,
         MjBody, MjBreakpoint, MjButton, MjCarousel, MjCarouselImage, MjColumn, MjDivider, MjFont,
-        MjGroup, MjHead, MjHero, MjHtmlAttributes, MjImage, MjInclude, MjNavbar, MjNavbarLink,
-        MjPreview, MjRaw, MjSection, MjSocial, MjSocialElement, MjSpacer, MjStyle, MjTable, MjText,
-        MjTitle, MjWrapper, Mjml, Text, Unknown,
+        MjGroup, MjHead, MjHero, MjHtmlAttribute, MjHtmlAttributes, MjImage, MjInclude, MjNavbar,
+        MjNavbarLink, MjPreview, MjRaw, MjSection, MjSelector, MjSocial, MjSocialElement, MjSpacer,
+        MjStyle, MjTable, MjText, MjTitle, MjWrapper, Mjml, Text, Unknown,
     };
 
     Some(match tag {
@@ -69,8 +69,12 @@ pub fn allowed_children(tag: MjmlTag) -> Option<&'static [MjmlTag]> {
             MjHtmlAttributes,
             MjRaw,
         ],
+        // `<mj-html-attributes>` holds `<mj-selector path>`, each holding
+        // `<mj-html-attribute name>` leaves.
+        MjHtmlAttributes => &[MjSelector],
+        MjSelector => &[MjHtmlAttribute],
         // Explicitly unconstrained: leaf/ending components and free-form containers.
-        MjAttributes | MjBreakpoint | MjFont | MjPreview | MjStyle | MjTitle | MjHtmlAttributes
+        MjAttributes | MjBreakpoint | MjFont | MjPreview | MjStyle | MjTitle | MjHtmlAttribute
         | MjRaw | MjText | MjButton | MjImage | MjDivider | MjSpacer | MjTable
         | MjSocialElement | MjNavbarLink | MjCarouselImage | MjAccordionTitle | MjAccordionText
         | MjInclude | Comment | Text | Unknown => return None,
@@ -89,6 +93,8 @@ pub const fn required_parent(tag: MjmlTag) -> Option<MjmlTag> {
         MjmlTag::MjCarouselImage => MjmlTag::MjCarousel,
         MjmlTag::MjAccordionElement => MjmlTag::MjAccordion,
         MjmlTag::MjAccordionTitle | MjmlTag::MjAccordionText => MjmlTag::MjAccordionElement,
+        MjmlTag::MjSelector => MjmlTag::MjHtmlAttributes,
+        MjmlTag::MjHtmlAttribute => MjmlTag::MjSelector,
         _ => return None,
     })
 }

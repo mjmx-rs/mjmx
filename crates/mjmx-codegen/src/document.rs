@@ -10,7 +10,7 @@ use std::ops::Range;
 
 use mjmx_ast::{Document, Element};
 use mjmx_diagnostics::Diagnostic;
-use mjmx_semantic::Semantic;
+use mjmx_semantic::{HtmlAttributeRule, Semantic};
 use mjmx_sourcemap::SourceMap;
 use mjmx_syntax::MjmlTag;
 
@@ -30,14 +30,20 @@ pub fn render_document<'a>(
     render_impl(document, options, false).map(|rendered| rendered.html)
 }
 
-/// [`render_document`], also returning the `<mj-style inline="inline">` CSS bodies.
+/// [`render_document`], also returning the two head buckets that codegen hands back as
+/// *data* for a caller to apply to the assembled document.
 ///
-/// The HTML is byte-identical to [`render_document`]'s: that bucket is *never* emitted
-/// as a `<style>` tag (mjml passes it to juice as `extraCss` with
-/// `insertPreservedExtraCss: false`), so it leaves codegen as data rather than markup.
-/// The caller — [`mjmx`](../mjmx/index.html) — feeds it to `mjmx_css_inline` after
-/// rendering and before any whitespace post-processing. An empty vector means there is
-/// nothing to inline and the HTML is final.
+/// The HTML is byte-identical to [`render_document`]'s. Neither bucket is emitted as
+/// markup by codegen:
+///
+/// - the `<mj-style inline="inline">` CSS bodies (mjml passes them to juice as
+///   `extraCss` with `insertPreservedExtraCss: false`);
+/// - the `<mj-html-attributes>` rules (mjml's `globalData.htmlAttributes`, applied by a
+///   cheerio pass over the body).
+///
+/// The caller — [`mjmx`](../mjmx/index.html) — applies the html-attributes rules and
+/// then the inline CSS (mjml's order: cheerio before juice), before any whitespace
+/// post-processing. Both empty means the HTML is final.
 ///
 /// # Errors
 ///
@@ -45,8 +51,9 @@ pub fn render_document<'a>(
 pub fn render_document_with_inline_css<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
-) -> Result<(String, Vec<String>), Vec<Diagnostic>> {
-    render_impl(document, options, false).map(|rendered| (rendered.html, rendered.inline_css))
+) -> Result<(String, Vec<String>, Vec<HtmlAttributeRule>), Vec<Diagnostic>> {
+    render_impl(document, options, false)
+        .map(|rendered| (rendered.html, rendered.inline_css, rendered.html_attributes))
 }
 
 /// Render a parsed [`Document`], also collecting an output → source [`SourceMap`].
@@ -79,16 +86,23 @@ struct Rendered {
     sourcemap: Option<SourceMap>,
     /// The `<mj-style inline="inline">` bodies, in source order.
     inline_css: Vec<String>,
+    /// The `<mj-html-attributes>` rules, in source order.
+    html_attributes: Vec<HtmlAttributeRule>,
 }
 
 /// Why a source map cannot be produced for this render, if it cannot.
 ///
-/// Both reasons are the same reason: something rewrites the HTML *after* codegen has
+/// Every reason is the same reason: something rewrites the HTML *after* codegen has
 /// recorded its offsets, so every mapping would silently point at the wrong bytes. The
-/// check cannot live at the API boundary, because whether CSS inlining runs is a
-/// property of the **document** (does it have an inline `<mj-style>`?) and is only known
-/// once semantic analysis has partitioned the style buckets.
-fn sourcemap_refusal(options: &RenderOptions, inline_css: &[String]) -> Option<Diagnostic> {
+/// document-shaped checks cannot live at the API boundary, because whether CSS inlining
+/// or the html-attributes pass runs is a property of the **document** (does it have an
+/// inline `<mj-style>` / an `<mj-html-attributes>`?) and is only known once semantic
+/// analysis has partitioned the head buckets.
+fn sourcemap_refusal(
+    options: &RenderOptions,
+    inline_css: &[String],
+    html_attributes: &[HtmlAttributeRule],
+) -> Option<Diagnostic> {
     if options.minify || options.beautify {
         return Some(
             Diagnostic::error("sourcemap collection is incompatible with minify/beautify").with_help(
@@ -100,6 +114,13 @@ fn sourcemap_refusal(options: &RenderOptions, inline_css: &[String]) -> Option<D
         return Some(
             Diagnostic::error("sourcemap collection is incompatible with <mj-style inline=\"inline\">").with_help(
                 "CSS inlining runs after codegen: it rewrites style attributes and inserts new ones, which shifts every mapped offset; remove the inline style block, or render without a sourcemap",
+            ),
+        );
+    }
+    if !html_attributes.is_empty() {
+        return Some(
+            Diagnostic::error("sourcemap collection is incompatible with <mj-html-attributes>").with_help(
+                "the html-attributes pass runs after codegen: it inserts and rewrites attributes on matched elements, which shifts every mapped offset; remove the <mj-html-attributes> block, or render without a sourcemap",
             ),
         );
     }
@@ -134,9 +155,11 @@ fn render_impl<'a>(
     // replaces the built-in one before any <mj-font> is folded in.
     let (semantic, _diagnostics) = Semantic::build_with_fonts(document, options.fonts.as_deref());
 
-    // The one head bucket that leaves codegen as data rather than markup.
+    // The two head buckets that leave codegen as data rather than markup.
     let inline_css = semantic.head().inline_styles.clone();
-    if sourcemap && let Some(diagnostic) = sourcemap_refusal(options, &inline_css) {
+    let html_attributes = semantic.head().html_attributes.clone();
+    if sourcemap && let Some(diagnostic) = sourcemap_refusal(options, &inline_css, &html_attributes)
+    {
         return Err(vec![diagnostic]);
     }
 
@@ -208,6 +231,7 @@ fn render_impl<'a>(
         html,
         sourcemap: map,
         inline_css,
+        html_attributes,
     })
 }
 

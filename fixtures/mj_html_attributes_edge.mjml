@@ -1,0 +1,20 @@
+<mjml>
+  <mj-head>
+    <mj-html-attributes>
+      <mj-selector path="table">
+        <mj-html-attribute name="border">9</mj-html-attribute>
+        <mj-html-attribute name="data-x">y</mj-html-attribute>
+      </mj-selector>
+      <mj-selector path=".nomatchclass">
+        <mj-html-attribute name="data-none">z</mj-html-attribute>
+      </mj-selector>
+    </mj-html-attributes>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-text>Hi</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

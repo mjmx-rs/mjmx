@@ -35,7 +35,7 @@ mod attributes;
 mod head;
 
 pub use attributes::AttributesRegistry;
-pub use head::{DEFAULT_BREAKPOINT, FontFace, HeadData};
+pub use head::{DEFAULT_BREAKPOINT, FontFace, HeadData, HtmlAttributeRule};
 
 use std::borrow::Cow;
 
@@ -133,6 +133,7 @@ impl<'a> Semantic<'a> {
             // injected verbatim at the end of the document `<head>`.
             MjmlTag::MjRaw => head.raws.push(inner_text(child)),
             MjmlTag::MjAttributes => attributes.ingest(child),
+            MjmlTag::MjHtmlAttributes => Self::ingest_html_attributes(child, head),
             _ => diagnostics.push(
                 Diagnostic::warning(format!(
                     "unknown <mj-head> child `<{}>` ignored",
@@ -140,6 +141,51 @@ impl<'a> Semantic<'a> {
                 ))
                 .with_label(child.span(), "not a recognized head element"),
             ),
+        }
+    }
+
+    /// Collect one `<mj-html-attributes>` block into `head.html_attributes`.
+    ///
+    /// Mirrors mjml's `MjHtmlAttributes.handler`: each `<mj-selector path="…">` child
+    /// contributes its `<mj-html-attribute name="…">value</…>` pairs (a repeated `name`
+    /// keeping its last value, mjml's `reduce`). A `path` already seen is *merged* into,
+    /// not duplicated, matching mjml's object-keyed `add('htmlAttributes', path, custom)`.
+    fn ingest_html_attributes(el: &Element<'a>, head: &mut HeadData<'a>) {
+        for selector in el
+            .element_children()
+            .filter(|c| c.tag == MjmlTag::MjSelector)
+        {
+            let Some(path) = selector.attr("path") else {
+                continue;
+            };
+            let mut attributes: Vec<(String, String)> = Vec::new();
+            for attr_el in selector
+                .element_children()
+                .filter(|c| c.tag == MjmlTag::MjHtmlAttribute)
+            {
+                let Some(name) = attr_el.attr("name") else {
+                    continue;
+                };
+                let value = inner_text(attr_el);
+                match attributes.iter_mut().find(|(n, _)| n == name) {
+                    Some(entry) => entry.1 = value,
+                    None => attributes.push((name.to_string(), value)),
+                }
+            }
+            match head.html_attributes.iter_mut().find(|r| r.selector == path) {
+                Some(existing) => {
+                    for (name, value) in attributes {
+                        match existing.attributes.iter_mut().find(|(n, _)| *n == name) {
+                            Some(entry) => entry.1 = value,
+                            None => existing.attributes.push((name, value)),
+                        }
+                    }
+                }
+                None => head.html_attributes.push(HtmlAttributeRule {
+                    selector: path.to_string(),
+                    attributes,
+                }),
+            }
         }
     }
 

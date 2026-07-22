@@ -1,0 +1,10 @@
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-raw><div class="rawincol">RAWINCOL</div></mj-raw>
+        <mj-text>hello</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -13,7 +13,7 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children, render_element};
+use crate::render::{Render, RenderResult, is_raw_element, render_children, render_element};
 
 // mjml defaults.
 const MODE: &str = "fixed-height";
@@ -158,6 +158,11 @@ impl<'a> Render<'a> for Hero<'a> {
         );
         buf.push_str("<tbody>");
         render_children(self.element, ctx, buf, |child, ctx, buf| {
+            // mjml's `renderChildren`: a raw element (mj-raw) renders directly into the
+            // tbody; every other child is wrapped in its own row.
+            if is_raw_element(child) {
+                return render_element(child, ctx, buf);
+            }
             buf.push_str("<tr>");
             render_element(child, ctx, buf)?;
             buf.push_str("</tr>");

@@ -1,0 +1,16 @@
+<mjml>
+  <mj-head>
+    <mj-html-attributes>
+      <mj-selector path=".mycol div">
+        <mj-html-attribute name="data-track">hello</mj-html-attribute>
+      </mj-selector>
+    </mj-html-attributes>
+  </mj-head>
+  <mj-body>
+    <mj-section>
+      <mj-column css-class="mycol">
+        <mj-text>Text here</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

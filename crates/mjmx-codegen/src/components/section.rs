@@ -7,7 +7,7 @@ use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::components::{Column, ColumnWidth, Group};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children};
+use crate::render::{Render, RenderResult, render_children, render_element};
 
 /// Renderer for `<mj-section>`.
 pub struct Section<'a> {
@@ -136,10 +136,12 @@ impl<'a> Section<'a> {
             "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr><![endif]-->",
         );
         render_children(self.element, ctx, buf, |child, ctx, buf| {
-            // Only columns and groups take part in the ghost row; any other element
-            // child is not a section-level layout component and is skipped.
+            // Only columns and groups take part in the ghost row. Any other child is a
+            // raw element (mjml's `isRawElement`, i.e. mj-raw), which mjml's
+            // `renderWrappedChildren` emits directly — between the opened-and-closed row
+            // conditionals, never inside a ghost `<td>`.
             if !matches!(child.tag, MjmlTag::MjColumn | MjmlTag::MjGroup) {
-                return Ok(());
+                return render_element(child, ctx, buf);
             }
             // mjml's `renderWrappedChildren`: the ghost cell's class is the *child's*
             // `css-class`, suffixed with `-outlook` (empty string when unset, which is

@@ -4,7 +4,7 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{append_css_class, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children, render_element};
+use crate::render::{Render, RenderResult, is_raw_element, render_children, render_element};
 
 /// A column's resolved width, mirroring mjml's `widthParser` output (`{parsedWidth,
 /// unit}`) as produced by `MjColumn.getParsedWidth`.
@@ -364,6 +364,11 @@ impl<'a> Render<'a> for Column<'a> {
             ));
             buf.push_str("<tbody>");
             render_children(self.element, ctx, buf, |child, ctx, buf| {
+                // mjml's `renderChildren`: a raw element (mj-raw) renders directly into
+                // the tbody; every other child is wrapped in its own row.
+                if is_raw_element(child) {
+                    return render_element(child, ctx, buf);
+                }
                 buf.push_str("<tr>");
                 render_element(child, ctx, buf)?;
                 buf.push_str("</tr>");
@@ -377,6 +382,11 @@ impl<'a> Render<'a> for Column<'a> {
             ));
             buf.push_str("<tbody>");
             render_children(self.element, ctx, buf, |child, ctx, buf| {
+                // mjml's `renderChildren`: a raw element (mj-raw) renders directly into
+                // the tbody; every other child is wrapped in its own row.
+                if is_raw_element(child) {
+                    return render_element(child, ctx, buf);
+                }
                 buf.push_str("<tr>");
                 render_element(child, ctx, buf)?;
                 buf.push_str("</tr>");

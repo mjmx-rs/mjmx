@@ -65,8 +65,20 @@ Phase 2 — toolchain: M8 traverse + transformer · M9 minifier + formatter · M
 Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 
 All of the above is **complete**, plus css-class, HTTP include loader (opt-in), v3→v4
-migrate, `mjmx lsp`, incremental LSP sync, wasm-opt, and CSS inlining. Rendering parity has
-**zero known divergences** from mjml 4.18.0 across 69 fixtures / 71 golden tests.
+migrate, `mjmx lsp`, incremental LSP sync, wasm-opt, CSS inlining, and
+`<mj-html-attributes>` (see below). Rendering parity has **no known divergences** from
+mjml 4.18.0 across 76 fixtures / 78 golden tests — a 2026-07-22 audit found three real
+divergences (mj-raw dropped/mis-wrapped in scaffolding parents; `<mj-html-attributes>`
+silently unimplemented; a suspected bare-attribute divergence), and all three are now
+fixed or resolved with a real-mjml golden fixture each (`mj_raw_in_{column,group,section,
+hero}`, `mj_html_attributes{,_edge}`, `section_full_width_bare`). The bare-attribute case
+proved to be *agreement*, not a divergence: mjml's htmlparser2 gives a valueless attribute
+the value `""` and `convertBooleans` only maps `"true"`/`"false"`, so `<mj-section
+full-width>` fails the `=== 'full-width'` check exactly as mjmx's absent-valued attribute
+does; the fixture locks that in. (One theoretical, non-real-world edge remains: mjml stores
+a bare attribute as `""` where mjmx stores it as absent, which could only diverge for an
+attribute whose *value* is echoed verbatim into output under a bare valueless spelling —
+no such construct occurs in real MJML.)
 
 ## CSS inlining (`mjmx-css-inline`, done)
 
@@ -109,6 +121,43 @@ analysis, because it is a property of the document rather than of the options.
 
 Known gap: functional/structural pseudo-classes (`:nth-child`, `:not`, …) and CSS Nesting
 are dropped rather than mis-applied.
+
+## `<mj-html-attributes>` (`mjmx-css-inline::apply_html_attributes`, done)
+
+mjml's `<mj-head><mj-html-attributes><mj-selector path="…"><mj-html-attribute name="…">v`
+collects `(selector, name, value)` triples (`globalData.htmlAttributes`) and, in a
+cheerio pass over the assembled body, adds `name="value"` to every element the CSS `path`
+matches. mjmx implements it as a **second post-codegen pass, a sibling of the inliner** in
+`mjmx-css-inline` — same shape (match selectors, mutate matched elements) so it reuses the
+inliner's `dom.rs` + `selector.rs` + `mjmx-html-tokenizer` rather than a third matcher; it
+lives there, not in a new crate, for that reuse. `MjSelector`/`MjHtmlAttribute` were added
+to the tag enum; semantic ingests the head structure into `HeadData::html_attributes`
+(mjml's object-keyed merge: a repeated `path` merges, a repeated `name` keeps its last
+value); codegen hands the rules back as data (like the inline bucket); the umbrella applies
+them in `render_source`.
+
+Behaviour is read off mjml 4.18.0 output, not guessed:
+
+- runs **after codegen, before the CSS inliner** — mjml runs `htmlAttributes` before
+  `juice`, so an added `class` can be a selector target for the inliner that follows
+  (verified byte-identical to mjml, incl. the case where the div's pre-existing `color`
+  wins the cascade over the inline rule);
+- an existing attribute of the same name is **overwritten in place**; a new one is
+  appended after the last attribute; a selector matching nothing is a silent no-op;
+- it **never descends into Outlook conditional comments** (the ghost tables inside
+  `<!--[if mso | IE]>` are comment text to the tokenizer, so a `table` selector reaches
+  only the real tables — exactly what mjml's cheerio, fed the commented markup, does);
+- it runs on body content only (mjml's cheerio `content` is body-inner), so mjmx gates on
+  the inliner's `inlinable` flag plus the structural `html`/`body` tags;
+- **not** masked for templating, unlike the inliner — mjml's cheerio pass does not mask
+  either (only juice's `codeBlocks` do);
+- a selector mjmx cannot parse is dropped, the same known gap the inliner's selector
+  engine has.
+
+Like the inliner, this pass shifts byte offsets, so `render_with_sourcemap` **refuses** a
+document carrying `<mj-html-attributes>` (codegen's `sourcemap_refusal`, alongside the
+inline-bucket and minify/beautify refusals). No new third-party dep; wasm artifact grew
++6,498 B (461,001 B).
 
 ## Options parity (audit done 2026-07-22 against mjml 4.18.0 source)
 

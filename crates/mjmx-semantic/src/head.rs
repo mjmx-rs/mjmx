@@ -75,6 +75,22 @@ const DEFAULT_FONTS: &[(&str, &str)] = &[
 /// mjml's default responsive breakpoint, in pixels.
 pub const DEFAULT_BREAKPOINT: u32 = 480;
 
+/// One `<mj-selector>` from `<mj-html-attributes>`: a CSS `path` and the HTML
+/// attributes to add to every element it matches.
+///
+/// mjml's `globalData.htmlAttributes` is keyed by selector, so a `path` that appears
+/// on more than one `<mj-selector>` is merged into a single rule (a later
+/// `<mj-html-attribute>` of the same `name` overwriting the earlier). These are
+/// applied to the assembled body by a post-codegen pass — before CSS inlining, as
+/// mjml runs its cheerio step before juice — see `mjmx_css_inline::apply_html_attributes`.
+#[derive(Debug, Clone)]
+pub struct HtmlAttributeRule {
+    /// The `path` attribute: a CSS selector into the rendered body.
+    pub selector: String,
+    /// The `(name, value)` pairs from the `<mj-html-attribute>` children, in order.
+    pub attributes: Vec<(String, String)>,
+}
+
 /// Everything aggregated from `<mj-head>`.
 #[derive(Debug, Clone)]
 pub struct HeadData<'a> {
@@ -106,6 +122,8 @@ pub struct HeadData<'a> {
     /// `<mj-raw position="file-start">` bodies found as *direct children of `<mjml>`*
     /// (mjml's `mjOutsideRaws`). They are emitted before the doctype.
     pub file_start_raws: Vec<String>,
+    /// `<mj-html-attributes>` rules, in source order (mjml's `globalData.htmlAttributes`).
+    pub html_attributes: Vec<HtmlAttributeRule>,
 }
 
 impl<'a> HeadData<'a> {
@@ -138,6 +156,7 @@ impl<'a> HeadData<'a> {
             inline_styles: Vec::new(),
             raws: Vec::new(),
             file_start_raws: Vec::new(),
+            html_attributes: Vec::new(),
         }
     }
 
