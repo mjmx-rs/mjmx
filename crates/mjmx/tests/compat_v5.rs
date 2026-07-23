@@ -131,3 +131,64 @@ fn v5_keeps_the_aria_label_a_title_contributes() {
         r#"<div aria-label="T" aria-roledescription="email" role="article" lang="und" dir="auto" style="word-spacing:normal;">"#
     );
 }
+
+// ---- component attributes (5.4) -----------------------------------------
+
+const SOCIAL: &str = r#"<mjml><mj-body><mj-section><mj-column><mj-social><mj-social-element name="facebook">FB</mj-social-element><mj-social-element name="twitter" border="2px solid red">TW</mj-social-element></mj-social></mj-column></mj-section></mj-body></mjml>"#;
+
+#[test]
+fn v5_social_element_icon_carries_a_border() {
+    // mjml 5.4 added `border` (default `0`) to the social icon `<img>`; 4.18 had none.
+    let v5 = render(SOCIAL, MjmlCompat::V5);
+    // Default: `border:0` prepended, byte-identical to mjml@5.4.0.
+    assert!(
+        v5.contains(r#"style="border:0;border-radius:3px;display:block;""#),
+        "{v5}"
+    );
+    // A set `border` is applied verbatim.
+    assert!(
+        v5.contains(r#"style="border:2px solid red;border-radius:3px;display:block;""#),
+        "{v5}"
+    );
+
+    // V4: the icon `<img>` has no `border`, and a set one is ignored.
+    let v4 = render(SOCIAL, MjmlCompat::V4);
+    assert!(
+        v4.contains(r#"style="border-radius:3px;display:block;""#),
+        "{v4}"
+    );
+    assert!(!v4.contains("border:2px solid red"), "{v4}");
+}
+
+const ACCORDION: &str = r#"<mjml><mj-body><mj-accordion><mj-accordion-element><mj-accordion-title>T</mj-accordion-title><mj-accordion-text>X</mj-accordion-text></mj-accordion-element></mj-accordion></mj-body></mjml>"#;
+
+#[test]
+fn v5_accordion_retargets_toggle_selectors_for_new_outlook() {
+    // mjml 5.2.1+ swapped the `input.mj-accordion-checkbox` type selector for the
+    // attribute selector `.mj-accordion-checkbox[type="checkbox"]`, and dropped the
+    // `input` qualifier from the `:checked` rules. The `.moz-text-html` rules are unchanged.
+    let v5 = render(ACCORDION, MjmlCompat::V5);
+    assert!(
+        v5.contains(r#".mj-accordion-checkbox[type="checkbox"]"#),
+        "{v5}"
+    );
+    assert!(
+        v5.contains(".mj-accordion-checkbox:checked+* .mj-accordion-content"),
+        "{v5}"
+    );
+    // The type-selector rules replace the old `input.` ones inside the media query.
+    assert!(!v5.contains("input.mj-accordion-checkbox:checked"), "{v5}");
+    // The moz-text-html fallbacks keep `input.`.
+    assert!(
+        v5.contains(".moz-text-html input.mj-accordion-checkbox"),
+        "{v5}"
+    );
+
+    // V4 keeps the original `input.`-qualified selectors.
+    let v4 = render(ACCORDION, MjmlCompat::V4);
+    assert!(v4.contains("input.mj-accordion-checkbox:checked"), "{v4}");
+    assert!(
+        !v4.contains(r#".mj-accordion-checkbox[type="checkbox"]"#),
+        "{v4}"
+    );
+}

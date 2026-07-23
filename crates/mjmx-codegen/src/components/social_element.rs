@@ -38,6 +38,8 @@ const ALT: &str = "";
 /// forwarded nothing, so the element falls back to its own default.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SocialInherited<'a> {
+    /// `<mj-social border>`, forwarded as the element's `border` default (mjml 5.4+).
+    pub border: Option<&'a str>,
     pub border_radius: Option<&'a str>,
     pub color: Option<&'a str>,
     pub font_family: Option<&'a str>,
@@ -155,6 +157,14 @@ impl<'a> SocialElement<'a> {
     /// social modes.
     pub fn render_row(&self, ctx: &mut RenderContext<'a>, buf: &mut String) {
         let inh = self.inherited;
+        // mjml 5.4 added a `border` on the icon `<img>` (default `0`), forwardable from
+        // `<mj-social>`. v4 had no such style, so this is gated on compat and prepended
+        // only under v5 — v4 output is unchanged.
+        let border = ctx
+            .options
+            .compat
+            .is_v5()
+            .then(|| self.attr(ctx, "border", inh.border.unwrap_or("0")));
         let border_radius = self.attr(
             ctx,
             "border-radius",
@@ -253,8 +263,9 @@ impl<'a> SocialElement<'a> {
         if has_link {
             buf.push_str(&format!("<a href=\"{href}\" target=\"{target}\">"));
         }
+        let border_css = border.map_or(String::new(), |b| format!("border:{b};"));
         buf.push_str(&format!(
-            "<img alt=\"{alt}\" src=\"{src}\" style=\"border-radius:{border_radius};display:block;\" width=\"{icon_px}\" />"
+            "<img alt=\"{alt}\" src=\"{src}\" style=\"{border_css}border-radius:{border_radius};display:block;\" width=\"{icon_px}\" />"
         ));
         if has_link {
             buf.push_str("</a>");

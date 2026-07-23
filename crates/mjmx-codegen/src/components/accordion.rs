@@ -38,6 +38,12 @@ const TEXT_PADDING: &str = "16px";
 /// values). Beautified to mjml 4.18.0's exact token stream.
 const HEAD_CSS: &str = "\n    noinput.mj-accordion-checkbox {\n      display: block !important;\n    }\n\n    @media yahoo,\n    only screen and (min-width:0) {\n      .mj-accordion-element {\n        display: block;\n      }\n\n      input.mj-accordion-checkbox,\n      .mj-accordion-less {\n        display: none !important;\n      }\n\n      input.mj-accordion-checkbox+* .mj-accordion-title {\n        cursor: pointer;\n        touch-action: manipulation;\n        -webkit-user-select: none;\n        -moz-user-select: none;\n        user-select: none;\n      }\n\n      input.mj-accordion-checkbox+* .mj-accordion-content {\n        overflow: hidden;\n        display: none;\n      }\n\n      input.mj-accordion-checkbox+* .mj-accordion-more {\n        display: block !important;\n      }\n\n      input.mj-accordion-checkbox:checked+* .mj-accordion-content {\n        display: block;\n      }\n\n      input.mj-accordion-checkbox:checked+* .mj-accordion-more {\n        display: none !important;\n      }\n\n      input.mj-accordion-checkbox:checked+* .mj-accordion-less {\n        display: block !important;\n      }\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-title {\n      cursor: auto;\n      touch-action: auto;\n      -webkit-user-select: auto;\n      -moz-user-select: auto;\n      user-select: auto;\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-content {\n      overflow: hidden;\n      display: block;\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-ico {\n      display: none;\n    }\n\n    @goodbye {\n      @gmail\n    }\n\n  ";
 
+/// mjml 5.2.1+ accordion stylesheet: the toggle selectors retargeted for the "new
+/// Outlook". Non-`:checked` `input.mj-accordion-checkbox` becomes the attribute selector
+/// `.mj-accordion-checkbox[type="checkbox"]`, and the `:checked` rules drop the `input`
+/// tag qualifier. The `.moz-text-html` fallbacks are unchanged from [`HEAD_CSS`].
+const HEAD_CSS_V5: &str = "\n    noinput.mj-accordion-checkbox {\n      display: block !important;\n    }\n\n    @media yahoo,\n    only screen and (min-width:0) {\n      .mj-accordion-element {\n        display: block;\n      }\n\n      .mj-accordion-checkbox[type=\"checkbox\"],\n      .mj-accordion-less {\n        display: none !important;\n      }\n\n      .mj-accordion-checkbox[type=\"checkbox\"]+* .mj-accordion-title {\n        cursor: pointer;\n        touch-action: manipulation;\n        -webkit-user-select: none;\n        -moz-user-select: none;\n        user-select: none;\n      }\n\n      .mj-accordion-checkbox[type=\"checkbox\"]+* .mj-accordion-content {\n        overflow: hidden;\n        display: none;\n      }\n\n      .mj-accordion-checkbox[type=\"checkbox\"]+* .mj-accordion-more {\n        display: block !important;\n      }\n\n      .mj-accordion-checkbox:checked+* .mj-accordion-content {\n        display: block;\n      }\n\n      .mj-accordion-checkbox:checked+* .mj-accordion-more {\n        display: none !important;\n      }\n\n      .mj-accordion-checkbox:checked+* .mj-accordion-less {\n        display: block !important;\n      }\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-title {\n      cursor: auto;\n      touch-action: auto;\n      -webkit-user-select: auto;\n      -moz-user-select: auto;\n      user-select: auto;\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-content {\n      overflow: hidden;\n      display: block;\n    }\n\n    .moz-text-html input.mj-accordion-checkbox+* .mj-accordion-ico {\n      display: none;\n    }\n\n    @goodbye {\n      @gmail\n    }\n\n  ";
+
 /// Accordion-level attributes threaded down to the title/text children.
 #[derive(Clone, Copy)]
 struct AccordionInherited<'a> {
@@ -91,7 +97,15 @@ impl<'a> Render<'a> for Accordion<'a> {
         };
 
         // mjml always registers the accordion stylesheet when the component is used.
-        ctx.add_style(HEAD_CSS);
+        // mjml 5.2.1+ retargets the toggle selectors for the "new Outlook": the
+        // `input.mj-accordion-checkbox` type selector became the attribute selector
+        // `.mj-accordion-checkbox[type="checkbox"]`, and the `:checked` rules dropped the
+        // `input` tag qualifier. The `.moz-text-html` rules keep the `input.` form.
+        ctx.add_style(if ctx.options.compat.is_v5() {
+            HEAD_CSS_V5
+        } else {
+            HEAD_CSS
+        });
 
         // Outer content cell (the column's generic wrapper, baked in as for other
         // components): accordion has no align, padding default 10px 25px.

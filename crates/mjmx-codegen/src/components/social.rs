@@ -57,6 +57,10 @@ impl<'a> Render<'a> for Social<'a> {
         // `getSocialElementAttributes`): the defaulted ones plus any explicitly-set
         // pass-throughs. `inner-padding` maps onto the element `padding`.
         let inherited = SocialInherited {
+            // mjml 5.4+ forwards `border` to the elements, but only when set (it has no
+            // default on `<mj-social>`); the element's own `border` default is `0`. Under
+            // v4 the element renderer ignores this, so forwarding it is harmless there.
+            border: opt("border"),
             border_radius: Some(some("border-radius", BORDER_RADIUS)),
             color: Some(some("color", COLOR)),
             font_family: Some(some("font-family", FONT_FAMILY)),
