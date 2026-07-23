@@ -398,33 +398,64 @@ versioned `ComponentCx` contract (leaf-only first), a native Rust trait plus (fu
 napi/wasm/python callbacks over one shared shape, with the cross-binding rule
 "registered → renders, else the clean unknown-component error".
 
-**Phase 1 (native Rust) is implemented (2026-07-23).** Public API on the umbrella:
-`mjmx::{CustomComponent, ComponentRegistry, ComponentCx}` + `render_with_components` /
-`render_file_with_components`. A host `impl`s `CustomComponent` (`tag()` + `render(&mut
-ComponentCx)`), registers it on a `ComponentRegistry`, and passes that in; a tag the parser
-left as `MjmlTag::Unknown` renders through its component, and only an *unregistered* unknown
-tag is the usual fatal "not a recognized MJML component" error (the linter agrees via
-`mjmx_linter::lint_with_components`, so a registered tag is not flagged under `strict`
-either). Trait/registry/`ComponentCx` live in `crates/mjmx-codegen/src/custom.rs`;
-registry-aware dispatch is the `MjmlTag::Unknown` arm in `render.rs`; the registry is
-threaded as `RenderContext.registry: Option<&'a ComponentRegistry>` (no new lifetime — a
-`&'r` param coerces since `'r: 'a`), and codegen's
+**Phases 1–2 are implemented (2026-07-23): native Rust + the napi/wasm JS callbacks.**
+Public API on the umbrella: `mjmx::{CustomComponent, ComponentRegistry, ComponentCx,
+ComponentLookup}` + `render_with_components` / `render_file_with_components`. A host `impl`s
+`CustomComponent` (`tag()` + `render(&mut ComponentCx)`), registers it on a
+`ComponentRegistry`, and passes that in; a tag the parser left as `MjmlTag::Unknown` renders
+through its component, and only an *unregistered* unknown tag is the usual fatal "not a
+recognized MJML component" error (the linter agrees via `mjmx_linter::lint_with_components`,
+so a registered tag is not flagged under `strict`; a registered Tier 1 tag *outside*
+`<mj-body>` is flagged instead — a body-only leaf). Trait/registry/`ComponentCx` live in
+`crates/mjmx-codegen/src/custom.rs`; registry-aware dispatch is the `MjmlTag::Unknown` arm in
+`render.rs`; the registry is threaded as `RenderContext.registry: Option<&'a dyn
+ComponentLookup>` (no new lifetime — a `&'r` param coerces since `'r: 'a`), and codegen's
 `render_document_with_inline_css_and_components` carries it. **ABI = `ComponentCx`**:
-`attr`/`attr_or` (cascade-resolved only), `container_width`, `breakpoint`, `raw_inner`
-(verbatim inner text), `write`, `add_style`, `add_font`. Head contributions are owned
-side-channels on `RenderContext` (`add_style` reuses the style buffer; `add_font` →
-`custom_fonts: Vec<(String,String)>`, emitted `<link>`+`@import` only when the family is
-referenced in the body, mjml's rule) — so a component needs no arena access. Byte-identical
-to before for any document with no custom fonts (the 78 golden tests are unmoved). The three
-open questions are resolved for Phase 1 (resolved-only `attr`; owned-side-channel head
-contributions; crate-semver versioning, no embedded ABI int). Tests:
+`attr`/`attr_or` (cascade-resolved only), `resolved_attrs` (the whole cascade-resolved map,
+for a binding snapshot), `container_width`, `breakpoint`, `raw_inner` (verbatim inner text),
+`write`, `add_style`, `add_font`. Head contributions are owned side-channels on
+`RenderContext` (`add_style` reuses the style buffer; `add_font` → `custom_fonts:
+Vec<(String,String)>`, emitted `<link>`+`@import` only when the family is referenced in the
+body, mjml's rule) — so a component needs no arena access. Byte-identical to before for any
+document with no custom fonts (the 78 golden tests are unmoved). Tests:
 `crates/mjmx/tests/custom_components.rs`.
 
+**The author returns cell *content*; mjmx supplies the `<td>` cell** (`render::
+render_custom_in_cell`). mjml's `mjml-column`/`mjml-hero` wrap every non-raw child in a
+`<td>` in `renderChildren`, reading the cell from that child: `align` + `css-class`
+attributes, then a style block of `background` (from `container-background-color`),
+`font-size:0px`, the `padding` family, `word-break:break-word` — verified against real
+`mjml-column@5.4.0` source (`lib/index.js`, the child cell). A custom component gets the
+same cell, so `<tr>` (from the column) + `<td>` (from mjmx) is valid `<tr><td>…</td></tr>`;
+without this a bare `<span>` return produced invalid `<tr><span>`. A custom component has
+no mjml attribute defaults, so each cell attribute appears **only when the cascade resolves
+one** (mjml's `htmlAttributes` drops undefined); with none set the cell is
+`<td style="font-size:0px;word-break:break-word;">`. Native and both JS bindings share this
+one path (the wrapping is in codegen, before the binding's `cx.write`).
+
+**Phase 2 — JS bindings.** Both `@mjmx/node` and `@mjmx/wasm` take a `components:
+Record<string, ComponentFn>` render option, `ComponentFn = (cx) => string |
+{ html, styles?, fonts? }`. `cx` is a **read-only snapshot** — `attr(name)`, `attrs`,
+`containerWidth`, `breakpoint`, `rawInner` — and head contributions come back through the
+**return channel** (resolving the Phase-2 half of the head-contributions open question:
+mutation for native, return-value for callbacks — a callback holds no live `cx`, and a
+return value keeps the JS call one-way, no reentrancy). The registry was generalized to a
+`ComponentLookup` trait so a binding supplies a JS-backed registry — napi holds each
+callback as a `FunctionRef` and `borrow_back`s it with the `Env` at call time; wasm holds a
+`js_sys::Function`. Both call the callback **synchronously on the JS thread** during render
+(no threadsafe-function / async — the bindings stay sync, per the mjml-version section's
+bindings note). napi's `index.js` wraps each callback to add the `cx.attr(name)` method (a
+pure lookup over the plain-data `attrs` it hands the native side, so the native never calls
+back into JS); wasm builds `attr` as a `Closure` over the snapshot. The `attrs` snapshot is
+built from `Semantic::resolved_attributes` (union of inline attrs + every applicable
+`mj-attributes`/`mj-class`/`mj-all` name, each cascade-resolved). Examples in `examples/`
+(node-cjs, node-esm, node-ts, browser); napi + wasm smoke tests each gained a custom-
+component check.
+
 **Still unimplemented (deliberately):** Tier 2 container components (custom tag holding
-`mj-column`s — the layout ABI); and Phase 2/3 bindings — CLI (no callback surface), napi
-(threadsafe-fn), wasm (imported-fn), python (pyo3). A CLI user renders built-ins + any
-Rust-registered components only; that is the documented, consistent consequence of the
-same rule, not a special case.
+`mj-column`s — the layout ABI); the CLI (no JS-callback surface — a CLI user renders
+built-ins + any Rust-registered components only, the documented consequence of the same
+rule); and Phase 3 python (pyo3), which will reuse the same `cx` shape + return channel.
 
 ## Planned next
 

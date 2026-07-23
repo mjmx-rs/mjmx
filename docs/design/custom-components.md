@@ -1,8 +1,25 @@
 # Design: custom components (mjmx extension points)
 
-Status: **Phase 1 (native Rust) — implemented 2026-07-23.** Tier 2 (container
-components) and Phases 2–3 (napi/wasm/python callbacks) remain proposal. Author-reviewed
-2026-07-22. The shipped surface: `mjmx::{CustomComponent, ComponentRegistry, ComponentCx}`
+Status: **Phases 1–2 implemented 2026-07-23** — native Rust *and* the napi + wasm JS
+callbacks. Tier 2 (container components) and Phase 3 (python) remain proposal.
+Author-reviewed 2026-07-22.
+
+The JS surface (`@mjmx/node`, `@mjmx/wasm`): a `components: Record<string, ComponentFn>`
+render option, where `ComponentFn = (cx: ComponentCx) => string | ComponentResult`. `cx`
+is a **read-only snapshot** — `attr(name)` / `attrs` (cascade-resolved), `containerWidth`,
+`breakpoint`, `rawInner` — and head contributions come back through the **return channel**
+(`ComponentResult { html, styles?, fonts? }`), *not* by mutating `cx`. That answers the
+Phase-2 half of the "head contributions" open question below (mutation for native,
+return-channel for the callbacks — a callback holds no live `cx` to mutate, and a return
+value avoids any reentrant call back into the renderer). Both bindings build the snapshot
+from `ComponentCx::resolved_attrs()` and route through
+`render_with_components`; the registry generalized to a `ComponentLookup` trait so a
+binding supplies a JS-backed registry (napi via `FunctionRef` + `borrow_back`, wasm via a
+held `js_sys::Function`) without re-implementing it. Both call the JS synchronously on the
+JS thread during render — no threadsafe-function machinery — which is sound because the
+callback only reads its snapshot (no reentrancy).
+
+The Phase-1 native surface: `mjmx::{CustomComponent, ComponentRegistry, ComponentCx}`
 and `mjmx::render_with_components` / `render_file_with_components` (the trait, registry and
 `ComponentCx` live in `crates/mjmx-codegen/src/custom.rs`; registry-aware dispatch in
 `render.rs`, linter in `mjmx-linter` via `lint_with_components`). See
@@ -55,6 +72,19 @@ recurse into mjmx's dispatch and does not drive layout scaffolding. This covers
 the overwhelming majority of real custom components (branded button, badge,
 social widget, divider variant) while keeping the ABI small enough to keep
 stable across versions.
+
+**The author returns cell *content*, not a cell.** mjmx wraps the returned
+fragment in the standard leaf `<td>` cell — exactly the cell mjml's
+`mjml-column`/`mjml-hero` emit around every non-raw child (`renderChildren`),
+read from *this* component's attributes: `align` and `css-class` as attributes,
+then a style block of `background` (from `container-background-color`),
+`font-size:0px`, the `padding` family, and `word-break:break-word`. So the column's
+`<tr>` and mjmx's `<td>` yield valid `<tr><td>…</td></tr>` markup. Unlike a
+built-in, a custom component has no mjml-declared attribute defaults, so every cell
+attribute is emitted **only when the cascade resolves one** (mjml's `htmlAttributes`
+drops `null`/`undefined`); a component with no cell attributes gets
+`<td style="font-size:0px;word-break:break-word;">`. Implemented in
+`render::render_custom_in_cell`.
 
 ## The ABI: `ComponentCx`
 
@@ -183,17 +213,21 @@ scope until Tier 1 ships and demand is demonstrated.
    imported-function plumbing, done once against a shared shape.
 3. **python (pyo3)** — same `cx`, at that binding's milestone.
 
-Native-first locks the ABI before callback plumbing is paid for three times.
+Native-first locks the ABI before callback plumbing is paid for three times. Phases 1 and
+2 are now done; Phase 3 (python) reuses the same `cx` shape and return channel.
 
-## Open questions — resolved for Phase 1
+## Open questions — resolved
 
-- **Head contributions.** *Decided: collected via `cx` mutation.* `add_style` /
-  `add_font` push onto the `RenderContext` (styles reuse the existing dedup buffer; fonts
-  land in an owned `custom_fonts: Vec<(String, String)>` side-channel, merged into the head
-  font pass and emitted — `<link>` + `@import` — only when the family is referenced in the
-  body, mjml's own rule). Owned rather than arena-bound so a future callback need not
-  thread the allocator. The napi/wasm return-channel question (Phase 2) is still open and
-  does not affect the native shape.
+- **Head contributions.** *Decided:* native via `cx` mutation, JS callbacks via a **return
+  channel**. `add_style` / `add_font` push onto the `RenderContext` (styles reuse the
+  existing dedup buffer; fonts land in an owned `custom_fonts: Vec<(String, String)>`
+  side-channel, merged into the head font pass and emitted — `<link>` + `@import` — only
+  when the family is referenced in the body, mjml's own rule). Owned rather than
+  arena-bound so a callback need not thread the allocator. For napi/wasm the callback
+  returns `{ html, styles?, fonts? }` rather than mutating a live `cx`: a callback holds no
+  Rust `cx` to mutate, and a plain return value keeps the JS call one-way (no reentrancy
+  back into the renderer). The binding component applies the returned styles/fonts through
+  the native `cx` after the call.
 - **`attr()` — raw or resolved?** *Decided: resolved only*, through
   `Semantic::attribute` exactly as built-ins read attributes. Raw access is not offered
   (it would bypass `mj-attributes`).

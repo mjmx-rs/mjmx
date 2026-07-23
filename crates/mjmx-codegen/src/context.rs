@@ -18,7 +18,7 @@ use mjmx_minifier::MinifyOptions;
 use mjmx_semantic::{FontFace, Semantic};
 use mjmx_sourcemap::SourceMapBuilder;
 
-use crate::custom::ComponentRegistry;
+use crate::custom::ComponentLookup;
 
 /// How hard a render insists the document validates. mjml's `validationLevel`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -290,7 +290,7 @@ pub struct RenderContext<'a> {
     /// The registered custom components, if any. `None` — the default — is the ordinary
     /// render path: an unknown tag stays an error. Set by
     /// [`set_components`](Self::set_components) on the `_with_components` entry points.
-    registry: Option<&'a ComponentRegistry>,
+    registry: Option<&'a dyn ComponentLookup>,
     hamburger_seq: u32,
     carousel_seq: u32,
     /// Source-mapping collector. `None` — the default — means no mapping is recorded and
@@ -330,13 +330,13 @@ impl<'a> RenderContext<'a> {
 
     /// Attach a custom-component registry, so dispatch can render a registered tag the
     /// parser left as [`MjmlTag::Unknown`](mjmx_syntax::MjmlTag::Unknown).
-    pub fn set_components(&mut self, registry: &'a ComponentRegistry) {
+    pub fn set_components(&mut self, registry: &'a dyn ComponentLookup) {
         self.registry = Some(registry);
     }
 
     /// The attached custom-component registry, if any.
     #[must_use]
-    pub(crate) fn registry(&self) -> Option<&'a ComponentRegistry> {
+    pub(crate) fn registry(&self) -> Option<&'a dyn ComponentLookup> {
         self.registry
     }
 

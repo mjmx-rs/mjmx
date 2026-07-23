@@ -43,7 +43,7 @@ mod head;
 mod render;
 
 pub use context::{MediaQuery, MjmlCompat, RenderContext, RenderOptions, ValidationLevel};
-pub use custom::{ComponentCx, ComponentRegistry, CustomComponent};
+pub use custom::{ComponentCx, ComponentLookup, ComponentRegistry, CustomComponent};
 // Re-exported so a caller can build a `RenderOptions::fonts` table without depending on
 // `mjmx-semantic` directly.
 pub use document::{

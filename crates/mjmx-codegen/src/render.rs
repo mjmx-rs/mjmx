@@ -175,13 +175,84 @@ fn dispatch<'a>(
         MjmlTag::Unknown => {
             let registered = ctx.registry();
             if let Some(comp) = registered.and_then(|reg| reg.get(element.raw_tag.as_str())) {
-                let mut cx = ComponentCx::new(element, ctx, buf);
-                return comp.render(&mut cx);
+                return render_custom_in_cell(element, comp, ctx, buf);
             }
             Err(unsupported(element))
         }
         _ => Err(unsupported(element)),
     }
+}
+
+/// Render a registered Tier 1 custom component wrapped in the standard leaf `<td>` cell.
+///
+/// mjml's column/hero emit the cell around every non-raw child (`mjml-column`'s
+/// `renderChildren`), reading the cell's attributes from that *child*: `align`, `css-class`
+/// → `class`, and a style block of `background` (from `container-background-color`),
+/// `font-size:0px`, the `padding` family, and `word-break:break-word`. mjmx's built-in
+/// leaves emit this cell themselves (see `mj-text`), so a custom component gets the same
+/// treatment here — the author returns the cell *content* (a `<span>`, `<div>`, …) and mjmx
+/// supplies the cell, keeping the table markup valid (`<tr><td>…</td></tr>`).
+///
+/// Unlike a built-in, a custom component has no mjml-declared attribute defaults, so every
+/// cell attribute is emitted **only when the cascade resolves one** — mjml's `htmlAttributes`
+/// drops `null`/`undefined` values. A component with no cell attributes therefore yields
+/// `<td style="font-size:0px;word-break:break-word;">`.
+fn render_custom_in_cell<'a>(
+    element: &'a Element<'a>,
+    comp: &dyn crate::custom::CustomComponent,
+    ctx: &mut RenderContext<'a>,
+    buf: &mut String,
+) -> RenderResult {
+    use crate::components::css_class::css_class;
+
+    // Resolve the cell attributes from the component's own attributes (no built-in default;
+    // mjml omits an undefined value). `css_class` also folds any `mj-class` css-class in.
+    let align = ctx.semantic.attribute(element, "align", None);
+    let class = css_class(ctx, element);
+    let container_bg = ctx
+        .semantic
+        .attribute(element, "container-background-color", None);
+    let padding = ctx.semantic.attribute(element, "padding", None);
+    let padding_top = ctx.semantic.attribute(element, "padding-top", None);
+    let padding_right = ctx.semantic.attribute(element, "padding-right", None);
+    let padding_bottom = ctx.semantic.attribute(element, "padding-bottom", None);
+    let padding_left = ctx.semantic.attribute(element, "padding-left", None);
+
+    // Style block, in mjml's key order: background, font-size, padding (+ longhands),
+    // word-break. `font-size:0px` and `word-break:break-word` are always present.
+    let mut style = String::new();
+    if let Some(bg) = container_bg {
+        style.push_str(&format!("background:{bg};"));
+    }
+    style.push_str("font-size:0px;");
+    for (prop, value) in [
+        ("padding", padding),
+        ("padding-top", padding_top),
+        ("padding-right", padding_right),
+        ("padding-bottom", padding_bottom),
+        ("padding-left", padding_left),
+    ] {
+        if let Some(v) = value {
+            style.push_str(&format!("{prop}:{v};"));
+        }
+    }
+    style.push_str("word-break:break-word;");
+
+    // Attributes in mjml's `htmlAttributes` order: align, class, style — undefined omitted.
+    buf.push_str("<td");
+    if let Some(align) = align {
+        buf.push_str(&format!(" align=\"{align}\""));
+    }
+    if let Some(class) = class.as_deref() {
+        buf.push_str(&format!(" class=\"{class}\""));
+    }
+    buf.push_str(&format!(" style=\"{style}\">"));
+
+    let mut cx = ComponentCx::new(element, ctx, buf);
+    comp.render(&mut cx)?;
+
+    buf.push_str("</td>");
+    Ok(())
 }
 
 /// Build the diagnostic for a tag the body renderer cannot emit. Two distinct cases,

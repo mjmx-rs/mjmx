@@ -140,6 +140,45 @@ export interface RenderOptions {
    * these are per-call: nothing leaks into a later `render`. Default: `{}`.
    */
   juicePreserveTags?: Record<string, PreserveTag>;
+
+  /**
+   * Host-registered **custom components** (Tier 1), keyed by tag name. When rendering
+   * reaches a tag the parser does not recognize, its callback renders it; an
+   * unregistered unknown tag is the usual fatal "not a recognized MJML component" error.
+   * A registered component is a body leaf element — it receives its resolved attributes
+   * and inner text and returns HTML; it does not drive the responsive column layout
+   * (Tier 2, not yet available).
+   *
+   * mjmx's own extension point, not mjml's `.mjmlconfig` packages. Default: none.
+   */
+  components?: Record<string, ComponentFn>;
+}
+
+/** A custom-component renderer: attributes and inner text in, an HTML fragment out. */
+export type ComponentFn = (cx: ComponentCx) => string | ComponentResult;
+
+/** The read-only context a `ComponentFn` receives — a snapshot of this element. */
+export interface ComponentCx {
+  /** A cascade-resolved attribute (`mj-attributes` / `mj-class` / defaults applied). */
+  attr(name: string): string | undefined;
+  /** Every cascade-resolved attribute as a `{ name: value }` map. */
+  attrs: Record<string, string>;
+  /** The content-box width, in pixels, available to this element. */
+  containerWidth: number;
+  /** The active responsive breakpoint, in pixels. */
+  breakpoint: number;
+  /** The verbatim inner source text between the tag's open and close. */
+  rawInner: string;
+}
+
+/** What a `ComponentFn` may return instead of a bare HTML string, to also add to `<head>`. */
+export interface ComponentResult {
+  /** The HTML fragment this component renders. */
+  html: string;
+  /** `<style>` blocks to add to the head (deduped). */
+  styles?: string[];
+  /** Web fonts to add, each a `[name, href]` pair; emitted only if `name` is referenced. */
+  fonts?: [name: string, href: string][];
 }
 
 /**
@@ -669,20 +708,220 @@ where
         .map_err(|err| JsError::new(&format!("mjmx: invalid options object: {err}")))
 }
 
+/// One host component: a tag plus the JS callback that renders it.
+///
+/// WebAssembly is single-threaded and the render runs to completion synchronously, so the
+/// callback ([`js_sys::Function`]) can be held by value and called directly deep inside
+/// mjmx's render — no threadsafe machinery, no reentrancy (the callback reads only the
+/// snapshot it is handed).
+struct WasmComponent {
+    tag: String,
+    callback: js_sys::Function,
+}
+
+impl mjmx::CustomComponent for WasmComponent {
+    fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    fn render(&self, cx: &mut mjmx::ComponentCx<'_, '_>) -> Result<(), Diagnostic> {
+        let resolved = cx.resolved_attrs();
+
+        // The attrs object, and an `attr(name)` closure that looks it up (a pure snapshot
+        // read — it never calls back into the renderer). The closure is kept alive for the
+        // whole function, so it outlives the synchronous callback call below.
+        let attrs = js_sys::Object::new();
+        let snapshot: std::collections::HashMap<String, String> = resolved
+            .iter()
+            .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
+            .collect();
+        for (name, value) in &resolved {
+            let _ = js_sys::Reflect::set(&attrs, &(*name).into(), &(*value).into());
+        }
+        let attr = Closure::wrap(Box::new(move |name: JsValue| -> JsValue {
+            match name.as_string().and_then(|n| snapshot.get(&n).cloned()) {
+                Some(value) => JsValue::from_str(&value),
+                None => JsValue::UNDEFINED,
+            }
+        }) as Box<dyn Fn(JsValue) -> JsValue>);
+
+        let context = js_sys::Object::new();
+        let set = |key: &str, value: &JsValue| {
+            let _ = js_sys::Reflect::set(&context, &key.into(), value);
+        };
+        set("attrs", &attrs);
+        set(
+            "containerWidth",
+            &JsValue::from_f64(f64::from(cx.container_width())),
+        );
+        set("breakpoint", &JsValue::from_f64(f64::from(cx.breakpoint())));
+        set("rawInner", &JsValue::from_str(&cx.raw_inner()));
+        set("attr", attr.as_ref().unchecked_ref());
+
+        let result = self
+            .callback
+            .call1(&JsValue::NULL, &context)
+            .map_err(|err| custom_error(&self.tag, &err))?;
+
+        if let Some(html) = result.as_string() {
+            cx.write(&html);
+        } else if result.is_object() {
+            let html = js_sys::Reflect::get(&result, &"html".into())
+                .ok()
+                .and_then(|value| value.as_string())
+                .ok_or_else(|| {
+                    Diagnostic::error(format!(
+                        "mjmx: custom component <{}> must return a string or {{ html }}",
+                        self.tag
+                    ))
+                })?;
+            cx.write(&html);
+            if let Some(styles) = array_field(&result, "styles") {
+                for style in styles.iter().filter_map(|value| value.as_string()) {
+                    cx.add_style(style);
+                }
+            }
+            if let Some(fonts) = array_field(&result, "fonts") {
+                for pair in fonts
+                    .iter()
+                    .filter_map(|value| value.dyn_into::<js_sys::Array>().ok())
+                {
+                    if let (Some(name), Some(href)) =
+                        (pair.get(0).as_string(), pair.get(1).as_string())
+                    {
+                        cx.add_font(name, href);
+                    }
+                }
+            }
+        } else {
+            return Err(Diagnostic::error(format!(
+                "mjmx: custom component <{}> must return a string or {{ html }}",
+                self.tag
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// A JS array property of `object`, if present and an array.
+fn array_field(object: &JsValue, key: &str) -> Option<js_sys::Array> {
+    js_sys::Reflect::get(object, &key.into())
+        .ok()
+        .and_then(|value| value.dyn_into::<js_sys::Array>().ok())
+}
+
+/// The diagnostic a failed component callback aborts the render with.
+fn custom_error(tag: &str, err: &JsValue) -> Diagnostic {
+    let reason = err
+        .as_string()
+        .or_else(|| {
+            js_sys::Reflect::get(err, &"message".into())
+                .ok()
+                .and_then(|m| m.as_string())
+        })
+        .unwrap_or_else(|| "callback threw".to_owned());
+    Diagnostic::error(format!("mjmx: custom component <{tag}> failed: {reason}"))
+}
+
+/// A call-scoped set of JS-backed components, built from the `components` option.
+struct WasmComponentRegistry {
+    components: std::collections::BTreeMap<String, WasmComponent>,
+}
+
+impl std::fmt::Debug for WasmComponentRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WasmComponentRegistry")
+            .field("tags", &self.components.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl mjmx::ComponentLookup for WasmComponentRegistry {
+    fn get(&self, tag: &str) -> Option<&dyn mjmx::CustomComponent> {
+        self.components
+            .get(tag)
+            .map(|component| component as &dyn mjmx::CustomComponent)
+    }
+
+    fn names(&self) -> Vec<&str> {
+        self.components.keys().map(String::as_str).collect()
+    }
+}
+
+/// Pull the `components` object out of the options (its values are functions, which
+/// `serde-wasm-bindgen` cannot decode), returning the options *without* `components` for
+/// the serde path and the extracted object for the registry.
+fn split_components(
+    options: Option<RenderOptionsObject>,
+) -> Result<(Option<JsValue>, Option<js_sys::Object>), JsError> {
+    let Some(value): Option<JsValue> = options.map(Into::into) else {
+        return Ok((None, None));
+    };
+    if value.is_undefined() || value.is_null() {
+        return Ok((Some(value), None));
+    }
+    let components = js_sys::Reflect::get(&value, &"components".into())
+        .ok()
+        .filter(|c| c.is_object());
+    let Some(components) = components else {
+        return Ok((Some(value), None));
+    };
+    // Clone the options without `components`, so the serde pass never sees the functions.
+    let object = value
+        .dyn_ref::<js_sys::Object>()
+        .ok_or_else(|| JsError::new("mjmx: options must be an object"))?;
+    let cloned = js_sys::Object::assign(&js_sys::Object::new(), object);
+    let _ = js_sys::Reflect::delete_property(&cloned, &"components".into());
+    Ok((Some(cloned.into()), Some(components.unchecked_into())))
+}
+
+/// Build the component registry from the extracted `components` object, or `None`.
+fn build_registry(
+    components: Option<js_sys::Object>,
+) -> Result<Option<WasmComponentRegistry>, JsError> {
+    let Some(object) = components else {
+        return Ok(None);
+    };
+    let mut map = std::collections::BTreeMap::new();
+    for key in js_sys::Object::keys(&object).iter() {
+        let tag = key
+            .as_string()
+            .ok_or_else(|| JsError::new("mjmx: a components key must be a string"))?;
+        let value = js_sys::Reflect::get(&object, &key)
+            .map_err(|_| JsError::new(&format!("mjmx: could not read components['{tag}']")))?;
+        let callback = value
+            .dyn_into::<js_sys::Function>()
+            .map_err(|_| JsError::new(&format!("mjmx: components['{tag}'] must be a function")))?;
+        map.insert(tag.clone(), WasmComponent { tag, callback });
+    }
+    if map.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(WasmComponentRegistry { components: map }))
+}
+
 /// Render MJML `source` to HTML. Throws if parsing or rendering produced errors.
 ///
 /// `<mj-include>` is not resolved: WebAssembly has no filesystem. Inline the
 /// partials before calling, or use the native Node addon's `renderFile`.
+///
+/// `options.components` maps a tag to a callback that renders it (Tier 1 custom
+/// components); see the `RenderOptions` TypeScript type.
 #[wasm_bindgen]
 #[allow(
     clippy::needless_pass_by_value,
     reason = "wasm-bindgen owns its arguments"
 )]
 pub fn render(source: String, options: Option<RenderOptionsObject>) -> Result<String, JsError> {
-    let options = from_js_options::<JsRenderOptions>(options)?
+    let (options_value, components) = split_components(options)?;
+    let options = from_js_options::<JsRenderOptions>(options_value)?
         .into_render_options()
         .map_err(|message| JsError::new(&format!("mjmx: {message}")))?;
-    mjmx::render(&source, &options).map_err(|diagnostics| to_js_error(&diagnostics))
+    match build_registry(components)? {
+        Some(registry) => mjmx::render_with_components(&source, &options, &registry),
+        None => mjmx::render(&source, &options),
+    }
+    .map_err(|diagnostics| to_js_error(&diagnostics))
 }
 
 /// Format MJML `source` into canonical MJML source text. Throws on parse errors.

@@ -38,6 +38,7 @@ pub use attributes::AttributesRegistry;
 pub use head::{DEFAULT_BREAKPOINT, FontFace, HeadData, HtmlAttributeRule};
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 
 use mjmx_ast::{Document, Element, Node};
 use mjmx_diagnostics::Diagnostic;
@@ -266,6 +267,35 @@ impl<'a> Semantic<'a> {
         }
         // 4. mj-all default.
         self.attributes.all("css-class").map(Cow::Borrowed)
+    }
+
+    /// Every attribute that resolves for `el`, as `(name, value)` pairs in sorted name
+    /// order, each value taken through the [`attribute`](Self::attribute) cascade.
+    ///
+    /// The name set is the union of the element's own inline attributes and every
+    /// `<mj-attributes>` default (per-tag, `mj-all`, and the element's `mj-class` maps)
+    /// that could apply to its tag — so a caller sees exactly what a built-in would read,
+    /// with no name missed. The `mj-class` selector attribute is itself excluded (it names
+    /// classes, it is not a rendering value). Used to snapshot a custom component's
+    /// attributes for a host binding.
+    #[must_use]
+    pub fn resolved_attributes(&self, el: &Element<'a>) -> Vec<(&'a str, &'a str)> {
+        let mut names: BTreeSet<&'a str> = BTreeSet::new();
+        for attr in &el.attributes {
+            let name = attr.name.as_str();
+            if name != "mj-class" {
+                names.insert(name);
+            }
+        }
+        names.extend(self.attributes.per_tag_names(el.raw_tag.as_str()));
+        names.extend(self.attributes.all_names());
+        if let Some(classes) = el.attr("mj-class") {
+            names.extend(self.attributes.class_names(classes));
+        }
+        names
+            .into_iter()
+            .filter_map(|name| self.attribute(el, name, None).map(|value| (name, value)))
+            .collect()
     }
 }
 

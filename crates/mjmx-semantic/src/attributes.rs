@@ -68,6 +68,27 @@ impl<'a> AttributesRegistry<'a> {
         self.per_tag.get(tag).and_then(|m| m.get(name)).copied()
     }
 
+    /// Every attribute name defined by `<mj-all>`.
+    pub fn all_names(&self) -> impl Iterator<Item = &'a str> + '_ {
+        self.all.keys().copied()
+    }
+
+    /// Every attribute name defined per-tag for elements whose raw tag is `tag`.
+    pub fn per_tag_names<'s>(&'s self, tag: &str) -> impl Iterator<Item = &'a str> + 's {
+        self.per_tag
+            .get(tag)
+            .into_iter()
+            .flat_map(|map| map.keys().copied())
+    }
+
+    /// Every attribute name defined by any class in `classes` (a space-separated list).
+    pub fn class_names<'s>(&'s self, classes: &'s str) -> impl Iterator<Item = &'a str> + 's {
+        classes
+            .split_whitespace()
+            .filter_map(move |class| self.classes.get(class))
+            .flat_map(|map| map.keys().copied())
+    }
+
     /// The value for `name` from `mj-class="..."`, later classes winning over earlier.
     #[must_use]
     pub fn class(&self, classes: &str, name: &str) -> Option<&'a str> {

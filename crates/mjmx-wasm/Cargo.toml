@@ -16,6 +16,7 @@ mjmx.workspace = true
 serde.workspace = true
 serde-wasm-bindgen.workspace = true
 wasm-bindgen.workspace = true
+js-sys.workspace = true
 
 [dev-dependencies]
 # The options structs are deserialized by `serde-wasm-bindgen` at the JS boundary and

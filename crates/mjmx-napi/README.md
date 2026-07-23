@@ -81,6 +81,40 @@ output carries `<div … style="" role="article">`, so mjml's `true` *removes an
 attribute* while minifying; mjmx defaults it off to keep `minify` a pure whitespace
 transform. Pass `true` for byte parity with mjml.
 
+## Custom components
+
+Register a renderer for a tag through `options.components`. When rendering reaches a tag
+the parser does not recognize, its callback renders it; an unregistered unknown tag stays
+the usual fatal "not a recognized MJML component" error. This is mjmx's own extension
+point (a small, versioned contract), not mjml's `.mjmlconfig` JS packages.
+
+```js
+const html = mjmx.render(source, {
+  components: {
+    // Return a string for HTML only…
+    'mj-badge': (cx) => `<span>${cx.attr('label') ?? ''}</span>`,
+    // …or an object to also contribute to <head>.
+    'mj-card': (cx) => ({
+      html: `<div class="card">${cx.rawInner}</div>`,
+      styles: ['.card{border:1px solid #ccc}'],
+      fonts: [['Inter', 'https://fonts.example/inter.css']], // emitted if referenced
+    }),
+  },
+});
+```
+
+The callback receives a read-only `cx`: `attr(name)` and `attrs` (cascade-resolved through
+`mj-attributes` / `mj-class` / defaults), `containerWidth`, `breakpoint`, and `rawInner`
+(the verbatim inner text). A component is a **body leaf** — it does not drive the responsive
+column layout (that is Tier 2, not yet available).
+
+**Return cell *content*, not a cell.** mjmx wraps your fragment in the standard leaf `<td>`
+cell (the one mjml's column emits around every child), so `<mj-badge>` above becomes
+`<tr><td style="font-size:0px;word-break:break-word;"><span>…</span></td></tr>` — valid
+table markup. The cell reads `align`, `css-class`, `container-background-color` and the
+`padding` family from the component's own (cascade-resolved) attributes; set none and the
+cell is the bare default. Runnable examples are in the repo's `examples/` directory.
+
 ## CSS inlining: `juiceOptions` and `juicePreserveTags`
 
 mjml hands `<mj-style inline="inline">` to [juice]. mjmx has no juice — the inliner is

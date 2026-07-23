@@ -105,6 +105,67 @@ export interface RenderOptions {
    * these are per-call: they never leak into a later `render`. Default: `{}`.
    */
   juicePreserveTags?: Record<string, PreserveTag>;
+
+  /**
+   * Host-registered **custom components** (Tier 1), keyed by tag name. When rendering
+   * reaches a tag the parser does not recognize, its callback renders it; an
+   * unregistered unknown tag is the usual fatal "not a recognized MJML component"
+   * error. A registered component is a body leaf element — it receives its resolved
+   * attributes and inner text and returns HTML; it does not participate in the
+   * responsive column layout (that is Tier 2, not yet available).
+   *
+   * mjmx's own extension point, not mjml's `.mjmlconfig` packages: a small, versioned
+   * contract this compiler owns. Default: none.
+   *
+   * @example
+   * render(src, {
+   *   components: {
+   *     "mj-badge": (cx) => `<span>${cx.attr("label") ?? ""}</span>`,
+   *     "mj-card": (cx) => ({
+   *       html: `<div class="card">${cx.rawInner}</div>`,
+   *       styles: [".card{border:1px solid #ccc}"],
+   *       fonts: [["Inter", "https://fonts.example/inter.css"]],
+   *     }),
+   *   },
+   * });
+   */
+  components?: Record<string, ComponentFn>;
+}
+
+/** A custom-component renderer: attributes and inner text in, an HTML fragment out. */
+export type ComponentFn = (cx: ComponentCx) => string | ComponentResult;
+
+/**
+ * The context a {@link ComponentFn} receives. Read-only: a snapshot of this element,
+ * with no path back into the renderer.
+ */
+export interface ComponentCx {
+  /** A cascade-resolved attribute (`mj-attributes` / `mj-class` / defaults applied). */
+  attr(name: string): string | undefined;
+  /** Every cascade-resolved attribute as a `{ name: value }` map. */
+  attrs: Record<string, string>;
+  /** The content-box width, in pixels, available to this element. */
+  containerWidth: number;
+  /** The active responsive breakpoint, in pixels. */
+  breakpoint: number;
+  /** The verbatim inner source text between the tag's open and close. */
+  rawInner: string;
+}
+
+/**
+ * What a {@link ComponentFn} may return instead of a bare HTML string, to also
+ * contribute to `<head>`.
+ */
+export interface ComponentResult {
+  /** The HTML fragment this component renders. */
+  html: string;
+  /** `<style>` blocks to add to the head (deduped). */
+  styles?: string[];
+  /**
+   * Web fonts to add to the head, each a `[name, href]` pair. As with mjml's fonts, a
+   * font is emitted only when its family `name` is referenced in the rendered body.
+   */
+  fonts?: [name: string, href: string][];
 }
 
 /**

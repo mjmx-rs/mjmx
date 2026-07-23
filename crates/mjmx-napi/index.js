@@ -86,17 +86,52 @@ function withDiagnostics(err, source) {
   return err;
 }
 
+// Custom components (Tier 1): the native side calls each callback with a plain data
+// snapshot `{ attrs, containerWidth, breakpoint, rawInner }`. We wrap each callback here
+// so the object the user actually receives also has the documented `attr(name)` method —
+// a pure lookup over `attrs`, never a call back into the renderer. `components` lives on
+// the options object for the caller but is passed to the native addon as a separate
+// argument (it is not one of the native render options).
+function makeCx(data) {
+  return {
+    attrs: data.attrs,
+    containerWidth: data.containerWidth,
+    breakpoint: data.breakpoint,
+    rawInner: data.rawInner,
+    attr(name) {
+      return this.attrs[name];
+    },
+  };
+}
+
+function splitComponents(options) {
+  if (!options || typeof options !== 'object' || options.components == null) {
+    return [options, undefined];
+  }
+  const { components, ...rest } = options;
+  const wrapped = {};
+  for (const [tag, fn] of Object.entries(components)) {
+    if (typeof fn !== 'function') {
+      throw new TypeError(`mjmx: components['${tag}'] must be a function`);
+    }
+    wrapped[tag] = (data) => fn(makeCx(data));
+  }
+  return [rest, wrapped];
+}
+
 function render(source, options) {
+  const [opts, components] = splitComponents(options);
   try {
-    return native.render(source, options);
+    return native.render(source, opts, components);
   } catch (err) {
     throw withDiagnostics(err, source);
   }
 }
 
 function renderFile(path, options) {
+  const [opts, components] = splitComponents(options);
   try {
-    return native.renderFile(path, options);
+    return native.renderFile(path, opts, components);
   } catch (err) {
     let source;
     try {

@@ -145,6 +145,33 @@ console.log(render('<mjml><mj-body><mj-section><mj-column><mj-text>Hi</mj-text><
 e.g. `mjmx: error: unclosed element `<mj-section>` (help: …) (+2 more diagnostics)`.
 Call `lint()` on the same source for the structured list.
 
+## Custom components
+
+Register a renderer for a tag through `options.components` — the same shape the Node addon
+uses, working the same way in the browser:
+
+```js
+const html = render(source, {
+  components: {
+    'mj-badge': (cx) => `<span>${cx.attr('label') ?? ''}</span>`,
+    'mj-card': (cx) => ({
+      html: `<div class="card">${cx.rawInner}</div>`,
+      styles: ['.card{border:1px solid #ccc}'],
+      fonts: [['Inter', 'https://fonts.example/inter.css']],
+    }),
+  },
+});
+```
+
+The callback gets a read-only `cx` (`attr(name)`, `attrs`, `containerWidth`, `breakpoint`,
+`rawInner`) and returns a string (HTML) or `{ html, styles?, fonts? }` to also add to
+`<head>`. An unregistered unknown tag stays the usual fatal error. Components are body
+leaves (no layout participation — Tier 2, not yet available).
+
+You return the cell **content**; mjmx wraps it in the standard leaf `<td>` cell (reading
+`align`, `css-class`, `container-background-color` and `padding` from the component's own
+attributes), so the table markup stays valid. See `examples/browser/` for a runnable page.
+
 ## No filesystem: `renderFile` / `mj-include`
 
 The Node addon (`crates/mjmx-napi`) exports `renderFile(path)`, which resolves

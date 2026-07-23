@@ -271,4 +271,30 @@ check('renderFile() throws on a missing file', () => {
   assert.throws(() => mjmx.renderFile(join(fixtures, 'does-not-exist.mjml')), /could not read/);
 });
 
+check('render({ components }) registers a custom component (Tier 1)', () => {
+  const src =
+    '<mjml><mj-body><mj-section><mj-column>' +
+    '<mj-badge label="Hi">deep</mj-badge></mj-column></mj-section></mj-body></mjml>';
+  const html = mjmx.render(src, {
+    components: {
+      'mj-badge': (cx) => ({
+        html: `<span class="badge">${cx.attr('label')}:${cx.rawInner}</span>`,
+        styles: ['.badge{color:#f0f}'],
+      }),
+    },
+  });
+  assert.ok(html.includes('<span class="badge">Hi:deep</span>'), 'expected the component fragment');
+  // mjmx wraps the returned fragment in the standard leaf <td> cell, so the table is valid.
+  assert.ok(
+    html.includes('<td style="font-size:0px;word-break:break-word;"><span class="badge">Hi:deep</span></td>'),
+    'expected the fragment wrapped in the standard cell',
+  );
+  assert.ok(html.includes('.badge{color:#f0f}'), 'expected the returned style in <head>');
+  // A bare string return works too, and cx exposes the layout snapshot.
+  const bare = mjmx.render(src, { components: { 'mj-badge': (cx) => `<i>${cx.containerWidth}</i>` } });
+  assert.ok(/<i>\d+<\/i>/.test(bare), 'expected the string-return fragment with a width');
+  // Unregistered, the same tag is the usual fatal error.
+  assert.throws(() => mjmx.render(src), /not a recognized MJML component|unknown mjml component/);
+});
+
 console.log(`\n${passed} checks passed.`);

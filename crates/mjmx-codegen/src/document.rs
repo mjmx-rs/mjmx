@@ -16,7 +16,7 @@ use mjmx_syntax::MjmlTag;
 
 use crate::components::Body;
 use crate::context::{RenderContext, RenderOptions};
-use crate::custom::ComponentRegistry;
+use crate::custom::ComponentLookup;
 use crate::head::render_head;
 use crate::render::Render;
 
@@ -68,7 +68,7 @@ pub fn render_document_with_inline_css<'a>(
 pub fn render_document_with_inline_css_and_components<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
-    registry: Option<&'a ComponentRegistry>,
+    registry: Option<&'a dyn ComponentLookup>,
 ) -> Result<(String, Vec<String>, Vec<HtmlAttributeRule>), Vec<Diagnostic>> {
     render_impl(document, options, false, registry)
         .map(|rendered| (rendered.html, rendered.inline_css, rendered.html_attributes))
@@ -154,7 +154,7 @@ fn render_impl<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
     sourcemap: bool,
-    registry: Option<&'a ComponentRegistry>,
+    registry: Option<&'a dyn ComponentLookup>,
 ) -> Result<Rendered, Vec<Diagnostic>> {
     let root = document.root_element().ok_or_else(|| {
         vec![

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mjmx — custom components in the browser</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; margin: 2rem; }
+      textarea, pre { width: 100%; box-sizing: border-box; }
+      pre { background: #0b1020; color: #d6e2ff; padding: 1rem; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>mjmx custom components (@mjmx/wasm, browser)</h1>
+    <p>Renders the MJML below, with a host-registered <code>&lt;mj-badge&gt;</code> and
+      <code>&lt;mj-card&gt;</code>, entirely in the browser via WebAssembly.</p>
+    <pre id="out">loading…</pre>
+
+    <!--
+      Served from the repo root so the relative path resolves, e.g.:
+        python3 -m http.server
+        open http://localhost:8000/examples/browser/custom-components.html
+      With the package installed, import from '@mjmx/wasm' instead.
+    -->
+    <script type="module">
+      import init, { render } from '../../crates/mjmx-wasm/pkg/web/mjmx_wasm.js';
+
+      const badge = (cx) => {
+        const label = cx.attr('label') ?? '';
+        const color = cx.attr('color') ?? '#5b21b6';
+        return `<span style="display:inline-block;padding:2px 10px;border-radius:9999px;` +
+          `background:${color};color:#fff;font:600 12px sans-serif">${label}</span>`;
+      };
+
+      const card = (cx) => ({
+        html: `<div class="mjx-card">${cx.rawInner}</div>`,
+        styles: ['.mjx-card{border:1px solid #e5e7eb;border-radius:8px;padding:16px}'],
+        fonts: [['Fraunces', 'https://fonts.googleapis.com/css?family=Fraunces']],
+      });
+
+      const source = `
+<mjml>
+  <mj-body>
+    <mj-section>
+      <mj-column>
+        <mj-badge label="New" color="#dc2626" />
+        <mj-card>Rendered in the browser by a host callback.</mj-card>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>`;
+
+      await init(); // fetch + instantiate the wasm module
+      const html = render(source, { components: { 'mj-badge': badge, 'mj-card': card } });
+      document.getElementById('out').textContent = html;
+    </script>
+  </body>
+</html>

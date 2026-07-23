@@ -17,8 +17,8 @@
 use mjmx_allocator::Allocator;
 
 pub use mjmx_codegen::{
-    ComponentCx, ComponentRegistry, CustomComponent, FontFace, Mapping, MjmlCompat, RenderContext,
-    RenderOptions, SourceMap, Span, ValidationLevel,
+    ComponentCx, ComponentLookup, ComponentRegistry, CustomComponent, FontFace, Mapping,
+    MjmlCompat, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
 };
 pub use mjmx_css_inline::{
     InlineOptions, PreserveTag, SUPPORTED_OPTIONS, refusal, unsupported_option,
@@ -78,7 +78,7 @@ pub fn render_with_diagnostics(
 pub fn render_with_components(
     source: &str,
     options: &RenderOptions,
-    registry: &ComponentRegistry,
+    registry: &dyn ComponentLookup,
 ) -> Result<String, Vec<Diagnostic>> {
     render_source_with(
         source,
@@ -100,7 +100,7 @@ pub fn render_with_components(
 pub fn render_file_with_components(
     path: &std::path::Path,
     options: &RenderOptions,
-    registry: &ComponentRegistry,
+    registry: &dyn ComponentLookup,
 ) -> Result<String, Vec<Diagnostic>> {
     render_file_with(
         path,
@@ -123,7 +123,7 @@ fn render_source(
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
     base: Option<&Path>,
-    registry: Option<&ComponentRegistry>,
+    registry: Option<&dyn ComponentLookup>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let allocator = Allocator::new();
     let parsed = mjmx_parser::parse(source, &allocator);
@@ -191,8 +191,9 @@ fn render_source(
     // Registered custom components are known tags: the linter must not flag them, and
     // codegen renders them through their `CustomComponent`. Empty (the common path) is
     // exactly the built-in behaviour.
-    let registered: std::collections::BTreeSet<&str> =
-        registry.map(|r| r.names().collect()).unwrap_or_default();
+    let registered: std::collections::BTreeSet<&str> = registry
+        .map(|r| r.names().into_iter().collect())
+        .unwrap_or_default();
     match options.validation_level {
         ValidationLevel::Skip => {}
         level => {
@@ -263,7 +264,7 @@ fn render_source_with(
     source: &str,
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
-    registry: Option<&ComponentRegistry>,
+    registry: Option<&dyn ComponentLookup>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     render_source(source, options, loader, None, registry)
 }
@@ -469,7 +470,7 @@ fn render_file_with(
     path: &std::path::Path,
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
-    registry: Option<&ComponentRegistry>,
+    registry: Option<&dyn ComponentLookup>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let source = std::fs::read_to_string(path).map_err(|err| {
         vec![Diagnostic::error(format!(

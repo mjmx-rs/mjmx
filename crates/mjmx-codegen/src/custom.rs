@@ -107,6 +107,35 @@ impl ComponentRegistry {
     }
 }
 
+/// The read-only view of a component set that codegen and the linter consult.
+///
+/// [`ComponentRegistry`] is the native implementation, but a binding (napi, wasm) supplies
+/// its own — one whose components call out to a JS/host callback — without re-implementing
+/// the registry. Codegen holds a `&dyn ComponentLookup`, so every implementation reaches
+/// dispatch through the same door and the "registered → renders, else the clean
+/// unknown-component error" rule stays identical across surfaces.
+///
+/// [`Debug`](std::fmt::Debug) is a supertrait because [`RenderContext`](crate::RenderContext)
+/// derives `Debug` and holds a `&dyn ComponentLookup`; an implementation may print however
+/// it likes (the registry prints its tag names).
+pub trait ComponentLookup: std::fmt::Debug {
+    /// The component registered for `tag`, if any.
+    fn get(&self, tag: &str) -> Option<&dyn CustomComponent>;
+
+    /// The registered tag names (for the linter's known-tag set). Order is unspecified.
+    fn names(&self) -> Vec<&str>;
+}
+
+impl ComponentLookup for ComponentRegistry {
+    fn get(&self, tag: &str) -> Option<&dyn CustomComponent> {
+        ComponentRegistry::get(self, tag)
+    }
+
+    fn names(&self) -> Vec<&str> {
+        ComponentRegistry::names(self).collect()
+    }
+}
+
 /// The render context a [`CustomComponent`] sees — the entire, versioned ABI.
 ///
 /// A thin, deliberately narrow wrapper over the internal [`RenderContext`]: attributes in
@@ -144,6 +173,18 @@ impl<'a, 'buf> ComponentCx<'a, 'buf> {
     #[must_use]
     pub fn attr_or<'d>(&'d self, name: &str, default: &'d str) -> &'d str {
         self.attr(name).unwrap_or(default)
+    }
+
+    /// Every attribute that resolves for this element, as `(name, value)` pairs in sorted
+    /// name order — each value cascade-resolved exactly as [`attr`](Self::attr) resolves it.
+    ///
+    /// This is the faithful snapshot a host binding hands to a JS/other-language callback:
+    /// the union of the element's inline attributes and every `mj-attributes` / `mj-class`
+    /// / `mj-all` default that applies to its tag, so the callback sees the same values a
+    /// built-in component would — without a live call back into the renderer.
+    #[must_use]
+    pub fn resolved_attrs(&self) -> Vec<(&'a str, &'a str)> {
+        self.ctx.semantic.resolved_attributes(self.element)
     }
 
     /// The content-box width, in pixels, available to this element (set by the parent).

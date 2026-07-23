@@ -58,9 +58,14 @@ fn registered_component_renders() {
         &registry,
     )
     .expect("registered custom component should render");
+    // mjmx wraps the returned fragment in the standard leaf <td> cell (the author returns
+    // content, not a cell), so the table markup stays valid. The badge sets no cell
+    // attributes, so the cell is the bare mjml default.
     assert!(
-        html.contains("<span class=\"badge\">Hi</span>"),
-        "expected the badge fragment in:\n{html}"
+        html.contains(
+            "<td style=\"font-size:0px;word-break:break-word;\"><span class=\"badge\">Hi</span></td>"
+        ),
+        "expected the badge wrapped in the standard cell in:\n{html}"
     );
 }
 
@@ -87,6 +92,30 @@ fn registered_component_survives_strict_validation() {
     let html = render_with_components(&doc("<mj-badge label=\"Ok\" />"), &options, &registry)
         .expect("a registered tag must not be a fatal unknown under strict validation");
     assert!(html.contains("<span class=\"badge\">Ok</span>"));
+}
+
+#[test]
+fn custom_cell_carries_resolved_attributes() {
+    // The standard leaf cell reads align / css-class / container-background-color / padding
+    // from the component's own (cascade-resolved) attributes, in mjml's key order:
+    // align and class as attributes, then a style block of background, font-size:0px,
+    // padding, word-break.
+    let registry = ComponentRegistry::new().with(Badge);
+    let html = render_with_components(
+        &doc("<mj-badge label=\"Hi\" align=\"center\" padding=\"5px\" \
+             container-background-color=\"#eee\" css-class=\"promo\" />"),
+        &RenderOptions::default(),
+        &registry,
+    )
+    .expect("render");
+    assert!(
+        html.contains(
+            "<td align=\"center\" class=\"promo\" \
+             style=\"background:#eee;font-size:0px;padding:5px;word-break:break-word;\">\
+             <span class=\"badge\">Hi</span></td>"
+        ),
+        "expected the cell to carry the resolved attributes in mjml order in:\n{html}"
+    );
 }
 
 #[test]

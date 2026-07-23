@@ -1,0 +1,16 @@
+{
+  "name": "mjmx-example-node-ts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TypeScript custom-components example for @mjmx/node.",
+  "type": "commonjs",
+  "scripts": {
+    "check": "tsc --noEmit --project .",
+    "start": "ts-node custom-components.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "ts-node": "^10",
+    "typescript": "^5"
+  }
+}

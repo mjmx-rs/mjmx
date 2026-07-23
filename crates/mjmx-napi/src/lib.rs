@@ -422,23 +422,193 @@ fn to_js_error(diagnostics: &[Diagnostic]) -> Error {
     Error::new(Status::GenericFailure, message)
 }
 
+/// The context object passed to a custom-component callback (Tier 1).
+///
+/// Plain data — the `attr(name)` convenience method the JS surface documents is added by
+/// the loader (`index.js`) around this snapshot, so the native side never calls back into
+/// JS mid-render (no reentrancy). Field names cross the boundary in camelCase:
+/// `containerWidth`, `rawInner`.
+#[napi(object)]
+pub struct JsComponentCx {
+    /// Every cascade-resolved attribute (`mj-attributes` / `mj-class` / defaults applied),
+    /// as a `{ name: value }` object.
+    pub attrs: std::collections::HashMap<String, String>,
+    /// The content-box width, in pixels, available to this element.
+    pub container_width: u32,
+    /// The active responsive breakpoint, in pixels.
+    pub breakpoint: u32,
+    /// The verbatim inner source text between the tag's open and close.
+    pub raw_inner: String,
+}
+
+/// The object form a component callback may return instead of a bare HTML string, to also
+/// contribute to `<head>`.
+#[napi(object)]
+pub struct JsComponentResult {
+    /// The HTML fragment this component renders.
+    pub html: String,
+    /// `<style>` blocks to add to the head (deduped), as a built-in's raw styles are.
+    pub styles: Option<Vec<String>>,
+    /// Web fonts to add to the head, each a `[name, href]` pair; emitted only if `name`
+    /// is referenced in the rendered body, as mjml does.
+    pub fonts: Option<Vec<Vec<String>>>,
+}
+
+/// One host component: a tag plus the JS callback that renders it.
+///
+/// The callback is held as a [`FunctionRef`] (which outlives the napi call scope) and
+/// borrowed back with the stored [`Env`] each time the component renders — so it can be
+/// called synchronously deep inside mjmx's render, on the same JS thread, with no
+/// threadsafe-function machinery.
+struct JsComponent {
+    tag: String,
+    env: Env,
+    callback: FunctionRef<JsComponentCx, Either<String, JsComponentResult>>,
+}
+
+impl mjmx::CustomComponent for JsComponent {
+    fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    fn render(&self, cx: &mut mjmx::ComponentCx<'_, '_>) -> std::result::Result<(), Diagnostic> {
+        let arg = JsComponentCx {
+            attrs: cx
+                .resolved_attrs()
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value.to_string()))
+                .collect(),
+            container_width: cx.container_width(),
+            breakpoint: cx.breakpoint(),
+            raw_inner: cx.raw_inner(),
+        };
+        let callback = self
+            .callback
+            .borrow_back(&self.env)
+            .map_err(|err| custom_error(&self.tag, &err.reason))?;
+        let result = callback
+            .call(arg)
+            .map_err(|err| custom_error(&self.tag, &err.reason))?;
+        match result {
+            Either::A(html) => cx.write(&html),
+            Either::B(res) => {
+                cx.write(&res.html);
+                for style in res.styles.unwrap_or_default() {
+                    cx.add_style(style);
+                }
+                for pair in res.fonts.unwrap_or_default() {
+                    if let [name, href] = pair.as_slice() {
+                        cx.add_font(name.clone(), href.clone());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A call-scoped set of JS-backed components, built from the `components` option.
+struct JsComponentRegistry {
+    components: std::collections::BTreeMap<String, JsComponent>,
+}
+
+impl std::fmt::Debug for JsComponentRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JsComponentRegistry")
+            .field("tags", &self.components.keys().collect::<Vec<_>>())
+            .finish()
+    }
+}
+
+impl mjmx::ComponentLookup for JsComponentRegistry {
+    fn get(&self, tag: &str) -> Option<&dyn mjmx::CustomComponent> {
+        self.components
+            .get(tag)
+            .map(|component| component as &dyn mjmx::CustomComponent)
+    }
+
+    fn names(&self) -> Vec<&str> {
+        self.components.keys().map(String::as_str).collect()
+    }
+}
+
+/// The diagnostic a failed component callback aborts the render with.
+fn custom_error(tag: &str, reason: &str) -> Diagnostic {
+    Diagnostic::error(format!("mjmx: custom component <{tag}> failed: {reason}"))
+}
+
+/// Build the component registry from the `components` object, or `None` when absent/empty.
+///
+/// Each value is a JS function taking the component context and returning a string or a
+/// `{ html, styles?, fonts? }` object. A non-function value is a `TypeError`.
+fn build_registry(env: &Env, components: Option<Object>) -> Result<Option<JsComponentRegistry>> {
+    let Some(components) = components else {
+        return Ok(None);
+    };
+    let mut map = std::collections::BTreeMap::new();
+    for tag in Object::keys(&components)? {
+        let callback: Function<JsComponentCx, Either<String, JsComponentResult>> =
+            components.get(&tag)?.ok_or_else(|| {
+                Error::new(
+                    Status::InvalidArg,
+                    format!("mjmx: components['{tag}'] must be a function"),
+                )
+            })?;
+        map.insert(
+            tag.clone(),
+            JsComponent {
+                tag,
+                env: *env,
+                callback: callback.create_ref()?,
+            },
+        );
+    }
+    if map.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(JsComponentRegistry { components: map }))
+}
+
 /// Render MJML `source` to HTML. Throws if parsing or rendering produced errors.
 ///
 /// Resolves `<mj-include>` only when `options.filePath` gives a base directory to
 /// resolve relative paths against (mjml's `filePath`); use [`render_file`] to render a
 /// file, which derives that base from the file itself.
+///
+/// `components` maps a tag name to a callback that renders it (Tier 1 custom components);
+/// see `index.d.ts`.
 #[napi]
-pub fn render(source: String, options: Option<JsRenderOptions>) -> Result<String> {
+pub fn render(
+    env: Env,
+    source: String,
+    options: Option<JsRenderOptions>,
+    components: Option<Object>,
+) -> Result<String> {
     let options = render_options(options)?;
-    mjmx::render(&source, &options).map_err(|diagnostics| to_js_error(&diagnostics))
+    match build_registry(&env, components)? {
+        Some(registry) => mjmx::render_with_components(&source, &options, &registry),
+        None => mjmx::render(&source, &options),
+    }
+    .map_err(|diagnostics| to_js_error(&diagnostics))
 }
 
 /// Render the MJML file at `path` to HTML, resolving `<mj-include>` from disk.
+///
+/// `components` works exactly as in [`render`].
 #[napi]
-pub fn render_file(path: String, options: Option<JsRenderOptions>) -> Result<String> {
+pub fn render_file(
+    env: Env,
+    path: String,
+    options: Option<JsRenderOptions>,
+    components: Option<Object>,
+) -> Result<String> {
     let options = render_options(options)?;
-    mjmx::render_file(std::path::Path::new(&path), &options)
-        .map_err(|diagnostics| to_js_error(&diagnostics))
+    let path = std::path::Path::new(&path);
+    match build_registry(&env, components)? {
+        Some(registry) => mjmx::render_file_with_components(path, &options, &registry),
+        None => mjmx::render_file(path, &options),
+    }
+    .map_err(|diagnostics| to_js_error(&diagnostics))
 }
 
 /// Format MJML `source` into canonical MJML source text. Throws on parse errors.

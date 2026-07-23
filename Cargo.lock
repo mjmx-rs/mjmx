@@ -1097,6 +1097,7 @@ dependencies = [
 name = "mjmx-wasm"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "mjmx",
  "serde",
  "serde-wasm-bindgen",
