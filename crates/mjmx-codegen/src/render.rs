@@ -140,7 +140,8 @@ fn dispatch<'a>(
         MjmlTag::MjBody => Body::new(element).render(ctx, buf),
         MjmlTag::MjWrapper => Wrapper::new(element).render(ctx, buf),
         MjmlTag::MjSection => Section::new(element).render(ctx, buf),
-        MjmlTag::MjGroup => Group::new(element, 1).render(ctx, buf),
+        // A bare group/column outside a section has no gutter context.
+        MjmlTag::MjGroup => Group::new(element, 1, None).render(ctx, buf),
         // A bare column outside a section defaults to full width.
         MjmlTag::MjColumn => {
             let raw = element.attr("width");
@@ -149,6 +150,7 @@ fn dispatch<'a>(
                 crate::components::ColumnWidth::resolve(raw, 1),
                 raw,
                 1,
+                crate::components::Gutter::none(),
             )
             .render(ctx, buf)
         }
@@ -175,7 +177,13 @@ fn dispatch<'a>(
         MjmlTag::Unknown => {
             let registered = ctx.registry();
             if let Some(comp) = registered.and_then(|reg| reg.get(element.raw_tag.as_str())) {
-                return render_custom_in_cell(element, comp, ctx, buf);
+                // A Tier 2 container drives its own markup + children (no cell wrap); a
+                // Tier 1 leaf is wrapped in the standard `<td>` cell.
+                return if comp.is_container() {
+                    render_custom_container(element, comp, ctx, buf)
+                } else {
+                    render_custom_in_cell(element, comp, ctx, buf)
+                };
             }
             Err(unsupported(element))
         }
@@ -253,6 +261,28 @@ fn render_custom_in_cell<'a>(
 
     buf.push_str("</td>");
     Ok(())
+}
+
+/// Render a registered Tier 2 **container** custom component.
+///
+/// Unlike a Tier 1 leaf, no wrapping `<td>` cell is emitted: the component drives its own
+/// markup and calls [`ComponentCx::render_children`] to render its MJML children through
+/// normal dispatch. mjmx only brackets the call to save and restore the parent's
+/// container width, so a width the container sets for its children (via
+/// [`ComponentCx::set_container_width`]) does not leak to a sibling.
+fn render_custom_container<'a>(
+    element: &'a Element<'a>,
+    comp: &dyn crate::custom::CustomComponent,
+    ctx: &mut RenderContext<'a>,
+    buf: &mut String,
+) -> RenderResult {
+    let saved_width = ctx.container_width;
+    let result = {
+        let mut cx = ComponentCx::new(element, ctx, buf);
+        comp.render(&mut cx)
+    };
+    ctx.container_width = saved_width;
+    result
 }
 
 /// Build the diagnostic for a tag the body renderer cannot emit. Two distinct cases,

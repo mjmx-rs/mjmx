@@ -21,6 +21,40 @@ use crate::dom::Tree;
 /// lexicographically.
 pub(crate) type Specificity = (u32, u32, u32);
 
+/// A generated pseudo-element, when `inlinePseudoElements` is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PseudoElement {
+    /// `::before` — the box is prepended to the matched element's content.
+    Before,
+    /// `::after` — the box is appended to the matched element's content.
+    After,
+}
+
+/// Split a trailing `::before` / `::after` (or their legacy single-colon spellings)
+/// off a selector, returning the base selector and the pseudo-element kind.
+///
+/// The `::` forms are checked first so `a::before` strips to `a`, not `a:` — the
+/// single-colon `:before` suffix would otherwise match the tail. Any *other* pseudo
+/// left on the base still makes [`Selector::parse`] drop the rule (e.g.
+/// `a:hover::before`), exactly as juice skips a rule carrying an ignored pseudo.
+pub(crate) fn strip_pseudo_element(src: &str) -> (&str, Option<PseudoElement>) {
+    let trimmed = src.trim_end();
+    for (suffix, kind) in [
+        ("::before", PseudoElement::Before),
+        ("::after", PseudoElement::After),
+        (":before", PseudoElement::Before),
+        (":after", PseudoElement::After),
+    ] {
+        if trimmed.len() >= suffix.len() {
+            let (head, tail) = trimmed.split_at(trimmed.len() - suffix.len());
+            if tail.eq_ignore_ascii_case(suffix) {
+                return (head.trim_end(), Some(kind));
+            }
+        }
+    }
+    (src, None)
+}
+
 /// How a compound selector relates to the one on its left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Combinator {

@@ -19,7 +19,7 @@ use cssparser::{
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser,
 };
 
-use crate::selector::{Selector, Specificity};
+use crate::selector::{PseudoElement, Selector, Specificity};
 
 /// One declaration of a rule.
 #[derive(Debug, Clone)]
@@ -41,6 +41,10 @@ pub(crate) struct Declaration {
 pub(crate) struct Rule {
     pub(crate) selector: Selector,
     pub(crate) declarations: Vec<Declaration>,
+    /// The pseudo-element this rule targets (`::before`/`::after`), if any. A pseudo
+    /// rule never inlines onto a real element — it feeds the `pseudo` pass, and only
+    /// when `inlinePseudoElements` is on. `None` is an ordinary rule.
+    pub(crate) pseudo: Option<PseudoElement>,
 }
 
 impl Rule {
@@ -102,7 +106,7 @@ impl<'i> AtRuleParser<'i> for RuleParser {
 }
 
 impl<'i> QualifiedRuleParser<'i> for RuleParser {
-    type Prelude = Vec<Selector>;
+    type Prelude = Vec<(Selector, Option<PseudoElement>)>;
     type QualifiedRule = Vec<Rule>;
     type Error = ();
 
@@ -112,9 +116,13 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
     ) -> Result<Self::Prelude, ParseError<'i, Self::Error>> {
         // `Selector::parse` returning `None` drops that one selector of the list
         // and keeps its siblings, which is how `a, a:hover { … }` inlines for `a`.
+        // A trailing `::before`/`::after` is split off first and carried as `pseudo`.
         Ok(crate::selector::split_list(drain(input))
             .into_iter()
-            .filter_map(Selector::parse)
+            .filter_map(|sel| {
+                let (base, pseudo) = crate::selector::strip_pseudo_element(sel);
+                Selector::parse(base).map(|selector| (selector, pseudo))
+            })
             .collect())
     }
 
@@ -130,9 +138,10 @@ impl<'i> QualifiedRuleParser<'i> for RuleParser {
         }
         Ok(prelude
             .into_iter()
-            .map(|selector| Rule {
+            .map(|(selector, pseudo)| Rule {
                 selector,
                 declarations: declarations.clone(),
+                pseudo,
             })
             .collect())
     }

@@ -1,7 +1,8 @@
 # Design: custom components (mjmx extension points)
 
-Status: **Phases 1–2 implemented 2026-07-23** — native Rust *and* the napi + wasm JS
-callbacks. Tier 2 (container components) and Phase 3 (python) remain proposal.
+Status: **Phases 1–2 + native Tier 2 implemented 2026-07-23** — native Rust (Tier 1 leaf
+*and* Tier 2 container) *and* the napi + wasm JS callbacks (Tier 1 leaf). The JS-callback
+container and Phase 3 (python) remain proposal.
 Author-reviewed 2026-07-22.
 
 The JS surface (`@mjmx/node`, `@mjmx/wasm`): a `components: Record<string, ComponentFn>`
@@ -197,13 +198,38 @@ Porting a real mjml custom component means **rewriting its `render()` against
 `ComponentCx`** — it will not drop in. That is the intended cost: a small stable
 ABI mjmx owns, rather than tracking `mjml-core`'s evolving internals.
 
-## Tier 2 (deferred): container components
+## Tier 2 (native, implemented 2026-07-23): container components
 
-Letting a custom tag contain layout components (`mj-column`, …) requires exposing
-the container-width computation, the ghost-row Outlook scaffolding, and a
-child-render entry back into mjmx's dispatch. That ABI is large and couples to
-mjmx's layout internals — the opposite of Tier 1's small stable surface. Out of
-scope until Tier 1 ships and demand is demonstrated.
+A custom tag may **contain** layout children (`mj-column`, `mj-section`, another
+custom component, …) and drive their placement itself. A component opts in with
+`is_container() -> true`; mjmx then emits **no** wrapping `<td>` cell (unlike a
+Tier 1 leaf) and calls its `render()`, where it uses two new `ComponentCx`
+methods:
+
+```
+render_children() -> Result<(), Diagnostic>   // render this tag's MJML children through
+                                              // mjmx's normal dispatch, at the current width
+set_container_width(width: u32)               // width the children size against; mjmx
+                                              // restores the parent's width afterwards
+```
+
+The chosen ABI is the **`render_children` callback** (over a "themed section
+alias" or a "pre-rendered children Vec"): the component controls its own outer
+markup and calls back into dispatch for the inner children. Deliberately, mjmx
+supplies **no** section ghost-row / column-share layout around them — a bare
+`mj-column` renders standalone (full width unless it carries an explicit `width`),
+so the container owns whatever grid it builds (its own ghost tables, widths, etc.).
+That keeps mjmx's expensive layout internals *out* of the ABI while still letting a
+container recurse. `render_custom_container` in `render.rs` brackets the call to
+save/restore `container_width`, so a width a container sets for its children never
+leaks to a sibling. A registered container is exempt from the linter's
+parent-child structural constraints (it is a known, free-form tag), so it passes
+strict validation as a direct `mj-body` child. Tests: the `tier2_*` cases in
+`crates/mjmx/tests/custom_components.rs`.
+
+**Still native-only.** The JS-callback container (a JS `render_children` reaching
+back across the FFI boundary) is a larger surface; the JS bindings remain Tier 1
+leaf-only for now, the same native-first ordering Tier 1 followed.
 
 ## Phasing
 

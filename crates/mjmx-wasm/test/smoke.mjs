@@ -238,9 +238,24 @@ check('render({ juiceOptions }) switches the attribute mirrors and !important', 
 
 check('an unsupported juiceOption throws with its reason', () => {
   assert.throws(
-    () => mjmx.render(templated, { juiceOptions: { resolveCSSVariables: true } }),
-    /resolveCSSVariables/,
+    () => mjmx.render(templated, { juiceOptions: { preserveMediaQueries: true } }),
+    /preserveMediaQueries/,
   );
+});
+
+// `resolveCSSVariables` (juice's default) resolves `var()` and drops `--x`.
+const cssVarsDoc =
+  '<mjml><mj-head><mj-style inline="inline">.v{--c:#ff0000;color:var(--c)}</mj-style>' +
+  '</mj-head><mj-body><mj-section><mj-column><mj-text css-class="v">x</mj-text>' +
+  '</mj-column></mj-section></mj-body></mjml>';
+check('resolveCSSVariables resolves var() by default', () => {
+  const on = mjmx.render(cssVarsDoc);
+  assert.ok(on.includes('color: #ff0000'), 'var(--c) should resolve');
+  assert.ok(!on.includes('--c'), 'the custom property should be dropped');
+});
+check('resolveCSSVariables:false leaves var() verbatim', () => {
+  const off = mjmx.render(cssVarsDoc, { juiceOptions: { resolveCSSVariables: false } });
+  assert.ok(off.includes('var(--c)'), 'var() should be left as written');
 });
 
 check('lint() flags a known-bad document', () => {

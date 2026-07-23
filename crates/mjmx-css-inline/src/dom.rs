@@ -39,6 +39,13 @@ pub(crate) struct Element<'a> {
     /// Whether a stylesheet may touch this element. False for the elements CSS
     /// inlining always skips, and for everything inside one.
     pub(crate) inlinable: bool,
+    /// Byte offset just past this element's start tag `>` — where a `::before`
+    /// pseudo-element is spliced (the start of the element's inner content).
+    pub(crate) content_start: usize,
+    /// Byte offset of this element's `</tag>` — where a `::after` pseudo-element is
+    /// spliced. `None` for a void/self-closing element or one never closed (no inner
+    /// content to append to).
+    pub(crate) content_end: Option<usize>,
 }
 
 impl<'a> Element<'a> {
@@ -85,6 +92,7 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                 attrs,
                 self_closing,
                 attrs_end,
+                span,
                 ..
             } => {
                 let frame = stack.last_mut().expect("the root frame is never popped");
@@ -115,17 +123,25 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                     parent,
                     prev_sibling,
                     inlinable,
+                    // Inner content starts just past the `>` of the start tag.
+                    content_start: span.end,
+                    content_end: None,
                 });
                 if opens_scope {
                     stack.push((Some(index), None));
                 }
             }
-            Event::Close { tag, .. } => {
+            Event::Close { tag, span } => {
                 let tag = tag.to_ascii_lowercase();
                 let matching = stack
                     .iter()
                     .rposition(|(index, _)| index.is_some_and(|i| elements[i].tag == tag));
                 if let Some(frame) = matching {
+                    // The element whose scope this close ends: record where its inner
+                    // content ends (the `<` of the `</tag>`) for `::after` splicing.
+                    if let Some(closed) = stack[frame].0 {
+                        elements[closed].content_end = Some(span.start);
+                    }
                     stack.truncate(frame);
                 }
             }

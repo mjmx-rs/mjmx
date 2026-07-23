@@ -41,6 +41,19 @@ pub trait CustomComponent {
     /// Return a [`Diagnostic`] to abort the render with a span-labelled message, exactly
     /// as a built-in component does.
     fn render(&self, cx: &mut ComponentCx<'_, '_>) -> Result<(), Diagnostic>;
+
+    /// Whether this is a **Tier 2 container** (holds MJML children it lays out itself)
+    /// rather than a **Tier 1 leaf** (returns cell content).
+    ///
+    /// The default is `false` — a leaf, which mjmx wraps in the standard `<td>` cell (see
+    /// [`render`](Self::render)'s cell contract). A container returns `true`: mjmx emits
+    /// **no** wrapping cell, and the component drives its own markup, calling
+    /// [`ComponentCx::render_children`] to render its MJML children (e.g. `mj-column`s)
+    /// through mjmx's normal dispatch. It owns the layout — mjmx does not supply the
+    /// section ghost-table / column-share machinery.
+    fn is_container(&self) -> bool {
+        false
+    }
 }
 
 /// A set of [`CustomComponent`]s, keyed by tag.
@@ -191,6 +204,36 @@ impl<'a, 'buf> ComponentCx<'a, 'buf> {
     #[must_use]
     pub fn container_width(&self) -> u32 {
         self.ctx.container_width
+    }
+
+    /// Set the content-box width, in pixels, that this component's children see.
+    ///
+    /// **Tier 2 only.** A container sets the width its `mj-column`s (and other children)
+    /// size against before calling [`render_children`](Self::render_children); mjmx
+    /// restores the parent's width when the container's render returns, so a sibling is
+    /// unaffected. A Tier 1 leaf has no children and need not call this.
+    pub fn set_container_width(&mut self, width: u32) {
+        self.ctx.container_width = width;
+    }
+
+    /// Render this component's MJML children through mjmx's normal dispatch, appending to
+    /// the output buffer.
+    ///
+    /// **Tier 2 only.** This is the container's callback into the renderer: each element
+    /// child (`mj-column`, `mj-section`, another custom component, …) renders exactly as
+    /// it would anywhere else, at the current [`container_width`](Self::container_width).
+    /// mjmx supplies no section ghost-row / column-share layout around them — a bare
+    /// `mj-column` renders standalone (full width unless it carries an explicit `width`),
+    /// so the container owns whatever grid it wants.
+    ///
+    /// # Errors
+    ///
+    /// Propagates the first child's render [`Diagnostic`], aborting the render as a
+    /// built-in container would.
+    pub fn render_children(&mut self) -> Result<(), Diagnostic> {
+        crate::render::render_children(self.element, self.ctx, self.buf, |child, ctx, buf| {
+            crate::render::render_element(child, ctx, buf)
+        })
     }
 
     /// The active responsive breakpoint, in pixels.

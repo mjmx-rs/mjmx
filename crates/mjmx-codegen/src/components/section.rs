@@ -5,7 +5,7 @@ use mjmx_syntax::MjmlTag;
 
 use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
-use crate::components::{Column, ColumnWidth, Group};
+use crate::components::{Column, ColumnWidth, Group, Gutter};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult, render_children, render_element};
 
@@ -118,6 +118,18 @@ impl<'a> Section<'a> {
         ));
         buf.push_str(&format!("<td style=\"{td_style}\">"));
 
+        // mjml 5's section `gutter` (v5 only): threaded to each column, which reduces
+        // its width and grows padding by its share. `None` under V4 leaves every gutter
+        // branch inert, so V4 output is unchanged. `index`/`total` track each child's
+        // position (mjml counts raw children too) for `first`/`last`.
+        let section_gutter = if ctx.options.compat.is_v5() {
+            opt("gutter")
+        } else {
+            None
+        };
+        let total_children = self.element.element_children().count() as u32;
+        let mut child_index = 0u32;
+
         // Children get the content box as their container width.
         let saved = ctx.container_width;
         ctx.container_width = box_width;
@@ -136,6 +148,11 @@ impl<'a> Section<'a> {
             "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr><![endif]-->",
         );
         render_children(self.element, ctx, buf, |child, ctx, buf| {
+            // Every child consumes an index (mjml counts raw children too), so `first`/
+            // `last` for the gutter geometry line up with mjml's `props.index`.
+            let index = child_index;
+            child_index += 1;
+
             // Only columns and groups take part in the ghost row. Any other child is a
             // raw element (mjml's `isRawElement`, i.e. mj-raw), which mjml's
             // `renderWrappedChildren` emits directly — between the opened-and-closed row
@@ -160,7 +177,7 @@ impl<'a> Section<'a> {
                         "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
                     ));
                     crate::render::traced(child, ctx, buf, |ctx, buf| {
-                        Group::new(child, count).render(ctx, buf)
+                        Group::new(child, count, section_gutter).render(ctx, buf)
                     })?;
                 }
                 _ => {
@@ -174,11 +191,29 @@ impl<'a> Section<'a> {
                         .semantic
                         .attribute(child, "vertical-align", Some("top"))
                         .unwrap_or("top");
+                    // The column's section gutter: reduces the ghost cell nothing (width
+                    // stays full) but adds `getOutlookGutterStyles` padding after it.
+                    let column = Column::new(
+                        child,
+                        width,
+                        raw,
+                        count,
+                        Gutter {
+                            value: section_gutter,
+                            direction,
+                            index,
+                            total: total_children,
+                        },
+                    );
+                    let outlook_padding = column
+                        .outlook_gutter_padding(f64::from(box_width))
+                        .map(|p| format!("padding:{p};"))
+                        .unwrap_or_default();
                     buf.push_str(&format!(
-                        "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;\" ><![endif]-->"
+                        "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;{outlook_padding}\" ><![endif]-->"
                     ));
                     crate::render::traced(child, ctx, buf, |ctx, buf| {
-                        Column::new(child, width, raw, count).render(ctx, buf)
+                        column.render(ctx, buf)
                     })?;
                 }
             }

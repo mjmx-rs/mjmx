@@ -218,6 +218,17 @@ export interface JuiceOptions {
    * it either way.
    */
   preserveImportant?: boolean;
+  /**
+   * Resolve `var(--x)` / `var(--x, fallback)` against the custom-property cascade and
+   * drop the `--x` declarations. Default: true (juice's default).
+   */
+  resolveCSSVariables?: boolean;
+  /**
+   * Synthesize `::before`/`::after` from their `content` (string → `<span>`, `url()` →
+   * `<img>`; `attr()`/`var()`/`counter()` resolved) and splice them in. Default: false
+   * (juice's default; mjml never enables it).
+   */
+  inlinePseudoElements?: boolean;
   /** The attribute inline declarations are read from and written to. Default: "style". */
   styleAttributeName?: string;
 }
@@ -343,6 +354,11 @@ struct JsJuiceOptions {
     apply_attributes_table_elements: Option<bool>,
     #[serde(default)]
     preserve_important: Option<bool>,
+    // `camelCase` would give `resolveCssVariables`; mjml's key is all-caps `CSS`.
+    #[serde(default, rename = "resolveCSSVariables")]
+    resolve_css_variables: Option<bool>,
+    #[serde(default)]
+    inline_pseudo_elements: Option<bool>,
     #[serde(default)]
     style_attribute_name: Option<String>,
     #[serde(flatten)]
@@ -369,6 +385,12 @@ impl JsJuiceOptions {
             preserve_important: self
                 .preserve_important
                 .unwrap_or(defaults.preserve_important),
+            resolve_css_variables: self
+                .resolve_css_variables
+                .unwrap_or(defaults.resolve_css_variables),
+            inline_pseudo_elements: self
+                .inline_pseudo_elements
+                .unwrap_or(defaults.inline_pseudo_elements),
             style_attribute_name: self
                 .style_attribute_name
                 .unwrap_or(defaults.style_attribute_name),
@@ -1022,10 +1044,17 @@ mod tests {
     }
 
     #[test]
+    fn resolve_css_variables_is_an_accepted_juice_option() {
+        // Once refused, now honoured (juice's default `true`); `false` is decoded.
+        let options = options(r#"{"juiceOptions": {"resolveCSSVariables": false}}"#).unwrap();
+        assert!(!options.inline_options.resolve_css_variables);
+    }
+
+    #[test]
     fn a_refused_juice_option_says_why_it_is_refused() {
-        let err = options(r#"{"juiceOptions": {"resolveCSSVariables": true}}"#).unwrap_err();
-        assert!(err.contains("resolveCSSVariables"), "{err}");
-        assert!(err.contains("custom-property cascade"), "{err}");
+        let err = options(r#"{"juiceOptions": {"preserveMediaQueries": true}}"#).unwrap_err();
+        assert!(err.contains("preserveMediaQueries"), "{err}");
+        assert!(err.contains("unreachable"), "{err}");
 
         let err = options(r#"{"juiceOptions": {"applyStyleTags": true}}"#).unwrap_err();
         assert!(err.contains("inline bucket"), "{err}");

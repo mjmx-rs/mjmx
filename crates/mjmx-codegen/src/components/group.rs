@@ -9,7 +9,7 @@ use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
 
 use crate::components::css_class::{append_css_class, css_class};
-use crate::components::{Column, ColumnWidth};
+use crate::components::{Column, ColumnWidth, Gutter};
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult, render_children, render_element};
 
@@ -19,13 +19,22 @@ pub struct Group<'a> {
     /// The number of non-raw layout siblings in the parent section (the group's share
     /// of the section is `100 / siblings` percent).
     siblings: u32,
+    /// The parent section's `gutter` (v5 only), forwarded to the group's own columns —
+    /// mjml keeps `context.gutter` across the group but overrides `context.direction`
+    /// with the group's. `None` under V4 / no gutter (every gutter branch is inert).
+    section_gutter: Option<&'a str>,
 }
 
 impl<'a> Group<'a> {
-    /// Wrap an `<mj-group>` element, given the parent section's layout-child count.
+    /// Wrap an `<mj-group>` element, given the parent section's layout-child count and
+    /// (v5) the section gutter to hand down to its columns.
     #[must_use]
-    pub fn new(element: &'a Element<'a>, siblings: u32) -> Self {
-        Self { element, siblings }
+    pub fn new(element: &'a Element<'a>, siblings: u32, section_gutter: Option<&'a str>) -> Self {
+        Self {
+            element,
+            siblings,
+            section_gutter,
+        }
     }
 }
 
@@ -89,11 +98,18 @@ impl<'a> Render<'a> for Group<'a> {
             .filter(|el| el.tag == MjmlTag::MjColumn)
             .collect();
         let num = columns.len().max(1) as u32;
+        // Position tracking for the columns' gutter `first`/`last` (mjml counts raw
+        // children too). The group's own `direction` governs its columns' gutter, not the
+        // section's.
+        let total_children = self.element.element_children().count() as u32;
+        let mut child_index = 0u32;
 
         // Columns size against the group width, not the section.
         let saved = ctx.container_width;
         ctx.container_width = group_width;
         render_children(self.element, ctx, buf, |col, ctx, buf| {
+            let index = child_index;
+            child_index += 1;
             // Only columns are laid out in a group. Any other child is a raw element
             // (mjml's `isRawElement`, i.e. mj-raw), which mjml's `renderChildren` emits
             // directly between the group's ghost cells rather than in one of its own.
@@ -109,11 +125,19 @@ impl<'a> Render<'a> for Group<'a> {
                 .semantic
                 .attribute(col, "vertical-align", Some("top"))
                 .unwrap_or("top");
+            // A grouped column carries its gutter as inline `<div>` padding (no ghost-cell
+            // padding, unlike a section column), keyed to the group's direction.
+            let gutter = Gutter {
+                value: self.section_gutter,
+                direction,
+                index,
+                total: total_children,
+            };
             buf.push_str(&format!(
                 "<!--[if mso | IE]><td style=\"vertical-align:{va};width:{col_px}px;\" ><![endif]-->"
             ));
             crate::render::traced(col, ctx, buf, |ctx, buf| {
-                Column::new_grouped(col, width, raw, num).render(ctx, buf)
+                Column::new_grouped(col, width, raw, num, gutter).render(ctx, buf)
             })?;
             buf.push_str("<!--[if mso | IE]></td><![endif]-->");
             Ok(())

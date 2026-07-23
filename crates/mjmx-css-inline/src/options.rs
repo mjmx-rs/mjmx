@@ -37,12 +37,14 @@
 //! reads these in `juiceResources`, which mjml does not call; and this crate
 //! performs no I/O).
 //!
-//! **Meaningful but disproportionate, deliberately not implemented**:
-//! `resolveCSSVariables` and `inlinePseudoElements`. See the crate docs' *Known
-//! gaps* section — both need machinery the inliner does not have (a custom-property
-//! cascade with `var()` fallbacks; synthesizing elements from a parsed `content`
-//! value), and neither can be faked. Note that mjmx's current behaviour equals
-//! `resolveCSSVariables: false`, which is *not* juice's default.
+//! `resolveCSSVariables` **is implemented** (juice's default, `true`): `var()` is
+//! resolved against the custom-property cascade and the `--x` declarations are
+//! dropped — see [`InlineOptions::resolve_css_variables`] and `apply.rs`.
+//!
+//! `inlinePseudoElements` **is implemented** (juice's default, `false`):
+//! `::before`/`::after` are synthesized from their `content` (strings, `url()`→img,
+//! `var()`, `attr()`, `counter()` with `counter-reset`/`counter-increment`) and
+//! spliced in — see [`InlineOptions::inline_pseudo_elements`] and `pseudo.rs`.
 
 /// A templating construct the inliner must not look inside — mjml's
 /// `juicePreserveTags`, juice's `codeBlocks`.
@@ -123,6 +125,26 @@ pub struct InlineOptions {
     /// The attribute inline declarations are read from and written to.
     /// `// juice default: "style"`.
     pub style_attribute_name: String,
+    /// Synthesize `::before` / `::after` pseudo-elements from their `content` and
+    /// splice them into the document. `// juice default: false` (mjml never enables
+    /// it, so mjmx's default drops them — matching every real mjml document).
+    ///
+    /// When `true`, matches juice: a `content` string becomes a `<span>` (or `<img>`
+    /// for `url(...)`), prepended (`::before`) or appended (`::after`) to the matched
+    /// element; the span carries the rule's other declarations; `content`'s `attr()`,
+    /// `var()`, `counter()` (with `counter-reset`/`counter-increment`) are resolved.
+    pub inline_pseudo_elements: bool,
+    /// Resolve `var(--x)` / `var(--x, fallback)` against the custom-property
+    /// cascade and drop the `--x` declarations. `// juice default: true`.
+    ///
+    /// Matches juice: a `var()` is replaced with the nearest ancestor's `--x`
+    /// value (the element itself first), or the fallback when it is undefined, or
+    /// left verbatim when neither exists; every `--x` declaration is removed from
+    /// the output. Resolution runs before attribute mirroring, so a resolved
+    /// colour still reaches `bgcolor`. Like the rest of the inliner it only
+    /// rewrites elements a rule matched — the realistic case, since a `var()`
+    /// only enters mjml output through an inline `<mj-style>` rule.
+    pub resolve_css_variables: bool,
     /// Templating constructs to mask out before tokenizing. Defaults to juice's
     /// built-ins (EJS `<% %>`, Handlebars `{{ }}`); mjml's `juicePreserveTags`
     /// adds to them via [`InlineOptions::add_preserve_tags`].
@@ -139,6 +161,10 @@ impl Default for InlineOptions {
             // is why mjml's output never carries `!important` from an inlined rule.
             preserve_important: false,
             style_attribute_name: "style".to_owned(),
+            // juice's own default is true, and mjml does not override it.
+            resolve_css_variables: true,
+            // juice's own default is falsy, and mjml does not override it.
+            inline_pseudo_elements: false,
             preserve_tags: PreserveTag::defaults(),
         }
     }
@@ -180,6 +206,8 @@ pub const SUPPORTED_OPTIONS: &[&str] = &[
     "applyAttributesTableElements",
     "preserveImportant",
     "styleAttributeName",
+    "resolveCSSVariables",
+    "inlinePseudoElements",
 ];
 
 /// Why mjmx refuses `key`, for a juice option it deliberately does not implement.
@@ -206,16 +234,6 @@ pub fn refusal(key: &str) -> Option<&'static str> {
             "unreachable: juice reads these only from `getPreservedText`, which \
              runs under `insertPreservedExtraCss` or `removeStyleTags`, and mjml \
              sets both to `false`"
-        }
-        "resolveCSSVariables" => {
-            "not implemented: resolving `var()` needs a custom-property cascade \
-             with fallback parsing. mjmx writes `var(--x)` through verbatim and \
-             keeps the `--x` declaration, i.e. it behaves as `false`"
-        }
-        "inlinePseudoElements" => {
-            "not implemented: mjmx drops `::before`/`::after` rules rather than \
-             materializing them into elements, which would need `content` parsing \
-             (strings, `url()`, `attr()`, counters)"
         }
         "xmlMode" => "a cheerio parser mode; mjmx has one forgiving HTML tokenizer and no XML mode",
         "url" | "webResources" => {
@@ -261,8 +279,6 @@ mod tests {
             "preserveFontFaces",
             "preserveKeyFrames",
             "preservePseudos",
-            "resolveCSSVariables",
-            "inlinePseudoElements",
             "xmlMode",
             "url",
             "webResources",
@@ -288,6 +304,8 @@ mod tests {
         assert!(options.apply_width_attributes);
         assert!(options.apply_height_attributes);
         assert!(options.apply_attributes_table_elements);
+        assert!(options.resolve_css_variables);
+        assert!(!options.inline_pseudo_elements);
         assert!(!options.preserve_important);
         assert_eq!(options.style_attribute_name, "style");
         assert_eq!(

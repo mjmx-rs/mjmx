@@ -57,13 +57,13 @@
 //! using one is dropped rather than mis-applied. Likewise CSS Nesting. Neither
 //! appears in mjml's own output or in the fixture corpus.
 //!
-//! Custom properties are not resolved: `var(--x)` is written through verbatim and
-//! the `--x` declaration is inlined alongside it. juice defaults
-//! `resolveCSSVariables: true`, which substitutes and then drops the custom
-//! properties, so mjmx's behaviour is juice's `false` — a real divergence, kept
-//! because a faithful implementation needs a custom-property cascade with
-//! `var()` fallback parsing. Likewise `inlinePseudoElements`: `::before` /
-//! `::after` rules are dropped rather than materialized into elements.
+//! `resolveCSSVariables` (juice's default `true`, always on here) resolves `var(--x)`
+//! / `var(--x, fallback)` against the custom-property cascade and drops the `--x`
+//! declarations — see [`apply`]. `inlinePseudoElements` (juice's default `false`,
+//! opt-in via [`options::InlineOptions::inline_pseudo_elements`]) synthesizes
+//! `::before`/`::after` from their `content` (strings, `url()`→img, `attr()`,
+//! `var()`, `counter()` with a `counter-reset`/`counter-increment` subsystem) — see
+//! [`pseudo`]. Both are ports of juice 10.0.1.
 
 mod apply;
 mod css;
@@ -71,6 +71,7 @@ mod dom;
 mod html_attributes;
 mod mask;
 mod options;
+mod pseudo;
 mod selector;
 
 pub use html_attributes::{HtmlAttribute, apply_html_attributes};
@@ -124,6 +125,148 @@ mod tests {
         let html = document("<p class=\"a\">x</p>");
         assert_eq!(inline(&html, ""), html);
         assert_eq!(inline(&html, "@media print { .a { color: red } }"), html);
+    }
+
+    #[test]
+    fn resolves_css_variables_like_juice() {
+        // Verified against mjml 4.18/5.4 output: `--brand` is dropped, `var(--brand)`
+        // resolves from the same element, `var(--missing, #00ff00)` takes its fallback,
+        // and `var(--nope)` with no fallback is left verbatim.
+        let out = inline(
+            &document(r#"<td class="v" style="font-size:0px;">x</td>"#),
+            ".v { --brand: #ff0000; color: var(--brand); background-color: var(--missing, #00ff00); border-color: var(--nope); }",
+        );
+        assert!(out.contains("color: #ff0000;"), "{out}");
+        assert!(out.contains("background-color: #00ff00;"), "{out}");
+        assert!(out.contains("border-color: var(--nope);"), "{out}");
+        assert!(!out.contains("--brand"), "custom property must be dropped: {out}");
+        // A resolved value reaches the attribute mirror too: mirroring reads the merged
+        // declarations *after* substitution (on a `<table>`, the tag mjmx mirrors).
+        let table = inline(
+            &document(r#"<table class="v" style="font-size:0px;">x</table>"#),
+            ".v { background-color: var(--x, #00ff00); }",
+        );
+        assert!(table.contains(r##"bgcolor="#00ff00""##), "{table}");
+    }
+
+    #[test]
+    fn resolves_css_variables_up_the_ancestor_chain() {
+        // A `--brand` defined on an ancestor is visible to a descendant `var(--brand)`,
+        // nearest definition winning.
+        let out = inline(
+            &document(
+                r#"<div class="outer"><td class="v" style="font-size:0px;">x</td></div>"#,
+            ),
+            ".outer { --brand: #123456; } .v { color: var(--brand); }",
+        );
+        assert!(out.contains("color: #123456;"), "{out}");
+    }
+
+    #[test]
+    fn resolves_nested_variable_references() {
+        // `--a: var(--b)` then `color: var(--a)` collapses to `--b`'s value.
+        let out = inline(
+            &document(r#"<td class="v" style="font-size:0px;">x</td>"#),
+            ".v { --b: green; --a: var(--b); color: var(--a); }",
+        );
+        assert!(out.contains("color: green;"), "{out}");
+        assert!(!out.contains("--a"), "{out}");
+        assert!(!out.contains("--b"), "{out}");
+    }
+
+    fn pseudo_opts() -> InlineOptions {
+        InlineOptions {
+            inline_pseudo_elements: true,
+            ..InlineOptions::default()
+        }
+    }
+
+    #[test]
+    fn pseudo_elements_are_dropped_by_default() {
+        // Off by default (juice's default; mjml never enables it): no span is synthesized.
+        let out = inline(
+            &document("<p class=\"p\">x</p>"),
+            ".p::before{content:\"NEW\"}",
+        );
+        assert!(!out.contains("NEW"), "{out}");
+        assert!(!out.contains("<span"), "{out}");
+    }
+
+    #[test]
+    fn pseudo_element_string_content_becomes_a_prepended_span() {
+        let out = inline_with(
+            &document("<p class=\"p\">x</p>"),
+            ".p::before{content:\"NEW\";color:red}",
+            &pseudo_opts(),
+        );
+        // A `<span>` with the rule's other declarations, prepended to the content.
+        assert!(
+            out.contains("<span style=\"color: red;\">NEW</span>x"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn pseudo_element_after_is_appended_and_url_is_an_img() {
+        let out = inline_with(
+            &document("<p class=\"p\">x</p>"),
+            ".p::after{content:\"!\"} .p::before{content:url(dot.png)}",
+            &pseudo_opts(),
+        );
+        // before = <img>, then the text, then after = <span>.
+        assert!(out.contains("<img src=\"dot.png\">x<span>!</span>"), "{out}");
+    }
+
+    #[test]
+    fn pseudo_element_counter_and_attr_and_full_juice_parity() {
+        // Verified against juice 10.0.1 (inlinePseudoElements: true) output.
+        let out = inline_with(
+            &document(
+                "<ol><li class=\"i\" data-x=\"Q\">a</li>\
+                 <li class=\"i\" data-x=\"R\">b</li></ol><p class=\"p\">y</p>",
+            ),
+            "ol{counter-reset:item} li{counter-increment:item} \
+             li.i::before{content:counter(item) \". \";color:red} \
+             .p::after{content:\" [\" attr(data-x) \"]\"}",
+            &pseudo_opts(),
+        );
+        // Counter resolves per element in document order.
+        assert!(out.contains("<span style=\"color: red;\">1. </span>a"), "{out}");
+        assert!(out.contains("<span style=\"color: red;\">2. </span>b"), "{out}");
+        // counter-reset / counter-increment stay inlined on the real elements.
+        assert!(out.contains("counter-reset: item;"), "{out}");
+        assert!(out.contains("counter-increment: item;"), "{out}");
+        // `.p` has no data-x, so attr() contributes nothing: " []".
+        assert!(out.contains("y<span> []</span>"), "{out}");
+    }
+
+    #[test]
+    fn pseudo_element_counter_styles() {
+        let out = inline_with(
+            &document("<ol><li class=\"i\">a</li><li class=\"i\">b</li><li class=\"i\">c</li></ol>"),
+            "ol{counter-reset:c} li{counter-increment:c} li.i::before{content:counter(c, upper-latin)}",
+            &pseudo_opts(),
+        );
+        assert!(out.contains("<span>A</span>a"), "{out}");
+        assert!(out.contains("<span>B</span>b"), "{out}");
+        assert!(out.contains("<span>C</span>c"), "{out}");
+    }
+
+    #[test]
+    fn pseudo_element_roman_counter_matches_juice() {
+        // juice 10.0.1: 4→iv, 40→xl, 1990→mcmxc (exercises the thousands + subtractive path).
+        for (value, roman) in [(4, "iv"), (40, "xl"), (1990, "mcmxc")] {
+            let css = format!(
+                "ol{{counter-reset:c {}}} li{{counter-increment:c}} li.i::before{{content:counter(c,lower-roman)}}",
+                value - 1
+            );
+            let out = inline_with(
+                &document("<ol><li class=\"i\">a</li></ol>"),
+                &css,
+                &pseudo_opts(),
+            );
+            assert!(out.contains(&format!("<span>{roman}</span>")), "{value}: {out}");
+        }
     }
 
     #[test]

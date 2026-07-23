@@ -192,3 +192,96 @@ fn v5_accordion_retargets_toggle_selectors_for_new_outlook() {
         "{v4}"
     );
 }
+
+/// A two-column section with `gutter="20px"` (mjml 5's column-layout rework). The 480px
+/// container is unaffected; the section content box is 600px, so a 20px gutter is
+/// `20/600*100 = 3.333333%`, each column's width drops from `50%` to `48.333333%`, and a
+/// per-position `mj-column-gutter-…` padding rule appears. mjml 4.18 has no `gutter`
+/// attribute at all, so V4 renders a plain two-column section.
+const GUTTER: &str = r#"<mjml><mj-body><mj-section gutter="20px"><mj-column><mj-text>a</mj-text></mj-column><mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>"#;
+
+#[test]
+fn v5_section_gutter_reduces_column_width_and_adds_padding_rules() {
+    let v5 = render(GUTTER, MjmlCompat::V5);
+    // The width class keys off the gutter-reduced width, not the raw 50%.
+    assert!(v5.contains("mj-column-per-48-333333"), "{v5}");
+    assert!(!v5.contains("mj-column-per-50"), "{v5}");
+    // Each column registers a per-position gutter padding rule and wears its class.
+    assert!(v5.contains("mj-column-gutter-2-1-per-3-333333"), "{v5}");
+    assert!(v5.contains("mj-column-gutter-2-2-per-3-333333"), "{v5}");
+    // First column: padding only on the trailing (right) edge; last: only leading (left).
+    assert!(
+        v5.contains("padding: 0% 1.666667% 0% 0% !important"),
+        "{v5}"
+    );
+    assert!(
+        v5.contains("padding: 0% 0% 0% 1.666667% !important"),
+        "{v5}"
+    );
+    // The Outlook ghost cell keeps the full 300px width but gains px gutter padding.
+    assert!(v5.contains("padding:0px 10px 0px 0px;"), "{v5}");
+}
+
+#[test]
+fn v4_ignores_the_section_gutter_attribute() {
+    // The whole feature is v5-gated: V4 renders exactly as if `gutter` were absent.
+    let v4 = render(GUTTER, MjmlCompat::V4);
+    assert!(v4.contains("mj-column-per-50"), "{v4}");
+    assert!(!v4.contains("mj-column-gutter"), "{v4}");
+    assert!(!v4.contains("48-333333"), "{v4}");
+
+    let plain = r#"<mjml><mj-body><mj-section><mj-column><mj-text>a</mj-text></mj-column><mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>"#;
+    assert_eq!(render(GUTTER, MjmlCompat::V4), render(plain, MjmlCompat::V4));
+}
+
+#[test]
+fn v5_group_gutter_lands_inline_without_a_media_query() {
+    // A grouped column carries the gutter as inline `<div>` padding (group columns never
+    // stack), and — unlike a section column — registers no per-position padding rule.
+    let grouped = r#"<mjml><mj-body><mj-section gutter="20px"><mj-group><mj-column><mj-text>a</mj-text></mj-column><mj-column><mj-text>b</mj-text></mj-column></mj-group></mj-section></mj-body></mjml>"#;
+    let v5 = render(grouped, MjmlCompat::V5);
+    // The gutter class is on the div…
+    assert!(v5.contains("mj-column-gutter-2-1-per-3-333333"), "{v5}");
+    // …but there is no `mj-column-gutter-…{ padding }` media-query rule for it.
+    assert!(
+        !v5.contains("mj-column-gutter-2-1-per-3-333333 {"),
+        "group gutter must not register a media query: {v5}"
+    );
+}
+
+#[test]
+fn css_variables_resolve_end_to_end_in_both_compat_modes() {
+    // `resolveCSSVariables` is plain-juice behaviour, present in both mjml releases, so
+    // it applies under V4 and V5 alike (not gated on compat). Threaded from the default
+    // `InlineOptions` through `RenderOptions`.
+    const DOC: &str = r#"<mjml><mj-head><mj-style inline="inline">.v{--c:#ff0000;color:var(--c)}</mj-style></mj-head><mj-body><mj-section><mj-column><mj-text css-class="v">x</mj-text></mj-column></mj-section></mj-body></mjml>"#;
+    for compat in [MjmlCompat::V4, MjmlCompat::V5] {
+        let out = render(DOC, compat);
+        assert!(out.contains("color: #ff0000"), "{compat:?}: {out}");
+        assert!(!out.contains("--c"), "{compat:?}: custom prop must drop: {out}");
+    }
+}
+
+#[test]
+fn inline_pseudo_elements_thread_through_render_options() {
+    // Opt-in (juice defaults it off, so does mjmx): a `::before` in an inline `<mj-style>`
+    // synthesizes a span only when `inline_pseudo_elements` is set. Compat-independent.
+    use mjmx::InlineOptions;
+    const DOC: &str = r#"<mjml><mj-head><mj-style inline="inline">.v::before{content:"* "}</mj-style></mj-head><mj-body><mj-section><mj-column><mj-text css-class="v">hi</mj-text></mj-column></mj-section></mj-body></mjml>"#;
+
+    let off = mjmx::render(DOC, &RenderOptions::default()).expect("renders");
+    assert!(!off.contains("<span>* </span>"), "default drops the pseudo: {off}");
+
+    let on = mjmx::render(
+        DOC,
+        &RenderOptions {
+            inline_options: InlineOptions {
+                inline_pseudo_elements: true,
+                ..InlineOptions::default()
+            },
+            ..RenderOptions::default()
+        },
+    )
+    .expect("renders");
+    assert!(on.contains("<span>* </span>"), "opt-in synthesizes the pseudo: {on}");
+}

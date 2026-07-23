@@ -181,7 +181,8 @@ struct RenderOptionArgs {
     /// shape — e.g. `'{"preserveImportant": true, "applyWidthAttributes": false}'`.
     /// Recognised keys are `applyWidthAttributes` (default true),
     /// `applyHeightAttributes` (true), `applyAttributesTableElements` (true),
-    /// `preserveImportant` (false) and `styleAttributeName` ("style"). mjmx has no
+    /// `preserveImportant` (false), `resolveCSSVariables` (true),
+    /// `inlinePseudoElements` (false) and `styleAttributeName` ("style"). mjmx has no
     /// juice, so every other juice option is rejected with the reason rather than
     /// accepted and ignored. [mjml: `juiceOptions`]
     #[arg(long, value_name = "JSON")]
@@ -932,6 +933,8 @@ fn parse_juice_options(spec: Option<&str>) -> Result<InlineOptions, String> {
                 options.apply_attributes_table_elements = flag(key, value)?;
             }
             "preserveImportant" => options.preserve_important = flag(key, value)?,
+            "resolveCSSVariables" => options.resolve_css_variables = flag(key, value)?,
+            "inlinePseudoElements" => options.inline_pseudo_elements = flag(key, value)?,
             "styleAttributeName" => {
                 options.style_attribute_name = value
                     .as_str()
@@ -1116,16 +1119,38 @@ mod tests {
     }
 
     #[test]
+    fn resolve_css_variables_is_an_accepted_juice_option() {
+        // It used to be refused; now it is honoured (juice's default is `true`).
+        let options = render_options(&[
+            "in.mjml",
+            "--juice-options",
+            r#"{"resolveCSSVariables": false}"#,
+        ]);
+        assert!(!options.inline_options.resolve_css_variables);
+    }
+
+    #[test]
+    fn inline_pseudo_elements_is_an_accepted_juice_option() {
+        // Once refused, now honoured (juice's default `false`); `true` is decoded.
+        let options = render_options(&[
+            "in.mjml",
+            "--juice-options",
+            r#"{"inlinePseudoElements": true}"#,
+        ]);
+        assert!(options.inline_options.inline_pseudo_elements);
+    }
+
+    #[test]
     fn a_refused_juice_option_says_why_it_is_refused() {
         // The failure mode this exists to avoid is accepting the option and doing
         // nothing, so the error must name the option *and* the reason.
         let err = render_options_err(&[
             "in.mjml",
             "--juice-options",
-            r#"{"resolveCSSVariables": true}"#,
+            r#"{"preserveMediaQueries": true}"#,
         ]);
-        assert!(err.contains("resolveCSSVariables"), "{err}");
-        assert!(err.contains("custom-property cascade"), "{err}");
+        assert!(err.contains("preserveMediaQueries"), "{err}");
+        assert!(err.contains("unreachable"), "{err}");
 
         let err = render_options_err(&["in.mjml", "--juice-options", r#"{"extraCss": ".a{}"}"#]);
         assert!(err.contains("not a setting but the CSS itself"), "{err}");

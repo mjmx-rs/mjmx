@@ -126,6 +126,14 @@ pub struct JsJuiceOptions {
     /// juice and therefore mjml). It still decides the cascade either way; attribute
     /// mirrors never carry it.
     pub preserve_important: Option<bool>,
+    /// Resolve `var(--x)` / `var(--x, fallback)` against the custom-property cascade
+    /// and drop the `--x` declarations (default: true, as in juice).
+    // Auto-camelCase would give `resolveCssVariables`; mjml's key is all-caps `CSS`.
+    #[napi(js_name = "resolveCSSVariables")]
+    pub resolve_css_variables: Option<bool>,
+    /// Synthesize `::before`/`::after` from their `content` and splice them in
+    /// (default: false, as in juice / mjml).
+    pub inline_pseudo_elements: Option<bool>,
     /// The attribute inline declarations are read from and written to
     /// (default: `"style"`).
     pub style_attribute_name: Option<String>,
@@ -147,6 +155,12 @@ impl From<JsJuiceOptions> for InlineOptions {
             preserve_important: value
                 .preserve_important
                 .unwrap_or(defaults.preserve_important),
+            resolve_css_variables: value
+                .resolve_css_variables
+                .unwrap_or(defaults.resolve_css_variables),
+            inline_pseudo_elements: value
+                .inline_pseudo_elements
+                .unwrap_or(defaults.inline_pseudo_elements),
             style_attribute_name: value
                 .style_attribute_name
                 .unwrap_or(defaults.style_attribute_name),

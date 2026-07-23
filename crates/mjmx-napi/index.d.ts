@@ -184,9 +184,8 @@ export interface ComponentResult {
  *   `preservePseudos` — unreachable: juice reads them only under
  *   `insertPreservedExtraCss` / `removeStyleTags`, and mjml sets both `false`.
  * - `xmlMode`, `url`, `webResources` — no mjmx analogue; the inliner does no I/O.
- * - `resolveCSSVariables`, `inlinePseudoElements` — real gaps that cannot be faked.
- *   mjmx writes `var(--x)` through verbatim (i.e. behaves as `false`) and drops
- *   `::before`/`::after` rules.
+ *   (`resolveCSSVariables` and `inlinePseudoElements` are both implemented — see the
+ *   fields below.)
  *
  * **How the refusal is enforced here.** This interface is closed, so passing one of
  * those keys in an object literal is a compile error. It is *not* a runtime error:
@@ -219,6 +218,17 @@ export interface JuiceOptions {
    * written value. Attribute mirrors never carry it either way.
    */
   preserveImportant?: boolean;
+  /**
+   * Resolve `var(--x)` / `var(--x, fallback)` against the custom-property cascade and
+   * drop the `--x` declarations. Default: true (juice's default).
+   */
+  resolveCSSVariables?: boolean;
+  /**
+   * Synthesize `::before`/`::after` from their `content` (string → `<span>`, `url()` →
+   * `<img>`; `attr()`/`var()`/`counter()` resolved) and splice them in. Default: false
+   * (juice's default; mjml never enables it).
+   */
+  inlinePseudoElements?: boolean;
   /** The attribute inline declarations are read from and written to. Default: "style". */
   styleAttributeName?: string;
 }

@@ -79,16 +79,45 @@ pub(crate) fn apply(
     tree: &Tree<'_>,
     options: &InlineOptions,
 ) -> String {
+    // The custom-property (`--x`) cascade for `var()` resolution: each element's
+    // final `--*` declarations (matched rules folded into its own `style`), so a
+    // lookup can walk ancestors like juice's `findVariableValue`. Built only when
+    // resolution is on, and empty for elements a stylesheet cannot touch.
+    let custom_maps: Vec<Vec<(String, String)>> = if options.resolve_css_variables {
+        tree.elements
+            .iter()
+            .enumerate()
+            .map(|(index, element)| custom_properties(html, rules, tree, index, element, options))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let mut edits: Vec<Edit> = Vec::new();
     for (index, element) in tree.elements.iter().enumerate() {
         if element.inlinable {
-            rewrite(html, rules, tree, index, element, options, &mut edits);
+            rewrite(
+                html,
+                rules,
+                tree,
+                index,
+                element,
+                options,
+                &custom_maps,
+                &mut edits,
+            );
         }
+    }
+    // juice's `inlinePseudoElements`: synthesize `::before`/`::after` and splice them
+    // in with the same edit list (so byte offsets stay valid against `html`).
+    if options.inline_pseudo_elements {
+        edits.extend(crate::pseudo::pseudo_edits(html, rules, tree, options));
     }
     splice(html, edits)
 }
 
 /// Queue the edits for one element, if any rule matched it.
+#[allow(clippy::too_many_arguments)]
 fn rewrite(
     html: &str,
     rules: &[Rule],
@@ -96,13 +125,24 @@ fn rewrite(
     index: usize,
     element: &Element<'_>,
     options: &InlineOptions,
+    custom_maps: &[Vec<(String, String)>],
     edits: &mut Vec<Edit>,
 ) {
     let winners = winners(rules, tree, index);
     if winners.is_empty() {
         return;
     }
-    let merged = merge(&winners, element, html, options);
+    let mut merged = merge(&winners, element, html, options);
+
+    // juice's `resolveCSSVariables`: substitute every `var()` against the cascade
+    // (before mirroring, so a resolved colour still reaches `bgcolor`) and drop the
+    // `--x` declarations from the output.
+    if options.resolve_css_variables {
+        for declaration in &mut merged {
+            declaration.value = substitute_vars(&declaration.value, index, tree, custom_maps, 0);
+        }
+        merged.retain(|declaration| !declaration.property.starts_with("--"));
+    }
 
     // Attributes that do not exist yet are collected into one insertion at the
     // end of the attribute list, so they land in a stable order.
@@ -133,11 +173,16 @@ fn rewrite(
 
 /// The declarations that win the cascade for one element, in the order they are
 /// first set — which is the order they are written back out in.
-fn winners(rules: &[Rule], tree: &Tree<'_>, index: usize) -> Vec<Declaration> {
+pub(crate) fn winners(rules: &[Rule], tree: &Tree<'_>, index: usize) -> Vec<Declaration> {
     // `(important, specificity, rule order)` ascending, so applying in order and
     // letting the last write win reproduces the cascade, source order included.
     let mut ranked: Vec<(bool, _, usize, &Declaration)> = Vec::new();
     for (order, rule) in rules.iter().enumerate() {
+        // A `::before`/`::after` rule never inlines onto a real element — it is the
+        // pseudo pass's input.
+        if rule.pseudo.is_some() {
+            continue;
+        }
         if rule.selector.matches(tree, index) {
             for declaration in &rule.declarations {
                 ranked.push((
@@ -400,6 +445,169 @@ pub(crate) fn splice(html: &str, mut edits: Vec<Edit>) -> String {
     }
     out.push_str(&html[cursor..]);
     out
+}
+
+// ---- juice's `resolveCSSVariables`: custom-property cascade + `var()` substitution ----
+
+/// One element's final custom properties (`--name → value`), as juice's
+/// `styleProps` would hold them: its matched-rule winners folded into its own
+/// `style` attribute, filtered to `--*`. Empty for an element no stylesheet may
+/// touch. This is what an ancestor walk reads during resolution.
+pub(crate) fn custom_properties(
+    html: &str,
+    rules: &[Rule],
+    tree: &Tree<'_>,
+    index: usize,
+    element: &Element<'_>,
+    options: &InlineOptions,
+) -> Vec<(String, String)> {
+    if !element.inlinable {
+        return Vec::new();
+    }
+    let winners = winners(rules, tree, index);
+    merge(&winners, element, html, options)
+        .into_iter()
+        .filter(|declaration| declaration.property.starts_with("--"))
+        .map(|declaration| (declaration.property, declaration.value))
+        .collect()
+}
+
+/// juice's `findVariableValue`: the value of custom property `name`, taken from
+/// the nearest element up the ancestor chain (the element itself first) that
+/// defines it. Names are matched against the lower-cased declarations mjmx keeps.
+pub(crate) fn resolve_var(
+    index: usize,
+    name: &str,
+    tree: &Tree<'_>,
+    custom_maps: &[Vec<(String, String)>],
+) -> Option<String> {
+    let name = name.trim().to_ascii_lowercase();
+    let mut current = Some(index);
+    while let Some(i) = current {
+        if let Some(map) = custom_maps.get(i) {
+            if let Some((_, value)) = map.iter().find(|(n, _)| *n == name) {
+                return Some(value.clone());
+            }
+        }
+        current = tree.elements[i].parent;
+    }
+    None
+}
+
+/// juice's `replaceVariables`: rewrite every `var(--name)` / `var(--name,
+/// fallback)` in `value`. A resolved value is itself re-scanned (so `var()`s that
+/// appear from a substitution resolve too); an undefined variable with no
+/// fallback is left verbatim. `depth` guards against a custom-property cycle.
+pub(crate) fn substitute_vars(
+    value: &str,
+    index: usize,
+    tree: &Tree<'_>,
+    custom_maps: &[Vec<(String, String)>],
+    depth: usize,
+) -> String {
+    if depth > 32 {
+        return value.to_owned();
+    }
+    let Some((start, open)) = find_var_call(value) else {
+        return value.to_owned();
+    };
+    let Some(close) = matching_paren(value, open) else {
+        return value.to_owned();
+    };
+    let (name, fallback) = split_var_args(&value[open + 1..close]);
+    let before = &value[..start];
+    let after = &value[close + 1..];
+    let replacement = match resolve_var(index, name, tree, custom_maps) {
+        // A found value can contain further `var()`s, resolved from the *consuming*
+        // element (juice re-scans against the same element).
+        Some(resolved) => substitute_vars(&resolved, index, tree, custom_maps, depth + 1),
+        None => match fallback {
+            Some(fallback) => {
+                substitute_vars(fallback.trim(), index, tree, custom_maps, depth + 1)
+            }
+            // Undefined and no fallback: keep the `var(…)` literal, skip past it.
+            None => value[start..=close].to_owned(),
+        },
+    };
+    format!(
+        "{before}{replacement}{}",
+        substitute_vars(after, index, tree, custom_maps, depth + 1)
+    )
+}
+
+/// Locate the first `var(` function call: `(start, open)` where `start` is the
+/// `v` and `open` is the `(`. The identifier immediately before the `(` (allowing
+/// whitespace) must be exactly `var` (case-insensitive), so `svar(` is not one.
+fn find_var_call(value: &str) -> Option<(usize, usize)> {
+    let bytes = value.as_bytes();
+    for open in 0..bytes.len() {
+        if bytes[open] != b'(' {
+            continue;
+        }
+        let mut ident_end = open;
+        while ident_end > 0 && bytes[ident_end - 1].is_ascii_whitespace() {
+            ident_end -= 1;
+        }
+        let mut ident_start = ident_end;
+        while ident_start > 0
+            && (bytes[ident_start - 1].is_ascii_alphabetic() || bytes[ident_start - 1] == b'-')
+        {
+            ident_start -= 1;
+        }
+        if value[ident_start..ident_end].eq_ignore_ascii_case("var") {
+            return Some((ident_start, open));
+        }
+    }
+    None
+}
+
+/// The index of the `)` that closes the `(` at `open`, respecting nesting and
+/// quotes.
+fn matching_paren(value: &str, open: usize) -> Option<usize> {
+    let bytes = value.as_bytes();
+    let mut depth = 0i32;
+    let mut quote: Option<u8> = None;
+    for (i, &b) in bytes.iter().enumerate().skip(open) {
+        match quote {
+            Some(q) if b == q => quote = None,
+            Some(_) => {}
+            None => match b {
+                b'"' | b'\'' => quote = Some(b),
+                b'(' => depth += 1,
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(i);
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+    None
+}
+
+/// Split a `var()`'s arguments on the first top-level comma into the custom
+/// property name and the optional fallback (`var(--x)` → `("--x", None)`,
+/// `var(--x, y)` → `("--x", Some(" y"))`).
+fn split_var_args(inner: &str) -> (&str, Option<&str>) {
+    let bytes = inner.as_bytes();
+    let mut depth = 0i32;
+    let mut quote: Option<u8> = None;
+    for (i, &b) in bytes.iter().enumerate() {
+        match quote {
+            Some(q) if b == q => quote = None,
+            Some(_) => {}
+            None => match b {
+                b'"' | b'\'' => quote = Some(b),
+                b'(' => depth += 1,
+                b')' => depth -= 1,
+                b',' if depth == 0 => return (&inner[..i], Some(&inner[i + 1..])),
+                _ => {}
+            },
+        }
+    }
+    (inner, None)
 }
 
 #[cfg(test)]

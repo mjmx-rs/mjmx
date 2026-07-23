@@ -129,17 +129,34 @@ What V5 changes, by area (each `is_v5()`-gated; V4 unchanged):
   selectors for the new Outlook (`input.mj-accordion-checkbox` →
   `.mj-accordion-checkbox[type="checkbox"]`, `:checked` rules drop `input`; `.moz-text-html`
   fallbacks unchanged), via a `HEAD_CSS_V5` const.
+- **Section `gutter`** (`components/{column,section,group}.rs`): the mjml 5 column-layout
+  rework, **shipped** (was deferred). `<mj-section gutter>` threads `gutter` + the
+  section's `direction` to each column (mjml's `context.gutter`/`direction`); a column
+  reduces its width by `gutter*(sibling-1)/sibling` (so the `mj-column-per-*` class keys
+  off the *reduced* width), registers a per-position `mj-column-gutter-{sibling}-{index+1}-
+  {unit}-{token}{-rtl}` padding media query (section columns only), and grows padding:
+  vertical `%` on the stacking div, horizontal desktop padding on a group column's div,
+  and px padding on its Outlook ghost `<td>`. RTL swaps the leading/trailing sides and
+  adds the `-rtl` token. px gutters distribute the fractional remainder one pixel at a
+  time (lowest index first). Group columns inherit the section gutter but the *group's*
+  own `direction`, carry the padding inline (no media query), and take the reduced width
+  as their inline mobile width. The whole feature is `is_v5()`-gated on a non-empty
+  `gutter` — a V4 render (or any section without `gutter`) is byte-identical to before;
+  `Column`/`Group` take a `Gutter` context that is inert (`Gutter::none()`) off the gutter
+  path. mjml's dead `gap` context key (never in `allowedAttributes`) is skipped. Verified
+  against real `mjml@5.4.0` output: golden fixtures `section_gutter_{px,3col,pct,rtl,
+  px_widths}` + `group_gutter` in `tests/golden_v5.rs` (a new V5 golden harness, beautified
+  goldens like the V4 set), plus targeted token asserts in `compat_v5.rs`.
 
 **Verified non-changes / deliberate scope cuts** (checked 4.18.0 vs 5.4.0 component
 source, not the guide):
 
 - **button `border-radius`** was already `'string'` in 4.18.0 — *not* a 4→5 change, so
   nothing shipped. (The upgrade guide implied otherwise.)
-- **`mj-section gutter`** is not a lone attribute: it is the whole mjml 5
-  **gap/gutter/direction + RTL** column-layout rework (`getNormalizedGutterValue`,
-  gutter-token media queries, group-column padding). It is opt-in by attribute and has **no
-  baseline impact** (a plain multi-column doc still emits `mj-column-per-50` in 5.4,
-  identical to mjmx), so it is **deferred to its own milestone**, not folded in here.
+- **`mj-section gutter`** — the whole mjml 5 **gap/gutter/direction + RTL** column-layout
+  rework — is now **shipped**, no longer deferred. See the `Section gutter` bullet in the
+  "What V5 changes" list above for the implementation. (It has no baseline impact: a plain
+  multi-column doc still emits `mj-column-per-50` in 5.4, identical to mjmx.)
 - The guide's claim that 5.4 "removes background-color from the body" is **false** against
   real output (5.4 keeps it on both `<body>` and the wrapper div); mjmx followed the
   output.
@@ -293,8 +310,8 @@ has no juice, so every option was classified rather than forwarded:
 | `extraCss`, `applyStyleTags`, `removeStyleTags`, `insertPreservedExtraCss` | **refused** | not settings in mjmx but the shape of the pass: semantic splits `<mj-style>` into an inline bucket and a `<style>` bucket, and the inliner only ever sees the first. `extraCss` *is* the `css` argument |
 | `preserveMediaQueries`, `preserveFontFaces`, `preserveKeyFrames`, `preservePseudos` | **refused** | unreachable — juice reads them only from `getPreservedText`, gated on `insertPreservedExtraCss` / `removeStyleTags`, and mjml sets both false |
 | `xmlMode`, `url`, `webResources` | **refused** | no analogue; `url`/`webResources` are `juiceResources`-only and mjml calls plain `juice()`. The inliner does no I/O |
-| `resolveCSSVariables` (**true**) | **refused — real gap** | needs a custom-property cascade with `var()` fallbacks. mjmx writes `var(--x)` through verbatim and keeps the `--x` declaration, i.e. it behaves as `false`, which is *not* juice's default |
-| `inlinePseudoElements` (falsy) | **refused — real gap** | needs `content` parsing (strings, `url()`, `attr()`, counters) and element synthesis; mjmx drops `::before`/`::after` |
+| `resolveCSSVariables` (**true**) | **implemented** | `apply.rs`: per-element custom-property maps (matched-rule + own `style`, filtered to `--*`); `var(--x)`/`var(--x, fallback)` resolved up the ancestor chain (nearest wins, element first), nested refs re-scanned, `--x` declarations dropped; resolution runs before attribute mirroring. Default `true` (juice's), **both compat modes** — it is plain-juice behaviour mjml always had, not a 5.x change. Only matched elements are rewritten (the crate's existing invariant); every real `var()` reaches output through a matched inline `<mj-style>` rule, so that covers the realistic cases. Verified against real mjml output |
+| `inlinePseudoElements` (falsy) | **implemented** | `pseudo.rs`: `::before`/`::after` synthesized from `content` — quoted strings, `url()`→`<img>`, `attr()`, `var()`, `counter()` with a `counter-reset`/`counter-increment` subsystem (decimal + roman/latin styles, all a faithful port of juice 10.0.1). The box is a `<span>` (or `<img>`) carrying the rule's other declarations, prepended/appended by splicing at new DOM content-start/content-end offsets. Default **false** (juice's; mjml never enables it), so a normal render is byte-identical. Verified against juice's own output |
 
 Refusals are **errors with the reason**, never silent ignores — `mjmx_css_inline::
 unsupported_option` is the single source of those strings, shared by CLI and wasm.
@@ -358,10 +375,17 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
     to prevent. Per-node file provenance (which would also fix the existing gap that
     spans from an included partial are meaningless in the main source) is a
     parser/AST milestone, not an option.
-- **Two juice options are real gaps, not oversights:** `resolveCSSVariables` (juice
-  defaults it **true**; mjmx behaves as `false`) and `inlinePseudoElements`. Both are
-  refused rather than faked; see the `juiceOptions` table above for what implementing
-  them would cost.
+- **Both former juice gaps are now implemented:** `resolveCSSVariables` (juice's default
+  `true`, both compat modes) and `inlinePseudoElements` (juice's default `false`, opt-in) —
+  see their `juiceOptions` table rows. No juice option is refused as a "real gap" any more;
+  the remaining refusals are structural (`extraCss`/`applyStyleTags`/… — the shape of
+  mjmx's split-bucket pass, not settings) or unreachable-in-mjml (`preserveMediaQueries`/…),
+  each still erroring with its reason rather than silently ignored.
+- **Known inliner divergence surfaced while implementing `resolveCSSVariables`, not yet
+  fixed:** mjmx mirrors the `TABLE_ATTRIBUTES` set (`background-color`→`bgcolor`, etc.)
+  onto `<table>` **only**, but real juice (`applyAttributesTableElements`) also mirrors them
+  onto `<td>`/`<th>`. No existing fixture exercises an inline rule that sets one of those on
+  a cell, so it never surfaced in the goldens. Orthogonal to var resolution; left as-is.
 - **Won't port:** `skeleton`, `preprocessors`, `presets` — JS function / `require()` semantics.
   Also `mjmlConfigPath` / `useMjmlConfigOptions` (was Tier 3): their *primary* purpose is
   loading **custom components** from a `.mjmlconfig` via JS `require()`, which a Rust
@@ -452,10 +476,26 @@ built from `Semantic::resolved_attributes` (union of inline attrs + every applic
 (node-cjs, node-esm, node-ts, browser); napi + wasm smoke tests each gained a custom-
 component check.
 
-**Still unimplemented (deliberately):** Tier 2 container components (custom tag holding
-`mj-column`s — the layout ABI); the CLI (no JS-callback surface — a CLI user renders
-built-ins + any Rust-registered components only, the documented consequence of the same
-rule); and Phase 3 python (pyo3), which will reuse the same `cx` shape + return channel.
+**Tier 2 container components — native, shipped (2026-07-23).** A custom tag can hold
+layout children (`mj-column`, …) and drive them itself: opt in with
+`CustomComponent::is_container() -> true`, and mjmx skips the leaf `<td>` cell and calls
+`render()`, where `ComponentCx` gains `render_children()` (recurse into mjmx dispatch for
+the tag's MJML children at the current width) and `set_container_width(u32)`. The ABI is
+the **`render_children` callback** shape (chosen over a themed-section alias or a
+pre-rendered-children Vec): the component owns its outer markup and calls back for the
+inner children — mjmx supplies **no** section ghost-row / column-share layout, so a bare
+`mj-column` under a container renders standalone (full width unless it has an explicit
+`width`); the container builds whatever grid it wants. `render_custom_container` (`render.rs`)
+save/restores `container_width` so a child width never leaks to a sibling; a registered
+container is exempt from the linter's parent-child constraints (passes strict as a body
+child). Tests: `tier2_*` in `crates/mjmx/tests/custom_components.rs`. See
+`docs/design/custom-components.md`.
+
+**Still unimplemented (deliberately):** the **JS-callback** container (a JS `render_children`
+across the FFI boundary — bindings stay Tier 1 leaf-only); the CLI (no JS-callback surface —
+a CLI user renders built-ins + any Rust-registered components only, the documented
+consequence of the same rule); and Phase 3 python (pyo3), which will reuse the same `cx`
+shape + return channel.
 
 ## Planned next
 
