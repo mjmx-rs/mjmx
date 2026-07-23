@@ -95,29 +95,34 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     // inlineStyle, fonts)` scans as a second source (helpers/fonts.js:11). That bucket
     // is never emitted as a `<style>` tag, so it has to be checked separately.
     let inline_styles = &ctx.semantic.head().inline_styles;
-    let fonts: Vec<_> = ctx
-        .semantic
-        .head()
-        .fonts
-        .iter()
-        .filter(|f| {
-            body.contains(f.name.as_ref())
-                || inline_styles.iter().any(|s| s.contains(f.name.as_ref()))
-        })
-        .collect();
+    let referenced =
+        |name: &str| body.contains(name) || inline_styles.iter().any(|s| s.contains(name));
+    // The built-in / `<mj-font>` table first (unchanged order and filter, so a document
+    // with no custom fonts is byte-identical), then any font a custom component
+    // contributed via `ComponentCx::add_font`, deduped against the table by `href`.
+    let mut fonts: Vec<(&str, &str)> = Vec::new();
+    for font in &ctx.semantic.head().fonts {
+        if referenced(font.name.as_ref()) {
+            fonts.push((font.name.as_ref(), font.href.as_ref()));
+        }
+    }
+    for (name, href) in ctx.custom_fonts() {
+        if referenced(name) && !fonts.iter().any(|(_, h)| *h == href.as_str()) {
+            fonts.push((name.as_str(), href.as_str()));
+        }
+    }
     if !fonts.is_empty() {
         h.push_str("<!--[if !mso]><!-->");
-        for font in &fonts {
+        for (_, href) in &fonts {
             h.push_str(&format!(
-                "<link href=\"{}\" rel=\"stylesheet\" type=\"text/css\">",
-                font.href
+                "<link href=\"{href}\" rel=\"stylesheet\" type=\"text/css\">"
             ));
         }
         h.push_str("<style type=\"text/css\">");
-        for font in &fonts {
+        for (_, href) in &fonts {
             // Leading/trailing whitespace mirrors mjml so the normalized token
             // stream (`> @import ... </style>`) matches.
-            h.push_str(&format!("\n    @import url({});\n  ", font.href));
+            h.push_str(&format!("\n    @import url({href});\n  "));
         }
         h.push_str("</style>");
         h.push_str("<!--<![endif]-->");

@@ -1,6 +1,12 @@
 # Design: custom components (mjmx extension points)
 
-Status: **proposal** — not implemented. Author-reviewed 2026-07-22.
+Status: **Phase 1 (native Rust) — implemented 2026-07-23.** Tier 2 (container
+components) and Phases 2–3 (napi/wasm/python callbacks) remain proposal. Author-reviewed
+2026-07-22. The shipped surface: `mjmx::{CustomComponent, ComponentRegistry, ComponentCx}`
+and `mjmx::render_with_components` / `render_file_with_components` (the trait, registry and
+`ComponentCx` live in `crates/mjmx-codegen/src/custom.rs`; registry-aware dispatch in
+`render.rs`, linter in `mjmx-linter` via `lint_with_components`). See
+`crates/mjmx/tests/custom_components.rs`.
 
 ## Problem
 
@@ -179,13 +185,17 @@ scope until Tier 1 ships and demand is demonstrated.
 
 Native-first locks the ABI before callback plumbing is paid for three times.
 
-## Open questions
+## Open questions — resolved for Phase 1
 
-- Head contributions from a callback: collected via `cx` mutation and returned
-  alongside the HTML, or a separate return channel? (napi threadsafe-fn return
-  shape decides this.)
-- Should `attr()` expose the raw attribute or the cascade-resolved value only?
-  Proposal: resolved only, matching how built-in components read attributes;
-  raw access is a footgun that bypasses `mj-attributes`.
-- Versioning: embed an ABI version in `ComponentCx` so a host can detect a
-  mismatch, or tie it to the crate semver? Proposal: crate semver, documented.
+- **Head contributions.** *Decided: collected via `cx` mutation.* `add_style` /
+  `add_font` push onto the `RenderContext` (styles reuse the existing dedup buffer; fonts
+  land in an owned `custom_fonts: Vec<(String, String)>` side-channel, merged into the head
+  font pass and emitted — `<link>` + `@import` — only when the family is referenced in the
+  body, mjml's own rule). Owned rather than arena-bound so a future callback need not
+  thread the allocator. The napi/wasm return-channel question (Phase 2) is still open and
+  does not affect the native shape.
+- **`attr()` — raw or resolved?** *Decided: resolved only*, through
+  `Semantic::attribute` exactly as built-ins read attributes. Raw access is not offered
+  (it would bypass `mj-attributes`).
+- **Versioning.** *Decided: crate semver*, documented. No embedded ABI-version integer in
+  `ComponentCx`.

@@ -393,12 +393,38 @@ linter was a **warning** whose help falsely claimed unknown tags "are rendered a
 now an **error** with accurate help, so lint and render tell the same story.
 
 **Custom components proper are won't-port via `.mjmlconfig`** (see "Won't port" above) but
-there is a design for an mjmx-owned alternative: **`docs/design/custom-components.md`** — a
-small, versioned `ComponentCx` contract (leaf-only first), a native Rust trait plus
+mjmx ships an mjmx-owned alternative: **`docs/design/custom-components.md`** — a small,
+versioned `ComponentCx` contract (leaf-only first), a native Rust trait plus (future)
 napi/wasm/python callbacks over one shared shape, with the cross-binding rule
-"registered → renders, else the clean unknown-component error". Proposal only, unimplemented;
-phasing and three open questions (head-contribution return channel, raw-vs-resolved `attr()`,
-ABI versioning) are in the doc.
+"registered → renders, else the clean unknown-component error".
+
+**Phase 1 (native Rust) is implemented (2026-07-23).** Public API on the umbrella:
+`mjmx::{CustomComponent, ComponentRegistry, ComponentCx}` + `render_with_components` /
+`render_file_with_components`. A host `impl`s `CustomComponent` (`tag()` + `render(&mut
+ComponentCx)`), registers it on a `ComponentRegistry`, and passes that in; a tag the parser
+left as `MjmlTag::Unknown` renders through its component, and only an *unregistered* unknown
+tag is the usual fatal "not a recognized MJML component" error (the linter agrees via
+`mjmx_linter::lint_with_components`, so a registered tag is not flagged under `strict`
+either). Trait/registry/`ComponentCx` live in `crates/mjmx-codegen/src/custom.rs`;
+registry-aware dispatch is the `MjmlTag::Unknown` arm in `render.rs`; the registry is
+threaded as `RenderContext.registry: Option<&'a ComponentRegistry>` (no new lifetime — a
+`&'r` param coerces since `'r: 'a`), and codegen's
+`render_document_with_inline_css_and_components` carries it. **ABI = `ComponentCx`**:
+`attr`/`attr_or` (cascade-resolved only), `container_width`, `breakpoint`, `raw_inner`
+(verbatim inner text), `write`, `add_style`, `add_font`. Head contributions are owned
+side-channels on `RenderContext` (`add_style` reuses the style buffer; `add_font` →
+`custom_fonts: Vec<(String,String)>`, emitted `<link>`+`@import` only when the family is
+referenced in the body, mjml's rule) — so a component needs no arena access. Byte-identical
+to before for any document with no custom fonts (the 78 golden tests are unmoved). The three
+open questions are resolved for Phase 1 (resolved-only `attr`; owned-side-channel head
+contributions; crate-semver versioning, no embedded ABI int). Tests:
+`crates/mjmx/tests/custom_components.rs`.
+
+**Still unimplemented (deliberately):** Tier 2 container components (custom tag holding
+`mj-column`s — the layout ABI); and Phase 2/3 bindings — CLI (no callback surface), napi
+(threadsafe-fn), wasm (imported-fn), python (pyo3). A CLI user renders built-ins + any
+Rust-registered components only; that is the documented, consistent consequence of the
+same rule, not a special case.
 
 ## Planned next
 

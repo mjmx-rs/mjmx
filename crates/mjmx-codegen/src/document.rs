@@ -16,6 +16,7 @@ use mjmx_syntax::MjmlTag;
 
 use crate::components::Body;
 use crate::context::{RenderContext, RenderOptions};
+use crate::custom::ComponentRegistry;
 use crate::head::render_head;
 use crate::render::Render;
 
@@ -27,7 +28,7 @@ pub fn render_document<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<String, Vec<Diagnostic>> {
-    render_impl(document, options, false).map(|rendered| rendered.html)
+    render_impl(document, options, false, None).map(|rendered| rendered.html)
 }
 
 /// [`render_document`], also returning the two head buckets that codegen hands back as
@@ -52,7 +53,24 @@ pub fn render_document_with_inline_css<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<(String, Vec<String>, Vec<HtmlAttributeRule>), Vec<Diagnostic>> {
-    render_impl(document, options, false)
+    render_document_with_inline_css_and_components(document, options, None)
+}
+
+/// [`render_document_with_inline_css`] with a custom-component registry.
+///
+/// A registered tag the parser left as [`MjmlTag::Unknown`] renders through its
+/// [`CustomComponent`](crate::CustomComponent); with `registry` = `None` this is exactly
+/// [`render_document_with_inline_css`].
+///
+/// # Errors
+///
+/// As [`render_document`].
+pub fn render_document_with_inline_css_and_components<'a>(
+    document: &Document<'a>,
+    options: &RenderOptions,
+    registry: Option<&'a ComponentRegistry>,
+) -> Result<(String, Vec<String>, Vec<HtmlAttributeRule>), Vec<Diagnostic>> {
+    render_impl(document, options, false, registry)
         .map(|rendered| (rendered.html, rendered.inline_css, rendered.html_attributes))
 }
 
@@ -75,7 +93,7 @@ pub fn render_document_with_sourcemap<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
 ) -> Result<(String, SourceMap), Vec<Diagnostic>> {
-    let rendered = render_impl(document, options, true)?;
+    let rendered = render_impl(document, options, true, None)?;
     Ok((rendered.html, rendered.sourcemap.unwrap_or_default()))
 }
 
@@ -136,6 +154,7 @@ fn render_impl<'a>(
     document: &Document<'a>,
     options: &RenderOptions,
     sourcemap: bool,
+    registry: Option<&'a ComponentRegistry>,
 ) -> Result<Rendered, Vec<Diagnostic>> {
     let root = document.root_element().ok_or_else(|| {
         vec![
@@ -164,6 +183,9 @@ fn render_impl<'a>(
     }
 
     let mut ctx = RenderContext::new(options.clone(), semantic);
+    if let Some(registry) = registry {
+        ctx.set_components(registry);
+    }
     if sourcemap {
         ctx.enable_sourcemap();
     }

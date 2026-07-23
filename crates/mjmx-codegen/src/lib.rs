@@ -37,15 +37,18 @@
 
 mod components;
 mod context;
+mod custom;
 mod document;
 mod head;
 mod render;
 
 pub use context::{MediaQuery, MjmlCompat, RenderContext, RenderOptions, ValidationLevel};
+pub use custom::{ComponentCx, ComponentRegistry, CustomComponent};
 // Re-exported so a caller can build a `RenderOptions::fonts` table without depending on
 // `mjmx-semantic` directly.
 pub use document::{
-    render_document, render_document_with_inline_css, render_document_with_sourcemap,
+    render_document, render_document_with_inline_css,
+    render_document_with_inline_css_and_components, render_document_with_sourcemap,
 };
 pub use mjmx_semantic::{FontFace, HtmlAttributeRule};
 pub use mjmx_sourcemap::{Mapping, SourceMap, Span};

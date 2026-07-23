@@ -18,6 +18,8 @@ use mjmx_minifier::MinifyOptions;
 use mjmx_semantic::{FontFace, Semantic};
 use mjmx_sourcemap::SourceMapBuilder;
 
+use crate::custom::ComponentRegistry;
+
 /// How hard a render insists the document validates. mjml's `validationLevel`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ValidationLevel {
@@ -279,6 +281,16 @@ pub struct RenderContext<'a> {
     pub semantic: Semantic<'a>,
     media_queries: Vec<MediaQuery>,
     styles: Vec<String>,
+    /// Web fonts contributed by a custom component via
+    /// [`ComponentCx::add_font`](crate::ComponentCx::add_font). Kept as owned `(name,
+    /// href)` pairs rather than the arena-bound [`FontFace`](mjmx_semantic::FontFace) so a
+    /// callback need not thread the allocator; merged into the head font pass alongside
+    /// the built-in / `<mj-font>` table. Empty on every non-custom render.
+    custom_fonts: Vec<(String, String)>,
+    /// The registered custom components, if any. `None` — the default — is the ordinary
+    /// render path: an unknown tag stays an error. Set by
+    /// [`set_components`](Self::set_components) on the `_with_components` entry points.
+    registry: Option<&'a ComponentRegistry>,
     hamburger_seq: u32,
     carousel_seq: u32,
     /// Source-mapping collector. `None` — the default — means no mapping is recorded and
@@ -308,10 +320,39 @@ impl<'a> RenderContext<'a> {
             semantic,
             media_queries: Vec::new(),
             styles: Vec::new(),
+            custom_fonts: Vec::new(),
+            registry: None,
             hamburger_seq: 0,
             carousel_seq: 0,
             sourcemap: None,
         }
+    }
+
+    /// Attach a custom-component registry, so dispatch can render a registered tag the
+    /// parser left as [`MjmlTag::Unknown`](mjmx_syntax::MjmlTag::Unknown).
+    pub fn set_components(&mut self, registry: &'a ComponentRegistry) {
+        self.registry = Some(registry);
+    }
+
+    /// The attached custom-component registry, if any.
+    #[must_use]
+    pub(crate) fn registry(&self) -> Option<&'a ComponentRegistry> {
+        self.registry
+    }
+
+    /// Register a web font contributed by a custom component (deduped by family name,
+    /// insertion order kept). See [`custom_fonts`](Self::custom_fonts).
+    pub fn add_custom_font(&mut self, name: String, href: String) {
+        if self.custom_fonts.iter().any(|(n, _)| *n == name) {
+            return;
+        }
+        self.custom_fonts.push((name, href));
+    }
+
+    /// The web fonts contributed by custom components, in insertion order.
+    #[must_use]
+    pub fn custom_fonts(&self) -> &[(String, String)] {
+        &self.custom_fonts
     }
 
     /// Turn on source-map collection for this render pass.

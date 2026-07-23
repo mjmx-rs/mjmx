@@ -17,7 +17,8 @@
 use mjmx_allocator::Allocator;
 
 pub use mjmx_codegen::{
-    FontFace, Mapping, MjmlCompat, RenderContext, RenderOptions, SourceMap, Span, ValidationLevel,
+    ComponentCx, ComponentRegistry, CustomComponent, FontFace, Mapping, MjmlCompat, RenderContext,
+    RenderOptions, SourceMap, Span, ValidationLevel,
 };
 pub use mjmx_css_inline::{
     InlineOptions, PreserveTag, SUPPORTED_OPTIONS, refusal, unsupported_option,
@@ -58,7 +59,56 @@ pub fn render_with_diagnostics(
     source: &str,
     options: &RenderOptions,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
-    render_source_with(source, options, &mjmx_transformer::LocalLoader)
+    render_source_with(source, options, &mjmx_transformer::LocalLoader, None)
+}
+
+/// Render MJML `source` to HTML with host-registered custom components (Tier 1).
+///
+/// Like [`render`], but a tag the parser does not recognize is looked up in `registry`
+/// first: a match renders through its [`CustomComponent`], and only an *unregistered*
+/// unknown tag is the usual fatal "not a recognized MJML component" error. The linter
+/// applies the same rule, so a registered tag is not flagged under `strict` validation
+/// either. This is mjmx's alternative to mjml's `.mjmlconfig` packages — a small,
+/// crate-semver-versioned ABI ([`ComponentCx`]) mjmx owns, not `mjml-core`'s plugin
+/// contract (see `docs/design/custom-components.md`).
+///
+/// # Errors
+///
+/// As [`render`].
+pub fn render_with_components(
+    source: &str,
+    options: &RenderOptions,
+    registry: &ComponentRegistry,
+) -> Result<String, Vec<Diagnostic>> {
+    render_source_with(
+        source,
+        options,
+        &mjmx_transformer::LocalLoader,
+        Some(registry),
+    )
+    .map(|(html, _)| html)
+}
+
+/// Render an MJML file at `path` to HTML with host-registered custom components.
+///
+/// The file-input counterpart of [`render_with_components`]: it has a base directory (the
+/// file's parent) for `<mj-include>` resolution, exactly as [`render_file`] does.
+///
+/// # Errors
+///
+/// As [`render_file`].
+pub fn render_file_with_components(
+    path: &std::path::Path,
+    options: &RenderOptions,
+    registry: &ComponentRegistry,
+) -> Result<String, Vec<Diagnostic>> {
+    render_file_with(
+        path,
+        options,
+        &mjmx_transformer::LocalLoader,
+        Some(registry),
+    )
+    .map(|(html, _)| html)
 }
 
 /// [`render_with_diagnostics`] with the loader — and, for a file render, the include
@@ -73,6 +123,7 @@ fn render_source(
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
     base: Option<&Path>,
+    registry: Option<&ComponentRegistry>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let allocator = Allocator::new();
     let parsed = mjmx_parser::parse(source, &allocator);
@@ -137,10 +188,15 @@ fn render_source(
 
     // mjml's `validationLevel`, applied to the post-include tree exactly as mjml
     // applies `MJMLValidator` after parsing.
+    // Registered custom components are known tags: the linter must not flag them, and
+    // codegen renders them through their `CustomComponent`. Empty (the common path) is
+    // exactly the built-in behaviour.
+    let registered: std::collections::BTreeSet<&str> =
+        registry.map(|r| r.names().collect()).unwrap_or_default();
     match options.validation_level {
         ValidationLevel::Skip => {}
         level => {
-            let lint_diags = mjmx_linter::lint(&document);
+            let lint_diags = mjmx_linter::lint_with_components(&document, &registered);
             if level == ValidationLevel::Strict && has_errors(&lint_diags) {
                 return Err(lint_diags);
             }
@@ -149,7 +205,7 @@ fn render_source(
     }
 
     let (html, inline_css, html_attributes) =
-        mjmx_codegen::render_document_with_inline_css(&document, options)?;
+        mjmx_codegen::render_document_with_inline_css_and_components(&document, options, registry)?;
     // mjml's order: the cheerio `htmlAttributes` pass runs *before* juice, so an
     // added attribute can be a selector target for the inliner that follows.
     let html = apply_html_attributes(html, &html_attributes);
@@ -207,8 +263,9 @@ fn render_source_with(
     source: &str,
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
+    registry: Option<&ComponentRegistry>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
-    render_source(source, options, loader, None)
+    render_source(source, options, loader, None, registry)
 }
 
 /// The directory relative `<mj-include>` paths resolve against, given a
@@ -357,7 +414,7 @@ pub fn render_file_with_diagnostics(
     path: &std::path::Path,
     options: &RenderOptions,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
-    render_file_with(path, options, &mjmx_transformer::LocalLoader)
+    render_file_with(path, options, &mjmx_transformer::LocalLoader, None)
 }
 
 /// Render an MJML file, resolving `<mj-include>` **over the network as well as the
@@ -398,7 +455,12 @@ pub fn render_file_allow_http_with_diagnostics(
     path: &std::path::Path,
     options: &RenderOptions,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
-    render_file_with(path, options, &mjmx_transformer::CombinedLoader::new())
+    render_file_with(
+        path,
+        options,
+        &mjmx_transformer::CombinedLoader::new(),
+        None,
+    )
 }
 
 /// The shared body of [`render_file`] and `render_file_allow_http`:
@@ -407,6 +469,7 @@ fn render_file_with(
     path: &std::path::Path,
     options: &RenderOptions,
     loader: &dyn mjmx_transformer::IncludeLoader,
+    registry: Option<&ComponentRegistry>,
 ) -> Result<(String, Vec<Diagnostic>), Vec<Diagnostic>> {
     let source = std::fs::read_to_string(path).map_err(|err| {
         vec![Diagnostic::error(format!(
@@ -424,7 +487,7 @@ fn render_file_with(
         .as_deref()
         .map_or(derived, |explicit| include_base(explicit));
 
-    render_source(&source, options, loader, Some(root_dir))
+    render_source(&source, options, loader, Some(root_dir), registry)
 }
 
 /// Format MJML `source` into canonical MJML source text.

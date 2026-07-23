@@ -39,6 +39,8 @@
 
 pub mod rules;
 
+use std::collections::BTreeSet;
+
 use mjmx_ast::{Document, Element};
 use mjmx_diagnostics::Diagnostic;
 use mjmx_syntax::MjmlTag;
@@ -64,10 +66,24 @@ enum Region {
 /// source-order walk.
 #[must_use]
 pub fn lint<'a>(document: &Document<'a>) -> Vec<Diagnostic> {
+    lint_with_components(document, &BTreeSet::new())
+}
+
+/// [`lint`], treating each tag in `registered` as a known component.
+///
+/// Custom components (`mjmx::render_with_components`) register renderers for tags the
+/// parser leaves as [`MjmlTag::Unknown`]. A registered tag must not be flagged as an
+/// unknown component, or lint and render would disagree — so the render pipeline passes
+/// the registered names here. With an empty set this is exactly [`lint`].
+#[must_use]
+pub fn lint_with_components<'a>(
+    document: &Document<'a>,
+    registered: &BTreeSet<&str>,
+) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for node in &document.children {
         if let Some(el) = node.as_element() {
-            walk(el, None, Region::Root, &mut out);
+            walk(el, None, Region::Root, registered, &mut out);
         }
     }
     out
@@ -78,9 +94,10 @@ fn walk<'a>(
     el: &'a Element<'a>,
     parent: Option<MjmlTag>,
     region: Region,
+    registered: &BTreeSet<&str>,
     out: &mut Vec<Diagnostic>,
 ) {
-    check_element(el, parent, region, out);
+    check_element(el, parent, region, registered, out);
 
     let child_region = match el.tag {
         MjmlTag::MjHead => Region::Head,
@@ -88,7 +105,7 @@ fn walk<'a>(
         _ => region,
     };
     for child in el.element_children() {
-        walk(child, Some(el.tag), child_region, out);
+        walk(child, Some(el.tag), child_region, registered, out);
     }
 }
 
@@ -97,13 +114,20 @@ fn check_element<'a>(
     el: &'a Element<'a>,
     parent: Option<MjmlTag>,
     region: Region,
+    registered: &BTreeSet<&str>,
     out: &mut Vec<Diagnostic>,
 ) {
     // Structural checks are mutually exclusive: unknown tags are opaque, child-only
     // elements are validated from the child side, everything else from the parent's
     // allowed-children table.
     if el.tag == MjmlTag::Unknown {
-        check_unknown(el, out);
+        // A host-registered custom component is known; only an unregistered tag is the
+        // usual unknown-component error.
+        if registered.contains(el.raw_tag.as_str()) {
+            check_custom_placement(el, region, out);
+        } else {
+            check_unknown(el, out);
+        }
     } else if let Some(required) = rules::required_parent(el.tag) {
         check_dangling(el, parent, required, out);
     } else if let Some(parent_tag) = parent {
@@ -112,6 +136,24 @@ fn check_element<'a>(
 
     // Rule 5 is independent of the structural verdict.
     check_required_attributes(el, out);
+}
+
+/// A registered Tier 1 custom component is a body leaf element: codegen only dispatches
+/// it while rendering the body, so a placement in `<mj-head>` (or above the body) would
+/// silently render nothing. Flag it — the same way a misplaced built-in is flagged — so a
+/// host registration mistake is a diagnostic rather than a quiet no-op. Lint stays at
+/// least as strict as render (which drops it).
+fn check_custom_placement<'a>(el: &'a Element<'a>, region: Region, out: &mut Vec<Diagnostic>) {
+    if region != Region::Body {
+        out.push(
+            Diagnostic::error(format!(
+                "custom component '<{}>' is only valid inside the body",
+                el.raw_tag.as_str()
+            ))
+            .with_label(el.span, "custom component outside <mj-body>")
+            .with_help("Tier 1 custom components render as body leaf elements"),
+        );
+    }
 }
 
 /// Rule 2: an unrecognized component is an error. The renderer rejects it — nothing is

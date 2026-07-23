@@ -17,6 +17,7 @@ use crate::components::{
     Raw, Section, Social, SocialElement, Spacer, Table, Text, Wrapper,
 };
 use crate::context::RenderContext;
+use crate::custom::ComponentCx;
 
 /// The result of rendering: unit on success, a [`Diagnostic`] on failure.
 pub type RenderResult = Result<(), Diagnostic>;
@@ -167,6 +168,18 @@ fn dispatch<'a>(
         MjmlTag::MjHero => Hero::new(element).render(ctx, buf),
         MjmlTag::MjCarousel => Carousel::new(element).render(ctx, buf),
         MjmlTag::MjAccordion => Accordion::new(element).render(ctx, buf),
+        // An unrecognized tag may be a host-registered custom component (Tier 1). The
+        // registry ref is `Copy` (an `Option<&_>`), so reading it here releases the
+        // context borrow before `ComponentCx` takes `ctx` mutably; `comp` borrows the
+        // registry (`'a`), independent of that mutable borrow.
+        MjmlTag::Unknown => {
+            let registered = ctx.registry();
+            if let Some(comp) = registered.and_then(|reg| reg.get(element.raw_tag.as_str())) {
+                let mut cx = ComponentCx::new(element, ctx, buf);
+                return comp.render(&mut cx);
+            }
+            Err(unsupported(element))
+        }
         _ => Err(unsupported(element)),
     }
 }
