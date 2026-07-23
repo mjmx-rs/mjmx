@@ -2,21 +2,43 @@
   "name": "@mjmx/node",
   "version": "0.1.0",
   "description": "Node.js bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
+  "keywords": [
+    "mjml",
+    "mjmx",
+    "email",
+    "html",
+    "compiler",
+    "napi",
+    "rust"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ryeasin03/mjmx.git",
     "directory": "crates/mjmx-napi"
   },
+  "homepage": "https://github.com/ryeasin03/mjmx#readme",
+  "bugs": {
+    "url": "https://github.com/ryeasin03/mjmx/issues"
+  },
   "main": "index.js",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "engines": {
     "node": ">= 18"
   },
   "files": [
     "index.js",
+    "index.mjs",
     "index.d.ts",
-    "*.node",
     "README.md"
   ],
   "napi": {
@@ -29,9 +51,20 @@
       "x86_64-pc-windows-msvc"
     ]
   },
+  "optionalDependencies": {
+    "@mjmx/node-linux-x64-gnu": "0.1.0",
+    "@mjmx/node-linux-arm64-gnu": "0.1.0",
+    "@mjmx/node-darwin-x64": "0.1.0",
+    "@mjmx/node-darwin-arm64": "0.1.0",
+    "@mjmx/node-win32-x64-msvc": "0.1.0"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.7.4"
+  },
   "scripts": {
     "build": "cargo build -p mjmx-napi --release",
+    "napi:create-dirs": "napi create-npm-dirs",
+    "napi:version": "napi version",
     "test": "node test/smoke.mjs"
-  },
-  "private": true
+  }
 }

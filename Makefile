@@ -14,11 +14,15 @@ NAPI_OUT := $(NAPI_DIR)/mjmx.$(if $(NAPI_TRIPLE),$(NAPI_TRIPLE),unknown).node
 # WebAssembly package: cargo emits a bare module, `wasm-bindgen` generates the JS
 # glue + .d.ts next to it. The CLI version must match the `wasm-bindgen` crate
 # version pinned in the workspace Cargo.toml (see crates/mjmx-wasm/README.md).
+# One cargo build feeds three `wasm-bindgen` runs — `nodejs` (CommonJS, `require`),
+# `bundler` (ESM for webpack/vite/rollup) and `web` (ESM for browsers/Deno without a
+# bundler) — each into its own `pkg/<flavor>` dir, wired up by the package.json
+# `exports` map. The three `_bg.wasm` differ (per-target glue), so each is optimised.
 WASM_DIR := crates/mjmx-wasm
 WASM_TARGET := wasm32-unknown-unknown
 WASM_LIB := target/$(WASM_TARGET)/release/mjmx_wasm.wasm
 WASM_OUT := $(WASM_DIR)/pkg
-WASM_BG := $(WASM_OUT)/mjmx_wasm_bg.wasm
+WASM_BG := $(WASM_OUT)/node/mjmx_wasm_bg.wasm $(WASM_OUT)/bundler/mjmx_wasm_bg.wasm $(WASM_OUT)/web/mjmx_wasm_bg.wasm
 
 # `wasm-opt` (binaryen) shrinks the wasm-bindgen output by roughly a third. It is
 # an *optional* tool: `make wasm` runs it when it is on PATH and prints a hint
@@ -69,20 +73,25 @@ napi: ## Build the Node addon and stage it as a loadable .node
 napi-test: napi ## Run the Node addon smoke test
 	$(NODE) $(NAPI_DIR)/test/smoke.mjs
 
-wasm: ## Build the WebAssembly package (wasm-opt applied when available)
+wasm: ## Build the WebAssembly package (node + bundler + web; wasm-opt applied when available)
 	$(CARGO) build -p mjmx-wasm --target $(WASM_TARGET) --release
-	wasm-bindgen --target nodejs --out-dir $(WASM_OUT) --out-name mjmx_wasm $(WASM_LIB)
+	wasm-bindgen --target nodejs  --out-dir $(WASM_OUT)/node    --out-name mjmx_wasm $(WASM_LIB)
+	wasm-bindgen --target bundler --out-dir $(WASM_OUT)/bundler --out-name mjmx_wasm $(WASM_LIB)
+	wasm-bindgen --target web     --out-dir $(WASM_OUT)/web     --out-name mjmx_wasm $(WASM_LIB)
 	@$(MAKE) --no-print-directory wasm-opt
-	@echo "staged $(WASM_OUT)"
+	@echo "staged $(WASM_OUT) (node/ bundler/ web/)"
 
 wasm-opt: ## Shrink the staged wasm with binaryen (no-op if wasm-opt is missing)
 	@if command -v $(WASM_OPT) >/dev/null 2>&1; then \
-	  before=$$(wc -c < $(WASM_BG)); \
-	  $(WASM_OPT) $(WASM_OPT_FLAGS) $(WASM_BG) -o $(WASM_BG).opt && mv $(WASM_BG).opt $(WASM_BG); \
-	  after=$$(wc -c < $(WASM_BG)); \
-	  awk -v b=$$before -v a=$$after 'BEGIN { \
-	    printf "wasm-opt $(WASM_OPT_FLAGS): %.1f KiB -> %.1f KiB (-%.1f%%)\n", \
-	      b/1024, a/1024, (b-a)*100/b }'; \
+	  for f in $(WASM_BG); do \
+	    [ -f $$f ] || continue; \
+	    before=$$(wc -c < $$f); \
+	    $(WASM_OPT) $(WASM_OPT_FLAGS) $$f -o $$f.opt && mv $$f.opt $$f; \
+	    after=$$(wc -c < $$f); \
+	    awk -v b=$$before -v a=$$after -v n=$$f 'BEGIN { \
+	      printf "wasm-opt $(WASM_OPT_FLAGS): %s %.1f KiB -> %.1f KiB (-%.1f%%)\n", \
+	        n, b/1024, a/1024, (b-a)*100/b }'; \
+	  done; \
 	else \
 	  echo "wasm-opt not found — skipping size optimisation."; \
 	  echo "  install binaryen to shrink the artifact: cargo install wasm-opt"; \

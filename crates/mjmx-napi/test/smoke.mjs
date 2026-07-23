@@ -56,7 +56,8 @@ check('render({ breakpoint }) is honored', () => {
 });
 
 check('renderFile() resolves mj-include', () => {
-  const out = mjmx.renderFile(join(fixtures, 'include', 'main.mjml'));
+  // V5 (the default compat) ignores includes unless asked; opt in to exercise resolution.
+  const out = mjmx.renderFile(join(fixtures, 'include', 'main.mjml'), { ignoreIncludes: false });
   assert.ok(out.includes('Before include.'));
   assert.ok(out.includes('Included section content.'), 'expected the partial to be inlined');
   assert.ok(out.includes('After include.'));
@@ -101,7 +102,8 @@ check('render({ validationLevel }) matches mjml', () => {
 
 check('render({ filePath }) resolves mj-include from a string', () => {
   const main = readFileSync(join(fixtures, 'include', 'main.mjml'), 'utf8');
-  const out = mjmx.render(main, { filePath: join(fixtures, 'include') });
+  // V5 (the default compat) ignores includes unless asked; opt in to exercise resolution.
+  const out = mjmx.render(main, { filePath: join(fixtures, 'include'), ignoreIncludes: false });
   assert.ok(out.includes('Included section content.'), 'expected the partial to be inlined');
 });
 
@@ -109,7 +111,9 @@ check('render({ minifyOptions }) matches mjml', () => {
   const two =
     '<mjml><mj-body><mj-section><mj-column><mj-text>hello    world</mj-text></mj-column>' +
     '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
-  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions });
+  // Pinned to V4: the empty `style=""` these switches observe is a V4-skeleton
+  // artifact (V5 drops it from the wrapper div); the minify plumbing is unchanged.
+  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions, mjmlVersion: 4 });
 
   // Defaults collapse whitespace and keep `style=""` (mjmx's one divergence).
   assert.ok(!opts({}).includes('hello    world'));
@@ -131,7 +135,8 @@ check('render({ ignoreIncludes }) drops mj-include instead of resolving it', () 
   const main = readFileSync(join(fixtures, 'include', 'main.mjml'), 'utf8');
   const base = join(fixtures, 'include');
   // With a base the partial is inlined; ignoreIncludes wins over filePath.
-  assert.ok(mjmx.render(main, { filePath: base }).includes('Included section content.'));
+  // (V5 default ignores includes, so opt in for the resolving arm of the contrast.)
+  assert.ok(mjmx.render(main, { filePath: base, ignoreIncludes: false }).includes('Included section content.'));
   const out = mjmx.render(main, { filePath: base, ignoreIncludes: true });
   assert.ok(!out.includes('Included section content.'), 'expected the partial to be dropped');
   assert.ok(out.includes('Before include.') && out.includes('After include.'));
@@ -139,7 +144,8 @@ check('render({ ignoreIncludes }) drops mj-include instead of resolving it', () 
 
 check('renderFile({ ignoreIncludes }) drops mj-include too', () => {
   const main = join(fixtures, 'include', 'main.mjml');
-  assert.ok(mjmx.renderFile(main).includes('Included section content.'));
+  // V5 default ignores includes, so opt in for the resolving arm of the contrast.
+  assert.ok(mjmx.renderFile(main, { ignoreIncludes: false }).includes('Included section content.'));
   assert.ok(!mjmx.renderFile(main, { ignoreIncludes: true }).includes('Included section content.'));
 });
 

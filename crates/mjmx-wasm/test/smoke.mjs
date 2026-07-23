@@ -15,7 +15,7 @@ const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
 const fixtures = join(repoRoot, 'fixtures');
-const pkg = join(here, '..', 'pkg');
+const pkg = join(here, '..', 'pkg', 'node');
 
 if (!existsSync(join(pkg, 'mjmx_wasm.js'))) {
   throw new Error(`mjmx: no wasm package at ${pkg}. Run \`make wasm\` first.`);
@@ -65,12 +65,15 @@ check('render() produces a full HTML document', () => {
 
 check('render() matches the vendored mjml golden output', () => {
   const golden = readFileSync(join(fixtures, 'slice.html'), 'utf8');
+  // fixtures/slice.html is the frozen mjml 4.18.0 golden; the default compat is now V5
+  // (the <body>/wrapper skeleton moved), so pin V4 for the byte-identical comparison.
+  const v4 = mjmx.render(slice, { mjmlVersion: 4 });
   assert.equal(
-    normalize(html),
+    normalize(v4),
     normalize(golden),
     'wasm render diverged from fixtures/slice.html'
   );
-  console.log(`      byte-identical to fixtures/slice.html (whitespace-normalized)`);
+  console.log(`      byte-identical to fixtures/slice.html (whitespace-normalized, V4)`);
 });
 
 check('render({ minify: true }) is smaller than the default render', () => {
@@ -137,7 +140,9 @@ check('render({ minifyOptions }) matches mjml', () => {
   const two =
     '<mjml><mj-body><mj-section><mj-column><mj-text>hello    world</mj-text></mj-column>' +
     '<mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>';
-  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions });
+  // Pinned to V4: the empty `style=""` these switches observe is a V4-skeleton
+  // artifact (V5 drops it from the wrapper div); the minify plumbing is unchanged.
+  const opts = (minifyOptions) => mjmx.render(two, { minify: true, minifyOptions, mjmlVersion: 4 });
 
   // Defaults collapse whitespace and keep `style=""` (mjmx's one divergence).
   assert.ok(!opts({}).includes('hello    world'));
@@ -164,9 +169,11 @@ check('render({ ignoreIncludes }) drops mj-include', () => {
   const withInclude =
     '<mjml><mj-body><mj-include path="./_section.mjml" /><mj-section><mj-column>' +
     '<mj-text>after</mj-text></mj-column></mj-section></mj-body></mjml>';
-  // Without it the unresolvable include is an error; with it the tag simply vanishes.
-  assert.throws(() => mjmx.render(withInclude), /mj-include/);
-  const out = mjmx.render(withInclude, { ignoreIncludes: true });
+  // Pinned to V4, where includes resolve by default: the unresolvable include is an
+  // error, and `ignoreIncludes` makes the tag vanish instead. (V5 flips the default to
+  // ignore includes, so there the error branch would not fire — a separate behaviour.)
+  assert.throws(() => mjmx.render(withInclude, { mjmlVersion: 4 }), /mj-include/);
+  const out = mjmx.render(withInclude, { ignoreIncludes: true, mjmlVersion: 4 });
   assert.ok(out.includes('after'), 'expected the rest of the document to render');
   assert.ok(!out.includes('mj-include'));
 });

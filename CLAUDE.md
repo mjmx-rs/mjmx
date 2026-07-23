@@ -403,8 +403,30 @@ ABI versioning) are in the doc.
 ## Planned next
 
 1. **Ship as three packages: JS, Rust, Python.**
-   - JS: `@mjmx/node` (napi) and `mjmx-wasm` exist but are unpublished/`private`. Needs real
-     packaging — naming, README, install story, ESM+CJS, per-platform prebuilds.
+   - JS: **publish-ready (no CI, not yet published).** Both `@mjmx/node` (napi) and
+     `@mjmx/wasm` (note: scoped, matching `@mjmx/node` — the prose used to say
+     `mjmx-wasm`) dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
+     dual `exports` map.
+     - **napi** adopts `@napi-rs/cli`: the binary ships as a per-platform **optional
+       dependency** `@mjmx/node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
+       `darwin-x64`, `darwin-arm64`, `win32-x64-msvc`), scaffolded under
+       `crates/mjmx-napi/npm/<triple>/` by `napi create-npm-dirs`. The hand-written
+       `index.js` loader (kept for its diagnostics enrichment) now `require`s the matching
+       optional dep first, then falls back to a locally built binary; `index.mjs` adds the
+       ESM surface. `npm/<triple>/package.json` is committed as scaffolding; the `.node`
+       binaries stay gitignored (`*.node`), only the local `linux-x64-gnu` one is staged.
+       Other triples build on their own platform (no cross-compile / CI yet).
+     - **wasm** is now multi-target: one cargo build feeds three `wasm-bindgen` passes —
+       `nodejs` (CJS) → `pkg/node/`, `bundler` (ESM) → `pkg/bundler/`, `web` (ESM) →
+       `pkg/web/` — wired to the `node` / `browser` / `import` `exports` conditions.
+       `"type": "module"` was deliberately **not** set (it would reinterpret the CJS node
+       glue as ESM and break `require`).
+     - The `crates/mjmx-{napi,wasm}/test/smoke.mjs` tests were stale against the V5-default
+       flip (a stale staged `.node` had hidden it): they assumed V4 include-resolution and
+       the V4 `style=""` skeleton. Fixed by pinning the affected checks to `mjmlVersion: 4`
+       or opting in with `ignoreIncludes: false`; `make napi-test` / `make wasm-test` green.
+     - **Still open:** a CI release workflow (`@napi-rs/cli`'s GitHub Actions flow) to
+       cross-build every triple and `npm publish`; nothing is published yet.
    - Rust: `mjmx` umbrella as a published-quality crate (docs.rs metadata, crate-level docs,
      examples, keywords).
    - Python: **new binding** (pyo3/maturin). This reverses the earlier "wasm + napi only, no

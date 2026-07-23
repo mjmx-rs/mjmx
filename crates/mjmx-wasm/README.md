@@ -1,4 +1,4 @@
-# mjmx-wasm
+# @mjmx/wasm
 
 WebAssembly bindings for **mjmx**, an MJML-to-HTML compiler written in Rust. This is
 the "drop-in for JS mjml" surface: the same compiler the CLI uses, compiled to
@@ -8,6 +8,26 @@ wasm-capable runtime.
 The crate is a **thin translation layer** — it converts JS values to the umbrella
 crate's Rust types, calls straight through, and converts back. No compiler logic
 lives here.
+
+## Install
+
+```sh
+npm i @mjmx/wasm
+```
+
+The package ships **three wasm-bindgen flavours** behind a conditional `exports` map, so
+one import resolves correctly everywhere:
+
+| condition | flavour (`pkg/…`) | for |
+| --- | --- | --- |
+| `node` | `node/` (CommonJS, `require`) | Node.js |
+| `browser` | `web/` (ESM, self-fetching) | browsers / Deno, no bundler |
+| `import` / default | `bundler/` (ESM) | webpack / vite / rollup |
+
+```js
+const { render } = require('@mjmx/wasm');   // Node (CommonJS)
+import { render } from '@mjmx/wasm';         // bundler / browser (ESM)
+```
 
 ## Build
 
@@ -29,30 +49,26 @@ cargo install wasm-bindgen-cli --version 0.2.100 --locked
 A third, `wasm-opt` from [binaryen](https://github.com/WebAssembly/binaryen), is
 **optional**: `make wasm` runs it with `-Oz` when it is on `PATH` and prints a
 hint instead of failing when it is not, so the build never depends on it. It is
-worth having — it cuts the module by ~14%:
+worth having — it cuts each module by ~17%:
 
 ```sh
 cargo install wasm-opt        # or: npm i -g binaryen, or a distro package
 ```
 
-| | `mjmx_wasm_bg.wasm` |
+| | `mjmx_wasm_bg.wasm` (per flavour) |
 | --- | --- |
-| wasm-bindgen output | 326.3 KiB |
-| after `wasm-opt -Oz` | 279.3 KiB (-14.4%) |
+| wasm-bindgen output | ~558 KiB |
+| after `wasm-opt -Oz` | ~463 KiB (-17%) |
 
 `make wasm-test` runs the smoke test against the **optimised** artifact, so the
 size win is always verified to still render byte-identically to the golden output.
 
-Output lands in `crates/mjmx-wasm/pkg/` (gitignored):
-
-| File | Purpose |
-| --- | --- |
-| `mjmx_wasm.js` | CommonJS glue (`--target nodejs`) |
-| `mjmx_wasm.d.ts` | TypeScript declarations |
-| `mjmx_wasm_bg.wasm` | the compiled module (~279 KiB release, `wasm-opt -Oz`) |
-
-For a browser bundle, re-run `wasm-bindgen` with `--target web` or `--target bundler`
-against the same `target/wasm32-unknown-unknown/release/mjmx_wasm.wasm`.
+`make wasm` runs one cargo build and three `wasm-bindgen` passes, landing in
+`crates/mjmx-wasm/pkg/` (gitignored) as `node/`, `bundler/` and `web/` subdirs. Each
+holds `mjmx_wasm.js` (glue), `mjmx_wasm.d.ts` (types) and `mjmx_wasm_bg.wasm` (the
+optimised module); the `bundler/` flavour additionally emits `mjmx_wasm_bg.js`. The
+package.json `exports` map wires the three to the `node` / `browser` / `import`
+conditions (see Install above).
 
 ## API
 
@@ -121,7 +137,7 @@ interface Diagnostic {
 ```
 
 ```js
-const { render } = require('./pkg/mjmx_wasm.js');
+const { render } = require('@mjmx/wasm'); // or './pkg/node/mjmx_wasm.js' from a local build
 console.log(render('<mjml><mj-body><mj-section><mj-column><mj-text>Hi</mj-text></mj-column></mj-section></mj-body></mjml>'));
 ```
 
@@ -142,6 +158,13 @@ target. Options:
 
 A future revision could accept a caller-supplied `resolve(path) => string` callback to
 run include resolution through JS; that is not implemented today.
+
+## Publishing
+
+`npm run build` (i.e. `make wasm`) produces all three flavours into `pkg/`; the
+package.json `files` whitelist ships `pkg/node`, `pkg/bundler` and `pkg/web` (the `files`
+entry overrides the gitignored `pkg/`, so `npm pack` includes them). Then `npm publish`.
+There is no CI release workflow yet.
 
 ## Workspace note
 

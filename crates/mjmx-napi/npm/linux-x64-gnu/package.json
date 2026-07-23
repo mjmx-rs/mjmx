@@ -1,0 +1,40 @@
+{
+  "name": "@mjmx/node-linux-x64-gnu",
+  "version": "0.1.0",
+  "cpu": [
+    "x64"
+  ],
+  "main": "mjmx.linux-x64-gnu.node",
+  "files": [
+    "mjmx.linux-x64-gnu.node"
+  ],
+  "description": "Node.js bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
+  "keywords": [
+    "mjml",
+    "mjmx",
+    "email",
+    "html",
+    "compiler",
+    "napi",
+    "rust"
+  ],
+  "homepage": "https://github.com/ryeasin03/mjmx#readme",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ryeasin03/mjmx.git",
+    "directory": "crates/mjmx-napi"
+  },
+  "bugs": {
+    "url": "https://github.com/ryeasin03/mjmx/issues"
+  },
+  "os": [
+    "linux"
+  ],
+  "libc": [
+    "glibc"
+  ]
+}

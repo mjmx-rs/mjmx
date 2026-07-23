@@ -4,9 +4,28 @@ Node.js bindings for [mjmx](https://github.com/ryeasin03/mjmx) — an MJML-to-HT
 compiler written in Rust.
 
 The npm package lives alongside the Rust crate in this directory: `package.json`,
-`index.js` (loader + thin wrapper), `index.d.ts` (hand-written types), and
-`test/smoke.mjs`. The compiled addon is staged here as
-`mjmx.<platform>-<arch>[-gnu].node` by `make napi`.
+`index.js` (CommonJS loader + thin wrapper), `index.mjs` (ESM re-export),
+`index.d.ts` (hand-written types), and `test/smoke.mjs`.
+
+## Install
+
+```sh
+npm i @mjmx/node
+```
+
+The native binary ships as a per-platform **optional dependency**
+(`@mjmx/node-<triple>`, e.g. `@mjmx/node-linux-x64-gnu`); npm installs only the one
+matching the host. Prebuilt triples: `linux-x64-gnu`, `linux-arm64-gnu`, `darwin-x64`,
+`darwin-arm64`, `win32-x64-msvc`. The loader (`index.js`) `require`s the matching
+package first, then falls back to a locally built binary — so a bare
+`cargo build -p mjmx-napi` or `make napi` is enough for development.
+
+Both module systems resolve:
+
+```js
+const mjmx = require('@mjmx/node'); // CommonJS
+import mjmx from '@mjmx/node';      // ESM (named exports too: import { render } …)
+```
 
 ## Build & test
 
@@ -119,4 +138,11 @@ diagnostics (`mjmx: error: <first message> (+N more diagnostics)`). The wrapper 
 `index.js` also attaches the structured list as `err.diagnostics` — the same shape
 `lint()` returns.
 
-Not published to npm.
+## Publishing
+
+The main package and the per-platform packages under `npm/` publish separately. Build
+each platform's binary on that platform (`cargo build -p mjmx-napi --release`), copy the
+cdylib into `npm/<triple>/mjmx.<triple>.node`, then `npm publish` each `npm/<triple>`
+followed by the root package. `npm run napi:version` keeps the platform-package versions
+in lockstep with the root. There is no CI release workflow yet; the `napi` config block
+and the generated `npm/` dirs are ready for one (`@napi-rs/cli`'s GitHub Actions flow).
