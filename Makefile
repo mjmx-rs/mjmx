@@ -28,7 +28,9 @@ WASM_BG := $(WASM_OUT)/mjmx_wasm_bg.wasm
 WASM_OPT ?= wasm-opt
 WASM_OPT_FLAGS ?= -Oz
 
-.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-opt wasm-release wasm-test lsp lsp-test cli-lsp-test
+BENCH_DIR := benches/perf
+
+.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-opt wasm-release wasm-test lsp lsp-test cli-lsp-test bench bench-write
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -110,5 +112,11 @@ doc: ## Build workspace documentation
 
 clean: ## Remove build artifacts
 	$(CARGO) clean
+
+bench: ## Print the live performance table (mjmx, mrml, mjml 4.18 + 5.4)
+	cd $(BENCH_DIR) && npm install --silent && $(CARGO) run --release -- $(ARGS)
+
+bench-write: ## Run the benchmark and splice the table into README.md
+	cd $(BENCH_DIR) && npm install --silent && $(CARGO) run --release -- --write $(ARGS)
 
 ci: lint test ## Run lint and test (CI entrypoint)

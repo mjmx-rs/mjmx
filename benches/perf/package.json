@@ -1,0 +1,11 @@
+{
+  "name": "mjmx-perf-bench-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Times mjml 4.18.0 and 5.4.0 for the mjmx perf table. Run via `make bench`.",
+  "dependencies": {
+    "mjml418": "npm:mjml@4.18.0",
+    "mjml540": "npm:mjml@5.4.0"
+  }
+}

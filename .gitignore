@@ -1,4 +1,6 @@
 /target
+# The standalone bench project has its own target dir (it is excluded from the workspace).
+/benches/perf/target
 **/*.rs.bk
 .DS_Store
 

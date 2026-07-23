@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*"]
+# `benches/perf` is a standalone project with its own `[workspace]` and a heavy `mrml`
+# dev dependency; keep it out of `cargo build --workspace` / `make ci`.
+exclude = ["benches/perf"]
 
 [workspace.package]
 version = "0.1.0"

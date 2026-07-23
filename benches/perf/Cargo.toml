@@ -1,0 +1,24 @@
+# Standalone perf-bench project. Its own `[workspace]` (below) detaches it from the
+# parent workspace, and the parent's `exclude` keeps `mrml` out of `make build`/`ci`.
+# Run it with `make bench` (from the repo root) or `cargo run --release` in this dir.
+[package]
+name = "mjmx-perf-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "mjmx-perf-bench"
+path = "src/main.rs"
+
+[dependencies]
+mjmx = { path = "../../crates/mjmx" }
+mrml = { version = "6.0.1", features = ["parse", "render"] }
+serde_json = "1"
+
+[profile.release]
+lto = true
+
+# Detach from the parent workspace so this heavy-dep bench never builds under
+# `cargo build --workspace` / `make ci`.
+[workspace]
