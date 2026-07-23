@@ -87,19 +87,44 @@ fn render_source(
     // mjml's `ignoreIncludes` short-circuits include handling entirely: its parser
     // drops every `<mj-include>` before the node exists, so nothing is resolved *and*
     // nothing is left behind. Checked before the base lookup, so it wins over both an
-    // explicit `base` and `file_path`.
-    let document = if options.ignore_includes {
+    // explicit `base` and `file_path`. mjml 5.4.0 flipped its default to *ignore*, so
+    // `resolve_ignore_includes` reads that compat-derived default (see its docs).
+    let document = if options.resolve_ignore_includes() {
         mjmx_transformer::strip_includes(&builder, &parsed.document)
     } else {
         match base.or_else(|| options.file_path.as_deref().map(include_base)) {
             Some(root_dir) => {
-                let (document, include_diags) = mjmx_transformer::resolve_includes(
+                // mjml 5.4.0 sandboxes includes to the base directory, widened by
+                // `include_path`; 4.18.0 (V4) has no sandbox. Resolve relative extra
+                // roots against the base so an `include_path` of `["layouts"]` means
+                // "the layouts dir next to the document", as the mjml CLI intends.
+                let include_opts = mjmx_transformer::IncludeOptions {
+                    sandbox: options.compat.is_v5(),
+                    roots: options
+                        .include_path
+                        .iter()
+                        .map(|p| {
+                            if p.is_absolute() {
+                                p.clone()
+                            } else {
+                                root_dir.join(p)
+                            }
+                        })
+                        .collect(),
+                };
+                if include_opts.sandbox {
+                    soft.extend(include_root_warnings(&include_opts.roots));
+                }
+                let (document, include_diags) = mjmx_transformer::resolve_includes_with(
                     &builder,
                     &parsed.document,
                     loader,
                     root_dir,
+                    &include_opts,
                 );
-                // Any error-severity include diagnostic blocks rendering (missing file, cycle).
+                // Any error-severity include diagnostic blocks rendering (missing file,
+                // cycle). Under the sandbox, denied/unreadable includes are warnings, not
+                // errors, so they flow into `soft` and rendering continues.
                 if include_diags.iter().any(|d| d.severity == Severity::Error) {
                     return Err(include_diags);
                 }
@@ -197,6 +222,31 @@ fn include_base(path: &Path) -> &Path {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
     }
+}
+
+/// Soft warnings for any `include_path` root that is a filesystem root directory.
+///
+/// mjml 5.4.0 `console.warn`s when an `includePath` resolves to `/` (or a drive root),
+/// since that hands the whole disk to the include sandbox. mjmx surfaces the same caution
+/// as a warning [`Diagnostic`] instead of writing to stderr from the library.
+fn include_root_warnings(roots: &[std::path::PathBuf]) -> Vec<Diagnostic> {
+    roots
+        .iter()
+        .filter(|root| {
+            root.canonicalize()
+                .as_deref()
+                .unwrap_or(root)
+                .parent()
+                .is_none()
+        })
+        .map(|root| {
+            Diagnostic::warning(format!(
+                "include_path \"{}\" is the root directory, which is unsafe; \
+                 scope it to a project templates folder",
+                root.display()
+            ))
+        })
+        .collect()
 }
 
 /// Whether any diagnostic is error-severity.

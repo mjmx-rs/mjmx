@@ -65,9 +65,20 @@ export interface RenderOptions {
   /**
    * Skip `<mj-include>` tags rather than resolving them. They are *dropped*, along
    * with the content they would have pulled in — mjml's parser returns before the
-   * node is built. Matches mjml's `ignoreIncludes`. Default: false.
+   * node is built. Matches mjml's `ignoreIncludes`.
+   *
+   * Omit to follow {@link mjmlVersion}: mjml 5 disabled includes by default, so `5`
+   * ignores and `4` resolves. Setting it pins the choice regardless of version.
    */
   ignoreIncludes?: boolean;
+  /**
+   * Extra directories `<mj-include>` paths may resolve into, on top of the include
+   * base. mjml 5 sandboxes includes to the base directory; a path resolving outside it
+   * is denied and replaced with an `<!-- mj-include denied -->` comment. Each entry
+   * widens the allowlist by one more root. Relative entries resolve against the include
+   * base. Matches mjml's `includePath`.
+   */
+  includePath?: string[];
   /**
    * Also emit the responsive column rules inside an `@media only print` block, so a
    * printed email keeps its desktop layout. Matches mjml's `printerSupport`

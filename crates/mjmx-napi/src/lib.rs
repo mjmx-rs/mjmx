@@ -68,8 +68,13 @@ pub struct JsRenderOptions {
     /// mjml's defaults. [mjml: `minifyOptions`]
     pub minify_options: Option<JsMinifyOptions>,
     /// Skip `<mj-include>` tags instead of resolving them; they are *dropped*, along
-    /// with the content they would have pulled in. [mjml: `ignoreIncludes`]
+    /// with the content they would have pulled in. Omit to follow `mjmlVersion`: mjml 5
+    /// disabled includes by default, so `5` ignores and `4` resolves. [mjml: `ignoreIncludes`]
     pub ignore_includes: Option<bool>,
+    /// Extra directories `<mj-include>` paths may resolve into, on top of the include
+    /// base. mjml 5 sandboxes includes to the base directory; each entry widens the
+    /// allowlist. Relative entries resolve against the include base. [mjml: `includePath`]
+    pub include_path: Option<Vec<String>>,
     /// Also emit the responsive column rules inside an `@media only print` block.
     /// [mjml: `printerSupport`]
     pub printer_support: Option<bool>,
@@ -237,7 +242,15 @@ fn to_render_options(
         file_path: options.file_path.map(std::path::PathBuf::from),
         fonts: options.fonts.map(to_font_faces),
         minify_options: to_minify_options(options.minify_options, minify_defaults(compat)),
-        ignore_includes: options.ignore_includes.unwrap_or(defaults.ignore_includes),
+        // Forwarded as-is: `None` lets `resolve_ignore_includes` apply the compat default
+        // (v5 ignores, v4 resolves), matching mjml 5.4.0's flipped default.
+        ignore_includes: options.ignore_includes,
+        include_path: options
+            .include_path
+            .unwrap_or_default()
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .collect(),
         printer_support: options.printer_support.unwrap_or(defaults.printer_support),
         // `juicePreserveTags` adds to the built-ins rather than replacing them, so the
         // two mjml options fold into the single carrier `RenderOptions` holds.
@@ -475,7 +488,8 @@ mod tests {
             assert_eq!(options.validation_level, ValidationLevel::Soft);
             assert_eq!(options.file_path, None);
             assert_eq!(options.fonts, None);
-            assert!(!options.ignore_includes);
+            assert_eq!(options.ignore_includes, None);
+            assert!(options.include_path.is_empty());
             assert!(!options.printer_support);
             // No `mjmlVersion`, so 5.4.0's minify defaults.
             assert_eq!(options.minify_options, MinifyOptions::for_mjml5());
@@ -504,6 +518,7 @@ mod tests {
                 remove_empty_attributes: Some(true),
             }),
             ignore_includes: Some(true),
+            include_path: Some(vec!["./layouts".to_owned()]),
             printer_support: Some(true),
             juice_options: Some(JsJuiceOptions {
                 apply_width_attributes: Some(false),
@@ -538,7 +553,11 @@ mod tests {
                 FontFace::new("Alpha", "https://a.example/a.css"),
             ]
         );
-        assert!(options.ignore_includes);
+        assert_eq!(options.ignore_includes, Some(true));
+        assert_eq!(
+            options.include_path,
+            vec![std::path::PathBuf::from("./layouts")]
+        );
         assert!(options.printer_support);
         assert_eq!(
             options.minify_options,

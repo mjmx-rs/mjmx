@@ -202,9 +202,14 @@ fn skip_validation_reports_nothing() {
 const WITH_INCLUDE: &str =
     "<mjml><mj-body><mj-include path=\"./_section.mjml\" /></mj-body></mjml>";
 
+// These pin `compat: V4`: they exercise include *resolution* and its hard-error path,
+// which is the pre-5.x behaviour. mjml 5 ignores includes by default and, when opted in,
+// replaces an unresolvable one with a denied comment instead of erroring — covered by the
+// dedicated v5 sandbox tests, not here.
 #[test]
 fn file_path_gives_a_string_render_an_include_base() {
     let options = RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
         file_path: Some(fixtures().join("include")),
         ..RenderOptions::default()
     };
@@ -215,6 +220,7 @@ fn file_path_gives_a_string_render_an_include_base() {
 #[test]
 fn file_path_pointing_at_a_file_uses_its_parent_directory() {
     let options = RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
         file_path: Some(fixtures().join("include/main.mjml")),
         ..RenderOptions::default()
     };
@@ -225,9 +231,13 @@ fn file_path_pointing_at_a_file_uses_its_parent_directory() {
 #[test]
 fn no_file_path_resolves_no_includes() {
     assert!(RenderOptions::default().file_path.is_none());
-    // Unchanged pre-option behavior: with no base the `<mj-include>` survives into
-    // codegen, which has no renderer for it.
-    let err = mjmx::render_default(WITH_INCLUDE).expect_err("nothing resolves the include");
+    // Under v4, with no base the `<mj-include>` survives into codegen, which has no
+    // renderer for it. (Under v5 the include would be ignored by default, not surfaced.)
+    let options = RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
+        ..RenderOptions::default()
+    };
+    let err = mjmx::render(WITH_INCLUDE, &options).expect_err("nothing resolves the include");
     assert!(err.iter().any(|d| d.message.contains("mj-include")));
 }
 
@@ -237,14 +247,19 @@ fn file_path_overrides_the_directory_derived_from_the_input_file() {
     // Pointing the base at `fixtures/` (where `_section.mjml` does not live) makes the
     // include unresolvable, proving the explicit base won over the file's own parent.
     let options = RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
         file_path: Some(fixtures()),
         ..RenderOptions::default()
     };
     let err = mjmx::render_file(&main, &options).expect_err("include must not resolve");
     assert!(err.iter().any(|d| d.severity == Severity::Error));
 
-    // With the default options the file's own directory is the base and it resolves.
-    let html = mjmx::render_file(&main, &RenderOptions::default()).expect("renders");
+    // With the file's own directory as the base it resolves.
+    let resolves = RenderOptions {
+        compat: mjmx::MjmlCompat::V4,
+        ..RenderOptions::default()
+    };
+    let html = mjmx::render_file(&main, &resolves).expect("renders");
     assert!(html.contains("Included section content."));
 }
 
@@ -309,20 +324,42 @@ fn mj_font_still_extends_a_supplied_table() {
 // ---- ignoreIncludes -----------------------------------------------------
 
 #[test]
-fn ignore_includes_defaults_to_resolving_them() {
-    assert!(!RenderOptions::default().ignore_includes);
-    let html = mjmx::render_file(
-        &fixtures().join("include/main.mjml"),
-        &RenderOptions::default(),
+fn v5_default_ignores_includes_and_v4_resolves_them() {
+    // mjml 5.4.0 flipped the default from resolve to ignore; `None` follows compat.
+    assert_eq!(RenderOptions::default().ignore_includes, None);
+    let main = fixtures().join("include/main.mjml");
+
+    // v5 (the default): the include is ignored, so its content is absent.
+    let v5 = mjmx::render_file(&main, &RenderOptions::default()).expect("renders");
+    assert!(!v5.contains("Included section content."));
+
+    // v4: includes resolve, as before 5.x.
+    let v4 = mjmx::render_file(
+        &main,
+        &RenderOptions {
+            compat: mjmx::MjmlCompat::V4,
+            ..RenderOptions::default()
+        },
     )
     .expect("renders");
+    assert!(v4.contains("Included section content."));
+}
+
+#[test]
+fn ignore_includes_some_false_opts_back_in_under_v5() {
+    // `Some(false)` forces resolution even under v5's ignore-by-default.
+    let options = RenderOptions {
+        ignore_includes: Some(false),
+        ..RenderOptions::default()
+    };
+    let html = mjmx::render_file(&fixtures().join("include/main.mjml"), &options).expect("renders");
     assert!(html.contains("Included section content."));
 }
 
 #[test]
 fn ignore_includes_drops_the_tag_and_its_content() {
     let options = RenderOptions {
-        ignore_includes: true,
+        ignore_includes: Some(true),
         ..RenderOptions::default()
     };
     let html = mjmx::render_file(&fixtures().join("include/main.mjml"), &options).expect("renders");
@@ -337,11 +374,11 @@ fn ignore_includes_drops_the_tag_and_its_content() {
 #[test]
 fn ignore_includes_wins_over_file_path_for_a_string_render() {
     let options = RenderOptions {
-        ignore_includes: true,
+        ignore_includes: Some(true),
         file_path: Some(fixtures().join("include")),
         ..RenderOptions::default()
     };
-    // With `file_path` alone this include resolves (see `filePath` above); with
+    // With `file_path` alone (and includes enabled) this resolves; with
     // `ignore_includes` it is dropped before resolution is even attempted, so the
     // render succeeds and the partial is absent.
     let html = mjmx::render(WITH_INCLUDE, &options).expect("renders");

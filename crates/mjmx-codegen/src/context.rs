@@ -125,14 +125,32 @@ pub struct RenderOptions {
     /// built-ins. A `<mj-font>` still extends (or overrides by name) whatever is seeded,
     /// and either way a face is only emitted when the body actually references it.
     pub fonts: Option<Vec<FontFace<'static>>>,
-    /// Skip `<mj-include>` entirely instead of resolving it. `// mjml default: false`.
+    /// Skip `<mj-include>` entirely instead of resolving it. `// mjml default: v4 false,
+    /// v5 true`.
     ///
     /// Matches mjml's `ignoreIncludes`, including its *drop, do not keep* semantics:
-    /// mjml's parser `return`s on an `mj-include` before the node is built
-    /// (`mjml-parser-xml/src/index.js:238`), so the tag and everything it would have
-    /// pulled in simply vanish from the tree. Honored by the umbrella crate, which owns
-    /// include resolution; codegen never sees the tag either way.
-    pub ignore_includes: bool,
+    /// mjml's parser `return`s on an `mj-include` before the node is built, so the tag
+    /// and everything it would have pulled in simply vanish from the tree. Honored by
+    /// the umbrella crate, which owns include resolution; codegen never sees the tag
+    /// either way.
+    ///
+    /// **The default flipped in mjml 5.4.0**, from `false` (resolve) to `true` (ignore),
+    /// as a security hardening — a template must now opt back into includes. `None` here
+    /// means "follow [`compat`](Self::compat)": [`V5`](MjmlCompat::V5) ignores,
+    /// [`V4`](MjmlCompat::V4) resolves. `Some(_)` pins it regardless of compat. Read
+    /// through [`resolve_ignore_includes`](Self::resolve_ignore_includes), never
+    /// directly, so the compat-derived default is applied.
+    pub ignore_includes: Option<bool>,
+    /// Extra directories `<mj-include>` paths may resolve into, on top of the include
+    /// base. `// mjml default: none`. **v5 only** (ignored under [`V4`](MjmlCompat::V4),
+    /// which has no include sandbox).
+    ///
+    /// Matches mjml 5.4.0's `includePath`. mjml 5 sandboxes includes to the base
+    /// directory; a path that resolves outside it is denied and replaced with an
+    /// `<!-- mj-include denied -->` comment. Each entry here widens the allowlist by one
+    /// more permitted root. Relative entries resolve against the include base. Honored by
+    /// the umbrella crate, which owns include resolution.
+    pub include_path: Vec<PathBuf>,
     /// Also emit the responsive column rules inside an `@media only print` block.
     /// `// mjml default: false`.
     ///
@@ -180,14 +198,31 @@ impl Default for RenderOptions {
             file_path: None,
             // mjml default: the built-in font table.
             fonts: None,
-            // mjml default: includes are resolved.
-            ignore_includes: false,
+            // None follows `compat`: v5 ignores includes (mjml 5.4.0's flipped default),
+            // v4 resolves them. Never read directly — see `resolve_ignore_includes`.
+            ignore_includes: None,
+            // mjml default: no extra include roots.
+            include_path: Vec::new(),
             // mjml default: no @media print block.
             printer_support: false,
             // mjml default: `juiceOptions: undefined` / `juicePreserveTags: undefined`,
             // i.e. juice's defaults as mjml configures them.
             inline_options: InlineOptions::default(),
         }
+    }
+}
+
+impl RenderOptions {
+    /// Whether `<mj-include>` should be dropped rather than resolved, resolving the
+    /// [`ignore_includes`](Self::ignore_includes) `None`-follows-`compat` default.
+    ///
+    /// `Some(_)` is honored as-is; `None` follows [`compat`](Self::compat) — mjml 5.4.0
+    /// flipped the default from resolve to ignore, so [`V5`](MjmlCompat::V5) ignores and
+    /// [`V4`](MjmlCompat::V4) resolves. Callers must use this rather than reading the
+    /// field, so the compat default is never skipped.
+    #[must_use]
+    pub fn resolve_ignore_includes(&self) -> bool {
+        self.ignore_includes.unwrap_or_else(|| self.compat.is_v5())
     }
 }
 

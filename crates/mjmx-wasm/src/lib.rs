@@ -109,7 +109,9 @@ export interface RenderOptions {
   /**
    * Skip `<mj-include>` tags rather than resolving them; they are *dropped*, along
    * with what they would have pulled in. Matches mjml's `ignoreIncludes`.
-   * Default: false.
+   *
+   * Omit to follow `mjmlVersion`: mjml 5 disabled includes by default, so `5` ignores
+   * and `4` resolves. Setting it pins the choice regardless of version.
    *
    * Note that WebAssembly resolves no includes in the first place, so the only thing
    * this changes here is whether the tags survive into the parsed document.
@@ -556,7 +558,12 @@ impl JsRenderOptions {
             file_path: None,
             fonts: self.fonts.map(FontTable::into_faces),
             minify_options: to_minify_options(self.minify_options, minify_defaults(compat)),
-            ignore_includes: self.ignore_includes.unwrap_or(defaults.ignore_includes),
+            // Forwarded as-is: `None` lets `resolve_ignore_includes` apply the compat
+            // default (v5 ignores, v4 resolves), matching mjml 5.4.0's flipped default.
+            ignore_includes: self.ignore_includes,
+            // No filesystem in wasm, so there is nothing for an include sandbox to allow;
+            // `filePath` is already rejected above, so includes never resolve here anyway.
+            include_path: Vec::new(),
             printer_support: self.printer_support.unwrap_or(defaults.printer_support),
         })
     }
@@ -741,7 +748,8 @@ mod tests {
         assert_eq!(options.validation_level, ValidationLevel::Soft);
         assert_eq!(options.file_path, None);
         assert_eq!(options.fonts, None);
-        assert!(!options.ignore_includes);
+        assert_eq!(options.ignore_includes, None);
+        assert!(options.include_path.is_empty());
         assert!(!options.printer_support);
         // No `mjmlVersion`, so 5.4.0's minify defaults.
         assert_eq!(options.minify_options, MinifyOptions::for_mjml5());
@@ -830,7 +838,7 @@ mod tests {
                 FontFace::new("Alpha", "https://a.example/a.css"),
             ]
         );
-        assert!(options.ignore_includes);
+        assert_eq!(options.ignore_includes, Some(true));
         assert!(options.printer_support);
         assert_eq!(
             options.minify_options,

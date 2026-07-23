@@ -30,7 +30,8 @@ pub mod http;
 mod loader;
 mod migrate;
 
-use std::path::Path;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 
 use mjmx_allocator::Vec as ArenaVec;
 use mjmx_ast::{AstBuilder, Attribute, Document, Element, Node};
@@ -44,6 +45,30 @@ pub use http::{CombinedLoader, HttpFetch, HttpLoader, UreqFetch, is_http_url};
 pub use loader::{IncludeBase, IncludeLoader, Loaded, LocalLoader};
 pub use migrate::migrate;
 
+/// Options that govern *how* includes resolve, beyond *where* their paths point.
+///
+/// The default (`sandbox: false`, no roots) is the pre-5.x behaviour: any readable path
+/// resolves and a failure is a hard diagnostic. [`resolve_includes`] and
+/// [`resolve_includes_from`] use it; the `*_with` variants take an explicit one.
+#[derive(Debug, Clone, Default)]
+pub struct IncludeOptions {
+    /// Enforce mjml 5.4.0's path sandbox: an include that resolves outside the base
+    /// directory (widened by [`roots`](Self::roots)) is *denied* — replaced with an
+    /// `<!-- mj-include denied -->` comment and a soft warning, rather than resolved or
+    /// hard-errored. Applies only to filesystem bases; URL bases are never sandboxed.
+    pub sandbox: bool,
+    /// Extra directories the sandbox permits, on top of the including file's own
+    /// directory. mjml's `includePath`. Ignored when [`sandbox`](Self::sandbox) is off.
+    pub roots: Vec<PathBuf>,
+}
+
+/// The invariant part of an include pass — the loader and the sandbox options — bundled
+/// so the walk carries one reference instead of two through every frame.
+struct Env<'e> {
+    loader: &'e dyn IncludeLoader,
+    opts: &'e IncludeOptions,
+}
+
 /// Resolve every `<mj-include>` in `document`, returning a rebuilt document and any
 /// diagnostics gathered along the way.
 ///
@@ -52,7 +77,8 @@ pub use migrate::migrate;
 /// parent file. If the document contains no includes it is rebuilt shallowly and no
 /// I/O happens. This function never panics.
 ///
-/// Use [`resolve_includes_from`] when the document's base is not a local directory.
+/// Uses default [`IncludeOptions`] (no sandbox); pass [`resolve_includes_with`] for
+/// mjml 5's sandbox. Use [`resolve_includes_from`] when the base is not a local directory.
 #[must_use]
 pub fn resolve_includes<'a>(
     builder: &AstBuilder<'a>,
@@ -60,7 +86,26 @@ pub fn resolve_includes<'a>(
     loader: &dyn IncludeLoader,
     root_dir: &Path,
 ) -> (Document<'a>, Vec<Diagnostic>) {
-    resolve_includes_from(builder, document, loader, &IncludeBase::dir(root_dir))
+    resolve_includes_with(
+        builder,
+        document,
+        loader,
+        root_dir,
+        &IncludeOptions::default(),
+    )
+}
+
+/// [`resolve_includes`] with explicit [`IncludeOptions`] — pass `sandbox: true` for
+/// mjml 5.4.0's include sandbox.
+#[must_use]
+pub fn resolve_includes_with<'a>(
+    builder: &AstBuilder<'a>,
+    document: &Document<'a>,
+    loader: &dyn IncludeLoader,
+    root_dir: &Path,
+    opts: &IncludeOptions,
+) -> (Document<'a>, Vec<Diagnostic>) {
+    resolve_includes_from_with(builder, document, loader, &IncludeBase::dir(root_dir), opts)
 }
 
 /// Like [`resolve_includes`], but the top-level document's base is given explicitly.
@@ -74,6 +119,19 @@ pub fn resolve_includes_from<'a>(
     loader: &dyn IncludeLoader,
     root: &IncludeBase,
 ) -> (Document<'a>, Vec<Diagnostic>) {
+    resolve_includes_from_with(builder, document, loader, root, &IncludeOptions::default())
+}
+
+/// [`resolve_includes_from`] with explicit [`IncludeOptions`]. The most general entry
+/// point: caller-chosen base *and* sandbox behaviour.
+#[must_use]
+pub fn resolve_includes_from_with<'a>(
+    builder: &AstBuilder<'a>,
+    document: &Document<'a>,
+    loader: &dyn IncludeLoader,
+    root: &IncludeBase,
+    opts: &IncludeOptions,
+) -> (Document<'a>, Vec<Diagnostic>) {
     let mut diagnostics = Vec::new();
 
     // Fast path: nothing to expand, so avoid a deep rebuild and all I/O.
@@ -82,11 +140,12 @@ pub fn resolve_includes_from<'a>(
         return (builder.document(children, document.span), diagnostics);
     }
 
+    let env = Env { loader, opts };
     let mut stack: Vec<String> = Vec::new();
     let children = rebuild_nodes(
         builder,
         &document.children,
-        loader,
+        &env,
         root,
         &mut stack,
         &mut diagnostics,
@@ -152,7 +211,7 @@ fn contains_include(document: &Document<'_>) -> bool {
 fn rebuild_nodes<'a>(
     builder: &AstBuilder<'a>,
     nodes: &[Node<'a>],
-    loader: &dyn IncludeLoader,
+    env: &Env,
     from: &IncludeBase,
     stack: &mut Vec<String>,
     diags: &mut Vec<Diagnostic>,
@@ -161,10 +220,10 @@ fn rebuild_nodes<'a>(
     for node in nodes {
         match node {
             Node::Element(el) if el.tag == MjmlTag::MjInclude => {
-                resolve_include(builder, el, loader, from, stack, &mut out, diags);
+                resolve_include(builder, el, env, from, stack, &mut out, diags);
             }
             Node::Element(el) => {
-                let rebuilt = rebuild_element(builder, el, loader, from, stack, diags);
+                let rebuilt = rebuild_element(builder, el, env, from, stack, diags);
                 out.push(builder.element_node(rebuilt));
             }
             // Text and comment nodes are `Copy` leaves; carry them over unchanged.
@@ -178,13 +237,13 @@ fn rebuild_nodes<'a>(
 fn rebuild_element<'a>(
     builder: &AstBuilder<'a>,
     el: &Element<'a>,
-    loader: &dyn IncludeLoader,
+    env: &Env,
     from: &IncludeBase,
     stack: &mut Vec<String>,
     diags: &mut Vec<Diagnostic>,
 ) -> &'a Element<'a> {
     let attributes = builder.vec_from_iter(el.attributes.iter().copied());
-    let children = rebuild_nodes(builder, &el.children, loader, from, stack, diags);
+    let children = rebuild_nodes(builder, &el.children, env, from, stack, diags);
     builder.element(el.tag, el.raw_tag, attributes, children, el.span)
 }
 
@@ -192,7 +251,7 @@ fn rebuild_element<'a>(
 fn resolve_include<'a>(
     builder: &AstBuilder<'a>,
     el: &Element<'a>,
-    loader: &dyn IncludeLoader,
+    env: &Env,
     from: &IncludeBase,
     stack: &mut Vec<String>,
     out: &mut ArenaVec<'a, Node<'a>>,
@@ -207,11 +266,58 @@ fn resolve_include<'a>(
         );
         return;
     };
+
+    // mjml 5.4.0's sandbox: validate the path against the allowed roots *before* any I/O.
+    // A denied path becomes an `<!-- mj-include denied -->` comment plus a soft warning,
+    // so rendering continues — this is mjml's `denyInclude`, not a hard error. The
+    // sandbox is filesystem-only, so a URL base skips it (`as_dir()` is `None`).
+    //
+    // On success the *canonicalized* target — not the raw attribute string — is what we
+    // load. That closes the check→read window (a symlink swapped after the containment
+    // check cannot redirect the read, since the read follows the already-resolved real
+    // path) and makes a percent-encoded path load the file it decoded to. Scoped to the
+    // sandbox, so the non-sandbox (v4) path reads the raw path exactly as before.
+    let load_path: Cow<'_, str> = if env.opts.sandbox {
+        match from.as_dir() {
+            Some(dir) => match loader::sandbox_check(path, dir, &env.opts.roots) {
+                loader::IncludeVerdict::Denied => {
+                    out.push(builder.element_node(wrap_raw_text(
+                        builder,
+                        MjmlTag::MjRaw,
+                        "mj-raw",
+                        builder.vec(),
+                        "<!-- mj-include denied -->",
+                        el.span,
+                    )));
+                    diags.push(
+                        Diagnostic::warning(format!(
+                            "<mj-include path=\"{path}\"> was denied: it resolves outside the \
+                             allowed include directories"
+                        ))
+                        .with_label(el.span, "add its directory to `include_path` to allow it"),
+                    );
+                    return;
+                }
+                // Fall back to the raw path only if the canonical path is not valid UTF-8
+                // (a loader input is `&str`); such a path still passed the containment
+                // check, so this is a correctness fallback, not a sandbox hole.
+                loader::IncludeVerdict::Allowed(real) => real
+                    .into_os_string()
+                    .into_string()
+                    .map_or(Cow::Borrowed(path), Cow::Owned),
+            },
+            None => Cow::Borrowed(path),
+        }
+    } else {
+        Cow::Borrowed(path)
+    };
+    let load_path = load_path.as_ref();
+
     let include_type = el.attr("type").unwrap_or("mjml");
 
     match include_type {
         // Raw HTML passthrough: wrap in <mj-raw> so codegen emits it verbatim.
-        "html" => match loader.load(path, from) {
+        "html" => match env.loader.load(load_path, from) {
             Ok(loaded) => out.push(builder.element_node(wrap_raw_text(
                 builder,
                 MjmlTag::MjRaw,
@@ -220,13 +326,13 @@ fn resolve_include<'a>(
                 &loaded.contents,
                 el.span,
             ))),
-            Err(diag) => diags.push(annotate(diag, el.span, path)),
+            Err(diag) => push_load_failure(builder, env, from, el, path, diag, out, diags),
         },
         // CSS: wrap in <mj-style> so it lands in the head <style> block — or, when the
         // include is marked `css-inline="inline"`, in the inline bucket. mjml's parser
         // does exactly this: `attrs['css-inline'] === 'inline' ? { inline: 'inline' } : {}`
         // (mjml-parser-xml/index.js), again an exact-string comparison.
-        "css" => match loader.load(path, from) {
+        "css" => match env.loader.load(load_path, from) {
             Ok(loaded) => {
                 let mut attributes = builder.vec();
                 if el.attr("css-inline") == Some("inline") {
@@ -245,20 +351,67 @@ fn resolve_include<'a>(
                     el.span,
                 )))
             }
-            Err(diag) => diags.push(annotate(diag, el.span, path)),
+            Err(diag) => push_load_failure(builder, env, from, el, path, diag, out, diags),
         },
-        // Default: an MJML fragment, parsed and spliced (with cycle detection).
-        _ => resolve_mjml_include(builder, el, path, loader, from, stack, out, diags),
+        // Default: an MJML fragment, parsed and spliced (with cycle detection). `path` is
+        // kept for diagnostics; `load_path` is what is actually read.
+        _ => resolve_mjml_include(builder, el, path, load_path, env, from, stack, out, diags),
+    }
+}
+
+/// Report a load failure for an include that passed the sandbox (or ran without one).
+///
+/// Under mjml 5's sandbox a read failure is soft: an `<!-- mj-include fails to read ...
+/// -->` comment plus a warning, so the render continues (a sandbox-allowed path exists,
+/// so this is rare — a permission error or a directory). Without the sandbox (pre-5.x)
+/// it stays a hard, render-blocking error, as before.
+#[allow(clippy::too_many_arguments)]
+fn push_load_failure<'a>(
+    builder: &AstBuilder<'a>,
+    env: &Env,
+    from: &IncludeBase,
+    el: &Element<'a>,
+    path: &str,
+    diag: Diagnostic,
+    out: &mut ArenaVec<'a, Node<'a>>,
+    diags: &mut Vec<Diagnostic>,
+) {
+    if env.opts.sandbox {
+        let abs = from
+            .as_dir()
+            .map_or_else(|| PathBuf::from(path), |dir| dir.join(path));
+        let comment = format!(
+            "<!-- mj-include fails to read file : {path} at {} -->",
+            abs.display()
+        );
+        out.push(builder.element_node(wrap_raw_text(
+            builder,
+            MjmlTag::MjRaw,
+            "mj-raw",
+            builder.vec(),
+            &comment,
+            el.span,
+        )));
+        diags.push(
+            Diagnostic::warning(format!("<mj-include path=\"{path}\"> could not be read"))
+                .with_label(el.span, "the include was skipped"),
+        );
+    } else {
+        diags.push(annotate(diag, el.span, path));
     }
 }
 
 /// Expand a `type="mjml"` include: load, parse as a fragment, recurse, splice.
+///
+/// `load_path` is the path actually read (canonicalized under the sandbox); `path` is
+/// the raw attribute, kept for diagnostics.
 #[allow(clippy::too_many_arguments)]
 fn resolve_mjml_include<'a>(
     builder: &AstBuilder<'a>,
     el: &Element<'a>,
     path: &str,
-    loader: &dyn IncludeLoader,
+    load_path: &str,
+    env: &Env,
     from: &IncludeBase,
     stack: &mut Vec<String>,
     out: &mut ArenaVec<'a, Node<'a>>,
@@ -269,10 +422,10 @@ fn resolve_mjml_include<'a>(
     // over HTTP). That means the load happens first and the identity is checked
     // after — one redundant fetch/read closes a cycle, and recursion still stops
     // because the identity is already on the stack.
-    let loaded = match loader.load(path, from) {
+    let loaded = match env.loader.load(load_path, from) {
         Ok(loaded) => loaded,
         Err(diag) => {
-            diags.push(annotate(diag, el.span, path));
+            push_load_failure(builder, env, from, el, path, diag, out, diags);
             return;
         }
     };
@@ -299,7 +452,7 @@ fn resolve_mjml_include<'a>(
     let children = rebuild_nodes(
         builder,
         &parsed.document.children,
-        loader,
+        env,
         &loaded.base,
         stack,
         diags,

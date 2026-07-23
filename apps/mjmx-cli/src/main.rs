@@ -158,6 +158,20 @@ struct RenderOptionArgs {
     #[arg(long)]
     ignore_includes: bool,
 
+    /// Opt back into `<mj-include>` resolution. mjml 5 disables includes by default
+    /// (a security hardening); pass this to resolve them. Ignored under
+    /// `--mjml-version 4`, which resolves includes anyway. Conflicts with
+    /// `--ignore-includes`. [mjml: `allowIncludes`]
+    #[arg(long, conflicts_with = "ignore_includes")]
+    allow_includes: bool,
+
+    /// Extra directory `<mj-include>` paths may resolve into, on top of the input's own
+    /// directory. mjml 5 sandboxes includes to the base directory; each `--include-path`
+    /// widens the allowlist. Relative paths resolve against the current directory. Repeat
+    /// the flag to add more. [mjml: `includePath`]
+    #[arg(long, value_name = "PATH")]
+    include_path: Vec<PathBuf>,
+
     /// Also emit the responsive column rules in an `@media only print` block, so a
     /// printed email keeps its desktop layout. [mjml: `printerSupport`]
     #[arg(long)]
@@ -270,7 +284,28 @@ impl RenderOptionArgs {
             validation_level: self.validation_level.into(),
             file_path: self.file_path.clone(),
             fonts: parse_fonts(&self.fonts)?,
-            ignore_includes: self.ignore_includes,
+            // mjml 5's default is to ignore; `None` lets that compat default apply.
+            // `--ignore-includes` forces off, `--allow-includes` forces on.
+            ignore_includes: if self.ignore_includes {
+                Some(true)
+            } else if self.allow_includes {
+                Some(false)
+            } else {
+                None
+            },
+            // Resolve relative include roots against the cwd (as mjml's CLI does), so the
+            // library keeps them verbatim.
+            include_path: self
+                .include_path
+                .iter()
+                .map(|p| {
+                    if p.is_absolute() {
+                        p.clone()
+                    } else {
+                        std::env::current_dir().map_or_else(|_| p.clone(), |c| c.join(p))
+                    }
+                })
+                .collect(),
             printer_support: self.printer_support,
         })
     }
@@ -642,6 +677,28 @@ fn run_render(args: &RenderArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // mjml 5.4.0 CLI parity: warn when includes are silently disabled but the source
+    // uses them, or when an enabled include was denied by the sandbox. Both go to stderr
+    // so they never pollute the HTML-on-stdout pipe.
+    let where_ = args
+        .input_file()
+        .map_or_else(|| "(stdin)".to_string(), |p| p.display().to_string());
+    if options.resolve_ignore_includes() {
+        if source.to_lowercase().contains("<mj-include") {
+            eprintln!("[MJML] mj-include tags were found but includes are disabled by default.");
+            eprintln!("  Files: {where_}");
+            eprintln!("  To enable includes, add --allow-includes to your command.");
+            eprintln!("  See https://documentation.mjml.io/#mj-include for security notes.");
+        }
+    } else if html.contains("<!-- mj-include denied -->") {
+        eprintln!(
+            "[MJML] Some mj-include paths were denied because they are outside the allowed directories."
+        );
+        eprintln!("  Files: {where_}");
+        eprintln!("  Add the include directories to --include-path to allow them.");
+        eprintln!("  See https://documentation.mjml.io/#mj-include for security notes.");
+    }
 
     // Soft findings are silent unless asked for, so the default `mjmx file.mjml` stays
     // a clean HTML-on-stdout pipe.
@@ -1036,7 +1093,7 @@ mod tests {
         assert_eq!(options.validation_level, ValidationLevel::Soft);
         assert_eq!(options.file_path, None);
         assert_eq!(options.fonts, None);
-        assert!(!options.ignore_includes);
+        assert_eq!(options.ignore_includes, None);
         assert!(!options.printer_support);
         // The CLI defaults to `--mjml-version 5`, so these are 5.4.0's minify defaults.
         assert_eq!(options.minify_options, MinifyOptions::for_mjml5());
@@ -1130,7 +1187,7 @@ mod tests {
     #[test]
     fn ignore_includes_and_printer_support_are_plain_switches() {
         let options = render_options(&["in.mjml", "--ignore-includes", "--printer-support"]);
-        assert!(options.ignore_includes);
+        assert_eq!(options.ignore_includes, Some(true));
         assert!(options.printer_support);
     }
 

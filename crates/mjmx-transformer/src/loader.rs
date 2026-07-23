@@ -140,3 +140,97 @@ impl IncludeLoader for LocalLoader {
         })
     }
 }
+
+/// The sandbox verdict for a candidate `<mj-include>` path — mjml 5.4.0's include model.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum IncludeVerdict {
+    /// The path resolves inside an allowed root. Carries the resolved (lexical) path,
+    /// which the read-failure comment echoes.
+    Allowed(PathBuf),
+    /// The path is rejected: a NUL byte, an absolute/drive-letter/UNC path, traversal
+    /// outside every allowed root, or a target that does not exist. Replaced with an
+    /// `<!-- mj-include denied -->` comment rather than read.
+    Denied,
+}
+
+/// Apply mjml 5.4.0's include sandbox to `path`, resolved against `from_dir`, with
+/// `roots` as extra allowed directories (mjml's `includePath`).
+///
+/// Rejects, in order: a NUL byte; an absolute, Windows drive-letter (`C:`), or UNC
+/// (`\\`/`//`) path; then anything that — after fully decoding percent-escapes so
+/// `%2e%2e%2f` cannot smuggle `../` through — canonicalizes to a location outside every
+/// allowed root (the base plus `roots`). Containment is checked on the canonicalized
+/// paths, so `..` and symlinks cannot escape. A non-existent target fails to canonicalize
+/// and is therefore denied, exactly as mjml's `realpathSync`-based check denies it.
+pub(crate) fn sandbox_check(path: &str, from_dir: &Path, roots: &[PathBuf]) -> IncludeVerdict {
+    let decoded = fully_decode(path);
+    if decoded.contains('\0') || is_dangerous_shape(&decoded) {
+        return IncludeVerdict::Denied;
+    }
+    let candidate = from_dir.join(&decoded);
+    let Ok(real_target) = candidate.canonicalize() else {
+        return IncludeVerdict::Denied;
+    };
+    let allowed = std::iter::once(from_dir.to_path_buf())
+        .chain(roots.iter().cloned())
+        .any(|root| {
+            root.canonicalize()
+                .ok()
+                .and_then(|real_root| real_target.strip_prefix(&real_root).ok())
+                .is_some_and(|rel| !rel.as_os_str().is_empty())
+        });
+    if allowed {
+        IncludeVerdict::Allowed(candidate)
+    } else {
+        IncludeVerdict::Denied
+    }
+}
+
+/// Whether `path` is an absolute, drive-letter (`C:`), or UNC (`\\` / `//`) path —
+/// shapes mjml rejects outright, before the allowlist check.
+fn is_dangerous_shape(path: &str) -> bool {
+    if Path::new(path).is_absolute() {
+        return true;
+    }
+    let bytes = path.as_bytes();
+    // A Windows drive letter (`C:`) is not "absolute" on unix, so it is checked apart.
+    let has_drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    let is_unc = path.starts_with("\\\\") || path.starts_with("//");
+    has_drive || is_unc
+}
+
+/// Decode percent-escapes repeatedly, mirroring mjml's `fullyDecode` (up to ten
+/// `decodeURIComponent` passes), so a multiply-encoded `../` is unmasked before the
+/// sandbox checks see it. Stops early when a pass changes nothing or yields invalid UTF-8.
+pub(crate) fn fully_decode(input: &str) -> String {
+    let mut current = input.to_string();
+    for _ in 0..10 {
+        match percent_decode_once(&current) {
+            Some(decoded) if decoded != current => current = decoded,
+            _ => break,
+        }
+    }
+    current
+}
+
+/// One percent-decoding pass. Returns `None` when the decoded bytes are not valid UTF-8
+/// (mjml's `decodeURIComponent` would throw; the caller stops decoding).
+fn percent_decode_once(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).ok()
+}
