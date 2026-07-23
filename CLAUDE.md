@@ -78,7 +78,77 @@ full-width>` fails the `=== 'full-width'` check exactly as mjmx's absent-valued 
 does; the fixture locks that in. (One theoretical, non-real-world edge remains: mjml stores
 a bare attribute as `""` where mjmx stores it as absent, which could only diverge for an
 attribute whose *value* is echoed verbatim into output under a bare valueless spelling —
-no such construct occurs in real MJML.)
+no such construct occurs in real MJML.) **This paragraph describes the V4 path**, which
+is now frozen — see the mjml-version section directly below.
+
+## mjml version compat (`MjmlCompat`) — 5.4.0 default, 4.18.0 opt-in
+
+**mjmx now reproduces mjml 5.4.0 by default and mjml 4.18.0 on request.** mjml has no
+such option (an install *is* one version); mjmx carries both because a renderer that
+silently changes its HTML on upgrade is unusable in a pipeline that diffs output.
+
+- `MjmlCompat { V4, V5 }` in `mjmx-codegen/src/context.rs`, **default `V5`**, with an
+  `is_v5()` helper that render sites branch on (so a future `V6` does not silently inherit
+  V4 at every call site). Carried on `RenderOptions.compat`, threaded to CLI
+  (`--mjml-version 4|5`, default 5), wasm (`mjmlVersion?: 4 | 5`) and napi (same).
+- **V4 is frozen**: it is the 4.18.0 behaviour mjmx shipped before 5.x, and the 78 golden
+  tests are its byte-identical regression gate. Every V5 change is gated on `is_v5()` so
+  V4 output never moves. Every V5 behaviour was **verified byte-for-byte against real
+  `mjml@5.4.0` output** (via `npm pack` / running the package), never the upgrade guide —
+  the guide was wrong twice (see "verified non-changes" below).
+
+What V5 changes, by area (each `is_v5()`-gated; V4 unchanged):
+
+- **Skeleton** (`document.rs`, `components/body.rs`): `<body>` is generated under
+  `mj-body`, not the global skeleton; the wrapper `<div>` drops its empty `style=""` and
+  takes the whole-body style at the tag end; `css-class` moves from the div onto the
+  `<body>`; `<mj-body id>` is emitted. Context carries `body_css_class` / `body_id`
+  (V5-only).
+- **Minifier** (`mjmx-minifier`): `MinifyOptions::for_mjml5()` (the V5 default) turns on
+  CSS minification with `CssDialect::Cssnano` — cssnano leaves selector preludes
+  byte-for-byte and closes the space-before-`!important` gap, vs cleancss (V4). Style
+  *attributes* are minified too (`tag.rs` + `css::minify_declarations`). This **narrows**
+  the minifier's semantic-invariance guarantee (`minify(x)` html-compare-equal to `x`) for
+  V5, so the invariance tests are pinned to V4.
+- **Includes** (`mjmx-transformer`, `mjmx/src/lib.rs`): mjml 5.4.0 flipped `ignoreIncludes`
+  to **true by default** and added a **path sandbox**. `ignore_includes` is now
+  `Option<bool>` — `None` follows compat (`resolve_ignore_includes()`: V5 ignores, V4
+  resolves); new `include_path` roots. The sandbox (`IncludeOptions { sandbox, roots }`,
+  V5-only) denies an include that escapes the base via `../`, an absolute/drive-letter/UNC
+  path, a NUL byte, a percent-encoded `../`, a symlink whose real target is outside, or a
+  missing file — replacing it with a non-blocking `<!-- mj-include denied -->` comment
+  (mjml's `denyInclude`). Containment is checked on canonicalized paths, and the
+  **canonical path is what gets loaded** — closing the check→read symlink window (mjml has
+  that window; mjmx does not) and honouring percent-decoded paths. CLI gained
+  `--allow-includes` (opt back in) and `--include-path`, plus mjml's two stderr warnings
+  (tags-found-but-disabled; some-denied). wasm forwards the Option (no FS → no sandbox);
+  napi adds `includePath`. See the include-sandbox tests in
+  `crates/mjmx/tests/include_sandbox_v5.rs`.
+- **Component attrs**: `mj-social-element` gains a `border` on the icon `<img>` (default
+  `0`, forwardable from `<mj-social border>`); `mj-accordion` retargets its toggle
+  selectors for the new Outlook (`input.mj-accordion-checkbox` →
+  `.mj-accordion-checkbox[type="checkbox"]`, `:checked` rules drop `input`; `.moz-text-html`
+  fallbacks unchanged), via a `HEAD_CSS_V5` const.
+
+**Verified non-changes / deliberate scope cuts** (checked 4.18.0 vs 5.4.0 component
+source, not the guide):
+
+- **button `border-radius`** was already `'string'` in 4.18.0 — *not* a 4→5 change, so
+  nothing shipped. (The upgrade guide implied otherwise.)
+- **`mj-section gutter`** is not a lone attribute: it is the whole mjml 5
+  **gap/gutter/direction + RTL** column-layout rework (`getNormalizedGutterValue`,
+  gutter-token media queries, group-column padding). It is opt-in by attribute and has **no
+  baseline impact** (a plain multi-column doc still emits `mj-column-per-50` in 5.4,
+  identical to mjmx), so it is **deferred to its own milestone**, not folded in here.
+- The guide's claim that 5.4 "removes background-color from the body" is **false** against
+  real output (5.4 keeps it on both `<body>` and the wrapper div); mjmx followed the
+  output.
+
+**Bindings stay synchronous — deliberate.** mjml 5's `mjml2html` became `async` (it
+returns a Promise). mjmx's core render is synchronous and does no awaitable I/O in the
+render path, so the napi and wasm bindings stay sync: there is nothing to await, and async
+wrappers would only add ceremony. Revisit only if an async loader ever enters the render
+path.
 
 ## CSS inlining (`mjmx-css-inline`, done)
 
@@ -161,8 +231,10 @@ inline-bucket and minify/beautify refusals). No new third-party dep; wasm artifa
 
 ## Options parity (audit done 2026-07-22 against mjml 4.18.0 source)
 
-`RenderOptions` (`mjmx-codegen/src/context.rs`) is the single option carrier, threaded to CLI,
-wasm and napi. Tier 1 is **shipped**:
+The defaults below are the **V4** values unless a cell says otherwise; where 5.4.0
+differs, `compat` decides (see the mjml-version section above). `RenderOptions`
+(`mjmx-codegen/src/context.rs`) is the single option carrier, threaded to CLI, wasm and
+napi. Tier 1 is **shipped**:
 
 | field | mjml option | default | note |
 | --- | --- | --- | --- |
@@ -177,8 +249,9 @@ Tier 2 is **shipped** (3 of 5; two were dead ends, see below):
 
 | field | mjml option | default | note |
 | --- | --- | --- | --- |
-| `minify_options: MinifyOptions` | `minifyOptions` | `{}` | only read when `minify`; new `MinifyOptions` struct + `mjmx_minifier::minify_with` |
-| `ignore_includes: bool` | `ignoreIncludes` | false | **drops** `<mj-include>`, does not merely skip resolution; wins over `file_path` and a file render's own base |
+| `minify_options: MinifyOptions` | `minifyOptions` | `{}` (V5: `for_mjml5()`) | only read when `minify`; `MinifyOptions` carries a `CssDialect` (V4 cleancss, V5 cssnano) — see the mjml-version section |
+| `ignore_includes: Option<bool>` | `ignoreIncludes` | `None` → compat (V5 true, V4 false) | `None` follows compat via `resolve_ignore_includes()`; `Some(_)` pins. Still **drops** `<mj-include>`, wins over `file_path`. mjml 5.4.0 flipped the default — see the mjml-version section |
+| `include_path: Vec<PathBuf>` | `includePath` | `[]` | **V5 only.** Extra allowed roots for the include sandbox; relative entries resolve against the base. Ignored under V4 (no sandbox) |
 | `printer_support: bool` | `printerSupport` | false | third `<style>` replaying the base column rules under `@media only print`, after the screen + Thunderbird blocks; suppressed when there are no column rules, as upstream |
 | `inline_options: InlineOptions` | `juiceOptions` **+** `juicePreserveTags` | juice's, as mjml sets them | one carrier for both, since there is no juice to hand two objects to; `preserve_tags` is `juicePreserveTags`. See "juiceOptions" below |
 
@@ -361,12 +434,17 @@ ABI versioning) are in the doc.
 
    Earlier passes added `dev --breakpoint` and `fmt`/`migrate --indent-width`. The
    `--config.*` options stay exposed as flat idiomatic flags (a locked decision, not a gap).
-   **Targets 4.18.0 on purpose:** master's CLI diverged (include-allowlist default flip to
-   `allowIncludes`, htmlnano instead of html-minifier, `sanitizeStyles`/`allowMixedSyntax`
-   CSS sanitization) and is out of scope.
 
-Method reminder: read mjml's actual README/source rather than guessing — that has caught real
-bugs every single time.
+   **Now retargeted to 5.4.0 (default), 4.18.0 opt-in** — see the mjml-version section. The
+   render-path CLI audit above targeted 4.18.0 (`-r`/`-i`/`-s`, watch, the FILE comment) and
+   still holds for both compat modes. The 5.4.0-specific CLI additions shipped since:
+   `--mjml-version 4|5`, and the include changes `--allow-includes` / `--include-path` with
+   mjml 5's two stderr warnings. Still **not** ported from 5.x: `sanitizeStyles` /
+   `allowMixedSyntax` CSS sanitization (out of scope for now).
+
+Method reminder: read mjml's actual README/**output** rather than guessing — that has caught
+real bugs every single time, including twice during the 5.x retarget (the upgrade guide was
+wrong about `border-radius` and about body `background-color`).
 
 ## Working agreement
 

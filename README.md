@@ -9,6 +9,15 @@ Rust port of [MJML](https://github.com/mjmlio/mjml), built as an oxc-style compi
 
 See [CLAUDE.md](CLAUDE.md) for architecture and roadmap.
 
+## mjml compatibility
+
+mjmx reproduces **mjml 5.4.0 by default** and **mjml 4.18.0 on request** — a renderer that
+silently changed its HTML on upgrade would be unusable in a pipeline that diffs output.
+Select with `RenderOptions.compat` (`MjmlCompat::V5` default, `V4` opt-in), the CLI's
+`--mjml-version 4|5`, or `mjmlVersion: 4 | 5` in the Node/wasm bindings. V4 output is frozen
+and gated by the golden fixtures; every V5 behaviour is verified byte-for-byte against real
+`mjml@5.4.0` output.
+
 ## Performance
 
 Warm in-process render, 76 MJML fixtures, 200 iterations, release build (LTO). Times
@@ -16,7 +25,7 @@ exclude process startup — the fair library-level comparison.
 
 | Engine | Version | Language | µs / render | Renders / sec | Relative |
 | --- | --- | --- | --- | --- | --- |
-| **mjmx** | — | Rust | **13.6** | **73,738** | 1.0× |
+| **mjmx** | 5.4.0 / 4.18.0 | Rust | **13.6** | **73,738** | 1.0× |
 | [mrml](https://github.com/jdrouet/mrml) | 6.0.1 | Rust | 20.3 | 49,174 | 0.55× |
 | [mjml](https://github.com/mjmlio/mjml) | 4.18.0 | JS (Node 24) | 547.2 | 1,827 | 0.025× |
 | [mjml](https://github.com/mjmlio/mjml) | 5.4.0 | JS (Node 24) | 573.0 | 1,745 | 0.024× |
