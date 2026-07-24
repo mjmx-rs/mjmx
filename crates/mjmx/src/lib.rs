@@ -210,8 +210,8 @@ fn render_source(
     // mjml's order: the cheerio `htmlAttributes` pass runs *before* juice, so an
     // added attribute can be a selector target for the inliner that follows.
     let html = apply_html_attributes(html, &html_attributes);
-    let processed = post_process(inline_css_into(html, &inline_css, options), options)
-        .map_err(|d| vec![d])?;
+    let processed =
+        post_process(inline_css_into(html, &inline_css, options), options).map_err(|d| vec![d])?;
     Ok((processed, soft))
 }
 
@@ -359,13 +359,13 @@ fn post_process(html: String, options: &RenderOptions) -> Result<String, Diagnos
             &minified, &sanitized, &syntaxes,
         ))
     } else if mjmx_minifier::sanitize::detect(&html, &syntaxes).any() {
-        Err(Diagnostic::error(
-            "template variables in CSS would be corrupted by CSS minification",
-        )
-        .with_help(
-            "enable sanitize_styles (CLI: --sanitize-styles) to mask template syntax \
+        Err(
+            Diagnostic::error("template variables in CSS would be corrupted by CSS minification")
+                .with_help(
+                    "enable sanitize_styles (CLI: --sanitize-styles) to mask template syntax \
              across the minify pass and restore it after",
-        ))
+                ),
+        )
     } else {
         Ok(mjmx_minifier::minify_with(&html, &options.minify_options))
     }

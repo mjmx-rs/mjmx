@@ -742,7 +742,10 @@ mod tests {
             prefix: "<#".into(),
             suffix: "#>".into(),
         }];
-        assert_eq!(round_trip_with(".a { color: <# c #> }", &syn), ".a{color:<# c #>}");
+        assert_eq!(
+            round_trip_with(".a { color: <# c #> }", &syn),
+            ".a{color:<# c #>}"
+        );
     }
 
     fn round_trip_with(style_body: &str, syn: &[Syntax]) -> String {

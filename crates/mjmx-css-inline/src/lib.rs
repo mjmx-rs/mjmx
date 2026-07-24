@@ -132,9 +132,7 @@ mod tests {
         // Verified against real juice: `li:nth-child(2)` rewrites the 2nd <li> and
         // `li:not(.skip)` rewrites the others — matching, not dropping, the rules.
         let out = inline(
-            &document(
-                "<ul><li>a</li><li class=\"skip\">b</li><li>c</li></ul>",
-            ),
+            &document("<ul><li>a</li><li class=\"skip\">b</li><li>c</li></ul>"),
             "li:nth-child(2){color:red}li:not(.skip){font-weight:bold}",
         );
         // 2nd <li> (the .skip one) gets color:red; the other two get font-weight.
@@ -144,10 +142,7 @@ mod tests {
         );
         assert_eq!(out.matches("font-weight: bold;").count(), 2, "{out}");
         // The .skip <li> is excluded from :not, so it has no font-weight.
-        assert!(
-            !out.contains(r#"style="color: red; font-weight"#),
-            "{out}"
-        );
+        assert!(!out.contains(r#"style="color: red; font-weight"#), "{out}");
     }
 
     #[test]
@@ -162,7 +157,10 @@ mod tests {
         assert!(out.contains("color: #ff0000;"), "{out}");
         assert!(out.contains("background-color: #00ff00;"), "{out}");
         assert!(out.contains("border-color: var(--nope);"), "{out}");
-        assert!(!out.contains("--brand"), "custom property must be dropped: {out}");
+        assert!(
+            !out.contains("--brand"),
+            "custom property must be dropped: {out}"
+        );
         // A resolved value reaches the attribute mirror too: mirroring reads the merged
         // declarations *after* substitution (on a `<table>`, the tag mjmx mirrors).
         let table = inline(
@@ -177,9 +175,7 @@ mod tests {
         // A `--brand` defined on an ancestor is visible to a descendant `var(--brand)`,
         // nearest definition winning.
         let out = inline(
-            &document(
-                r#"<div class="outer"><td class="v" style="font-size:0px;">x</td></div>"#,
-            ),
+            &document(r#"<div class="outer"><td class="v" style="font-size:0px;">x</td></div>"#),
             ".outer { --brand: #123456; } .v { color: var(--brand); }",
         );
         assert!(out.contains("color: #123456;"), "{out}");
@@ -237,7 +233,10 @@ mod tests {
             &pseudo_opts(),
         );
         // before = <img>, then the text, then after = <span>.
-        assert!(out.contains("<img src=\"dot.png\">x<span>!</span>"), "{out}");
+        assert!(
+            out.contains("<img src=\"dot.png\">x<span>!</span>"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -254,8 +253,14 @@ mod tests {
             &pseudo_opts(),
         );
         // Counter resolves per element in document order.
-        assert!(out.contains("<span style=\"color: red;\">1. </span>a"), "{out}");
-        assert!(out.contains("<span style=\"color: red;\">2. </span>b"), "{out}");
+        assert!(
+            out.contains("<span style=\"color: red;\">1. </span>a"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<span style=\"color: red;\">2. </span>b"),
+            "{out}"
+        );
         // counter-reset / counter-increment stay inlined on the real elements.
         assert!(out.contains("counter-reset: item;"), "{out}");
         assert!(out.contains("counter-increment: item;"), "{out}");
@@ -266,7 +271,9 @@ mod tests {
     #[test]
     fn pseudo_element_counter_styles() {
         let out = inline_with(
-            &document("<ol><li class=\"i\">a</li><li class=\"i\">b</li><li class=\"i\">c</li></ol>"),
+            &document(
+                "<ol><li class=\"i\">a</li><li class=\"i\">b</li><li class=\"i\">c</li></ol>",
+            ),
             "ol{counter-reset:c} li{counter-increment:c} li.i::before{content:counter(c, upper-latin)}",
             &pseudo_opts(),
         );
@@ -288,7 +295,10 @@ mod tests {
                 &css,
                 &pseudo_opts(),
             );
-            assert!(out.contains(&format!("<span>{roman}</span>")), "{value}: {out}");
+            assert!(
+                out.contains(&format!("<span>{roman}</span>")),
+                "{value}: {out}"
+            );
         }
     }
 
@@ -348,9 +358,7 @@ mod tests {
         // `tableElements` set, not `<table>` alone — a `<td>`/`<th>` gets the same
         // `bgcolor`/`align`/`valign`/`background`. Verified against real juice.
         let out = inline(
-            &document(
-                "<table><tr><td class=\"c\">c</td><th class=\"c\">h</th></tr></table>",
-            ),
+            &document("<table><tr><td class=\"c\">c</td><th class=\"c\">h</th></tr></table>"),
             ".c{background-color:#00ff00;text-align:center}",
         );
         assert_eq!(out.matches(r##"bgcolor="#00ff00""##).count(), 2, "{out}");
@@ -362,13 +370,14 @@ mod tests {
         // A gradient has no `background` attribute spelling: juice keeps the
         // declaration in `style` but skips the mirror. url() still mirrors.
         let out = inline(
-            &document(
-                "<table><tr><td class=\"g\">g</td><td class=\"u\">u</td></tr></table>",
-            ),
+            &document("<table><tr><td class=\"g\">g</td><td class=\"u\">u</td></tr></table>"),
             ".g{background-image:linear-gradient(#fff,#000)}.u{background-image:url(a.png)}",
         );
         assert!(!out.contains("background=\"linear"), "{out}");
-        assert!(out.contains("background-image: linear-gradient(#fff,#000);"), "{out}");
+        assert!(
+            out.contains("background-image: linear-gradient(#fff,#000);"),
+            "{out}"
+        );
         assert!(out.contains(r#"background="a.png""#), "{out}");
     }
 

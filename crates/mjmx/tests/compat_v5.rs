@@ -231,7 +231,10 @@ fn v4_ignores_the_section_gutter_attribute() {
     assert!(!v4.contains("48-333333"), "{v4}");
 
     let plain = r#"<mjml><mj-body><mj-section><mj-column><mj-text>a</mj-text></mj-column><mj-column><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>"#;
-    assert_eq!(render(GUTTER, MjmlCompat::V4), render(plain, MjmlCompat::V4));
+    assert_eq!(
+        render(GUTTER, MjmlCompat::V4),
+        render(plain, MjmlCompat::V4)
+    );
 }
 
 #[test]
@@ -258,7 +261,10 @@ fn css_variables_resolve_end_to_end_in_both_compat_modes() {
     for compat in [MjmlCompat::V4, MjmlCompat::V5] {
         let out = render(DOC, compat);
         assert!(out.contains("color: #ff0000"), "{compat:?}: {out}");
-        assert!(!out.contains("--c"), "{compat:?}: custom prop must drop: {out}");
+        assert!(
+            !out.contains("--c"),
+            "{compat:?}: custom prop must drop: {out}"
+        );
     }
 }
 
@@ -270,7 +276,10 @@ fn inline_pseudo_elements_thread_through_render_options() {
     const DOC: &str = r#"<mjml><mj-head><mj-style inline="inline">.v::before{content:"* "}</mj-style></mj-head><mj-body><mj-section><mj-column><mj-text css-class="v">hi</mj-text></mj-column></mj-section></mj-body></mjml>"#;
 
     let off = mjmx::render(DOC, &RenderOptions::default()).expect("renders");
-    assert!(!off.contains("<span>* </span>"), "default drops the pseudo: {off}");
+    assert!(
+        !off.contains("<span>* </span>"),
+        "default drops the pseudo: {off}"
+    );
 
     let on = mjmx::render(
         DOC,
@@ -283,5 +292,8 @@ fn inline_pseudo_elements_thread_through_render_options() {
         },
     )
     .expect("renders");
-    assert!(on.contains("<span>* </span>"), "opt-in synthesizes the pseudo: {on}");
+    assert!(
+        on.contains("<span>* </span>"),
+        "opt-in synthesizes the pseudo: {on}"
+    );
 }

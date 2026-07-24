@@ -212,9 +212,7 @@ impl<'a> Section<'a> {
                     buf.push_str(&format!(
                         "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;{outlook_padding}\" ><![endif]-->"
                     ));
-                    crate::render::traced(child, ctx, buf, |ctx, buf| {
-                        column.render(ctx, buf)
-                    })?;
+                    crate::render::traced(child, ctx, buf, |ctx, buf| column.render(ctx, buf))?;
                 }
             }
             buf.push_str("<!--[if mso | IE]></td><![endif]-->");

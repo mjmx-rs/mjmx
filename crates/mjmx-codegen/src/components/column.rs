@@ -504,7 +504,10 @@ impl<'a> Render<'a> for Column<'a> {
 
         // Register the responsive rule so the head emits both the @media block and
         // the .moz-text-html <style media> block for this class.
-        ctx.add_media_query(&column_class, self.class_width(container).media_query_body());
+        ctx.add_media_query(
+            &column_class,
+            self.class_width(container).media_query_body(),
+        );
 
         // mjml's `render`: `${getColumnClass()}` then the gutter class (when active) then
         // `mj-outlook-group-fix`, then `css-class` appended when set.

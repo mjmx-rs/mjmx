@@ -545,9 +545,7 @@ pub(crate) fn substitute_vars(
         // element (juice re-scans against the same element).
         Some(resolved) => substitute_vars(&resolved, index, tree, custom_maps, depth + 1),
         None => match fallback {
-            Some(fallback) => {
-                substitute_vars(fallback.trim(), index, tree, custom_maps, depth + 1)
-            }
+            Some(fallback) => substitute_vars(fallback.trim(), index, tree, custom_maps, depth + 1),
             // Undefined and no fallback: keep the `var(…)` literal, skip past it.
             None => value[start..=close].to_owned(),
         },

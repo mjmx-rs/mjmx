@@ -391,7 +391,10 @@ impl Compound {
             return false;
         }
         self.attrs.iter().all(|test| test.matches(element))
-            && self.pseudos.iter().all(|pseudo| pseudo.matches(tree, index))
+            && self
+                .pseudos
+                .iter()
+                .all(|pseudo| pseudo.matches(tree, index))
     }
 }
 
@@ -737,9 +740,8 @@ mod tests {
     #[test]
     fn pseudo_classes_match_like_juice() {
         // <ul> with four <li>, the second carrying class="skip".
-        let tree = crate::dom::build(
-            "<ul><li>a</li><li class=\"skip\">b</li><li>c</li><li>d</li></ul>",
-        );
+        let tree =
+            crate::dom::build("<ul><li>a</li><li class=\"skip\">b</li><li>c</li><li>d</li></ul>");
         let li: Vec<usize> = tree
             .elements
             .iter()

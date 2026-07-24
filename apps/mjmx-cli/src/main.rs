@@ -935,9 +935,7 @@ fn parse_template_syntax(spec: Option<&str>) -> Result<Option<Vec<(String, Strin
         return Ok(None);
     };
     let pairs: Vec<TemplateSyntaxSpec> = serde_json::from_str(spec.trim()).map_err(|err| {
-        format!(
-            "--template-syntax: invalid JSON array of {{prefix, suffix}} objects: {err}"
-        )
+        format!("--template-syntax: invalid JSON array of {{prefix, suffix}} objects: {err}")
     })?;
     if pairs.is_empty() {
         return Err("--template-syntax: at least one {prefix, suffix} pair is required".into());

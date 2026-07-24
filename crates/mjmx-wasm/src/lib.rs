@@ -660,7 +660,9 @@ impl JsRenderOptions {
             template_syntax: self
                 .template_syntax
                 .map(|pairs| pairs.into_iter().map(|p| (p.prefix, p.suffix)).collect()),
-            allow_mixed_syntax: self.allow_mixed_syntax.unwrap_or(defaults.allow_mixed_syntax),
+            allow_mixed_syntax: self
+                .allow_mixed_syntax
+                .unwrap_or(defaults.allow_mixed_syntax),
         })
     }
 }

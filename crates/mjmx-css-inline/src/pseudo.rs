@@ -59,9 +59,15 @@ pub(crate) fn pseudo_edits(
             continue;
         }
         for kind in [PseudoElement::Before, PseudoElement::After] {
-            if let Some(edit) =
-                pseudo_edit(rules, tree, index, kind, options, &custom_maps, element_counters)
-            {
+            if let Some(edit) = pseudo_edit(
+                rules,
+                tree,
+                index,
+                kind,
+                options,
+                &custom_maps,
+                element_counters,
+            ) {
                 edits.push(edit);
             }
         }
@@ -91,13 +97,7 @@ fn pseudo_edit(
         PseudoElement::After => tree.elements[index].content_end?,
     };
 
-    let content = parse_content(
-        &content_decl.value,
-        index,
-        tree,
-        custom_maps,
-        counters,
-    );
+    let content = parse_content(&content_decl.value, index, tree, custom_maps, counters);
 
     // The box's style: every declaration except `content` (and `--*` under
     // resolveCSSVariables), with `var()` resolved.
@@ -149,7 +149,12 @@ fn pseudo_winners(
     for (order, rule) in rules.iter().enumerate() {
         if rule.pseudo == Some(kind) && rule.selector.matches(tree, index) {
             for declaration in &rule.declarations {
-                ranked.push((declaration.important, rule.specificity(), order, declaration));
+                ranked.push((
+                    declaration.important,
+                    rule.specificity(),
+                    order,
+                    declaration,
+                ));
             }
         }
     }
@@ -157,7 +162,10 @@ fn pseudo_winners(
 
     let mut winners: Vec<crate::css::Declaration> = Vec::new();
     for (.., declaration) in ranked {
-        match winners.iter_mut().find(|w| w.property == declaration.property) {
+        match winners
+            .iter_mut()
+            .find(|w| w.property == declaration.property)
+        {
             Some(existing) => existing.clone_from(declaration),
             None => winners.push(declaration.clone()),
         }
@@ -300,8 +308,8 @@ fn romanize(num: i64) -> String {
         return num.to_string();
     }
     let key = [
-        "", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM", "", "X", "XX", "XXX", "XL", "L",
-        "LX", "LXX", "LXXX", "XC", "", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX",
+        "", "C", "CC", "CCC", "CD", "D", "DC", "DCC", "DCCC", "CM", "", "X", "XX", "XXX", "XL",
+        "L", "LX", "LXX", "LXXX", "XC", "", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX",
     ];
     let digits: Vec<u32> = num
         .to_string()
@@ -368,7 +376,11 @@ fn counter_snapshots(rules: &[Rule], tree: &Tree<'_>) -> Vec<HashMap<String, i64
 }
 
 /// juice's `resetCounter`: `name [value]` pairs; a missing value resets to 0.
-fn reset_counters(value: &str, global: &mut HashMap<String, i64>, props: &mut HashMap<String, i64>) {
+fn reset_counters(
+    value: &str,
+    global: &mut HashMap<String, i64>,
+    props: &mut HashMap<String, i64>,
+) {
     let tokens: Vec<&str> = value.split_whitespace().collect();
     let mut j = 0;
     while j < tokens.len() {
