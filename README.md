@@ -7,6 +7,11 @@
 Rust port of [MJML](https://github.com/mjmlio/mjml), built as an oxc-style compiler toolchain
 (parse → semantic → codegen → lint), rendering MJML to responsive HTML email.
 
+> ⚠️ **Work in progress.** mjmx is under active development and not yet published to any
+> package registry. The rendering pipeline is complete and parity-tested, but APIs may still
+> change and release packaging (crates.io, npm, PyPI) is not done. Not yet recommended for
+> production use.
+
 See [CLAUDE.md](CLAUDE.md) for architecture and roadmap.
 
 ## mjml compatibility
