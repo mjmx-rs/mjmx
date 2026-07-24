@@ -194,6 +194,26 @@ struct RenderOptionArgs {
     /// (`{{ }}`). [mjml: `juicePreserveTags`]
     #[arg(long, value_name = "JSON")]
     juice_preserve_tags: Option<String>,
+
+    /// Protect template syntax in CSS (`color: {{brand}}`, `{{prop}}: red`,
+    /// `{{#if}}…`) from CSS minification, which would otherwise corrupt it. Without
+    /// this, `--minify` on a document with template syntax in a `<style>` or `style`
+    /// attribute is a hard error. Has no effect unless CSS is being minified.
+    /// [mjml: `sanitizeStyles`]
+    #[arg(long)]
+    sanitize_styles: bool,
+
+    /// The template-delimiter pairs `--sanitize-styles` recognizes, as a JSON array in
+    /// mjml's shape — e.g. `'[{"prefix":"<#","suffix":"#>"}]'`. Replaces the built-in
+    /// pairs (`{{ }}` and `[[ ]]`). [mjml: `templateSyntax`]
+    #[arg(long, value_name = "JSON")]
+    template_syntax: Option<String>,
+
+    /// Allow a control block (`{{#if}}`) and a CSS value/property variable
+    /// (`color: {{x}}`) to coexist in one document; without this, mixing them is an
+    /// error under `--sanitize-styles`. [mjml: `allowMixedSyntax`]
+    #[arg(long)]
+    allow_mixed_syntax: bool,
 }
 
 /// `--mjml-version` values, spelled as the major version alone: these name an upstream
@@ -262,8 +282,9 @@ impl From<ValidationLevelArg> for ValidationLevel {
 impl RenderOptionArgs {
     /// Build the [`RenderOptions`] these flags describe.
     ///
-    /// Fails only on a malformed `--fonts`, `--minify-options`, `--juice-options` or
-    /// `--juice-preserve-tags` spec; every other flag is validated by clap.
+    /// Fails only on a malformed `--fonts`, `--minify-options`, `--juice-options`,
+    /// `--juice-preserve-tags` or `--template-syntax` spec; every other flag is
+    /// validated by clap.
     fn to_render_options(&self) -> Result<RenderOptions, String> {
         let inline_options = parse_juice_options(self.juice_options.as_deref())?
             .with_preserve_tags(parse_juice_preserve_tags(
@@ -308,6 +329,9 @@ impl RenderOptionArgs {
                 })
                 .collect(),
             printer_support: self.printer_support,
+            sanitize_styles: self.sanitize_styles,
+            template_syntax: parse_template_syntax(self.template_syntax.as_deref())?,
+            allow_mixed_syntax: self.allow_mixed_syntax,
         })
     }
 }
@@ -899,6 +923,36 @@ fn parse_minify_options(
         // Not one of mjml's four switches; it comes from the release being reproduced.
         css_dialect: defaults.css_dialect,
     })
+}
+
+/// Parse `--template-syntax`; `None` (the flag omitted) is mjml's default pairs.
+///
+/// mjml's `templateSyntax` is a JSON array of `{ prefix, suffix }` objects; an empty
+/// or omitted flag leaves [`RenderOptions::template_syntax`] `None`, which the umbrella
+/// reads as the built-in `{{ }}` / `[[ ]]` pairs.
+fn parse_template_syntax(spec: Option<&str>) -> Result<Option<Vec<(String, String)>>, String> {
+    let Some(spec) = spec else {
+        return Ok(None);
+    };
+    let pairs: Vec<TemplateSyntaxSpec> = serde_json::from_str(spec.trim()).map_err(|err| {
+        format!(
+            "--template-syntax: invalid JSON array of {{prefix, suffix}} objects: {err}"
+        )
+    })?;
+    if pairs.is_empty() {
+        return Err("--template-syntax: at least one {prefix, suffix} pair is required".into());
+    }
+    Ok(Some(
+        pairs.into_iter().map(|p| (p.prefix, p.suffix)).collect(),
+    ))
+}
+
+/// One `{ prefix, suffix }` entry of `--template-syntax`.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TemplateSyntaxSpec {
+    prefix: String,
+    suffix: String,
 }
 
 /// Parse `--juice-options`; `None` (the flag omitted) is mjml's `juiceOptions: {}`.

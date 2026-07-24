@@ -356,6 +356,49 @@ Outlook conditional, and `-->` does not nest — it truncated the conditional. F
 upstream's shape (each conditional opened *and* closed); `merge_outlook_conditionals` in
 `document.rs` re-fuses them, so byte output is unchanged for comment-free documents.
 
+### `sanitizeStyles` / `templateSyntax` / `allowMixedSyntax` (shipped, mjml 5.4.0)
+
+mjml 5.4.0's protection for **template syntax embedded in CSS** — `color: {{brand}}`,
+`{{prop}}: red`, `{{#if}}…{{/if}}` — from the CSS-minify pass, which would otherwise
+corrupt it (mjmx's `cssparser` mangles `{{brand}}`; upstream's `cssnano`/`postcss` throws
+outright). A **real bug** in mjmx before this: `--minify` on such a document silently
+truncated the CSS (`.x{color:{{brandColor}` — *worse* than mjml, which at least errored).
+Three `RenderOptions` fields (`mjmx-codegen/src/context.rs`), **available in both compat
+modes** (the corruption exists in both), threaded to CLI/wasm/napi:
+
+- `sanitize_styles: bool` (default false) — mjml's `sanitizeStyles`. CLI `--sanitize-styles`.
+- `template_syntax: Option<Vec<(String,String)>>` (default `None` → `{{ }}` + `[[ ]]`) —
+  mjml's `templateSyntax`, literal delimiter pairs (mjml regex-interpolates; mjmx does not,
+  matching the documented `"<#"`/`"#>"` examples). CLI `--template-syntax <JSON array>`.
+- `allow_mixed_syntax: bool` (default false) — mjml's `allowMixedSyntax`. CLI `--allow-mixed-syntax`.
+
+The pass is a **faithful port of mjml 5.4.0's `sanitizeTemplateVariablesInHtml`/`restore`**
+(`mjmx-minifier/src/sanitize.rs`, ~450 LoC, **no new dep** — literal `prefix`/`suffix`
+scanning over the two CSS scopes mjml's regexes target: `style="…"` values and
+`<style>…</style>` bodies). Three placement contexts, masked before the CSS pass and
+restored after, exactly as mjml: **value** (`{{x}}` → bare ident `variable_temp_N`),
+**property** (`{{x}}:` → custom prop `--mj-prop-temp_N:`), **block** (else → fake decl
+`sanitizedI:inner;`). Two guards, also mjml's: **unbalanced** delimiters → error;
+**mixed** block + value/property syntax → error unless `allow_mixed_syntax`.
+
+Orchestration is in the umbrella's `post_process` (now fallible, `Result<String,
+Diagnostic>`), which gates the whole thing on `minify && minify_options.minify_css` — the
+**only** transform that parses CSS. Deliberate mjmx divergence, faithful to *mjmx's* actual
+behaviour rather than mjml's: **beautify and non-CSS minify never corrupt** (mjmx's
+tokenizer emits `<style>` bodies and `style` attrs verbatim), so they need no sanitize and
+raise no error, whereas mjml sanitizes its beautify path too (js-beautify reformats CSS).
+
+**Default behaviour when off + template syntax present + CSS minify (chosen, not mjml's):**
+mjmx **errors** with an actionable message pointing at `--sanitize-styles`, rather than
+mjml's effective `cssnano` throw or the old silent corruption. A no-template-variable
+document is byte-identical to a plain minify (the 78 V4 goldens + V5 baseline are unmoved;
+sanitize only runs when `detect().any()`). Every masked→minify→restore round-trip was
+**verified byte-for-byte against real `mjml@5.4.0`** (`{ minify:true, sanitizeStyles:true,
+allowMixedSyntax:true }`), including the `{{pad}} px` space artifact masking introduces.
+Tests: `mjmx-minifier/src/sanitize.rs` unit tests + `crates/mjmx/tests/sanitize_styles.rs`.
+**Not** ported from 5.x still: nothing in this family — `sanitizeStyles`/`templateSyntax`/
+`allowMixedSyntax` are done.
+
 ### Still open
 
 - **Tier 2 dead ends — deliberately *not* implemented as fields:**
@@ -564,8 +607,8 @@ shape + return channel.
    render-path CLI audit above targeted 4.18.0 (`-r`/`-i`/`-s`, watch, the FILE comment) and
    still holds for both compat modes. The 5.4.0-specific CLI additions shipped since:
    `--mjml-version 4|5`, and the include changes `--allow-includes` / `--include-path` with
-   mjml 5's two stderr warnings. Still **not** ported from 5.x: `sanitizeStyles` /
-   `allowMixedSyntax` CSS sanitization (out of scope for now).
+   mjml 5's two stderr warnings, plus the `sanitizeStyles` family (`--sanitize-styles` /
+   `--template-syntax` / `--allow-mixed-syntax`) — see the `sanitizeStyles` section below.
 
 Method reminder: read mjml's actual README/**output** rather than guessing — that has caught
 real bugs every single time, including twice during the 5.x retarget (the upgrade guide was

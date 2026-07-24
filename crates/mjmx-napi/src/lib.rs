@@ -91,6 +91,26 @@ pub struct JsRenderOptions {
     /// `codeBlocks` object, so they leak into every later render in the process.
     /// [mjml: `juicePreserveTags`]
     pub juice_preserve_tags: Option<IndexMap<String, JsPreserveTag>>,
+    /// Protect template syntax in CSS (`color: {{brand}}`, `{{prop}}: red`, `{{#if}}…`)
+    /// from CSS minification, which would otherwise corrupt it. Without this, minifying
+    /// a document that carries template syntax in a `<style>` or `style` attribute is a
+    /// hard error. Only relevant when CSS is being minified. [mjml: `sanitizeStyles`]
+    pub sanitize_styles: Option<bool>,
+    /// The template-delimiter pairs `sanitizeStyles` recognizes. Replaces the built-in
+    /// pairs (`{{ }}` and `[[ ]]`). [mjml: `templateSyntax`]
+    pub template_syntax: Option<Vec<JsTemplateSyntax>>,
+    /// Allow a control block (`{{#if}}`) and a CSS value/property variable
+    /// (`color: {{x}}`) to coexist in one document; without this, mixing them is an error
+    /// under `sanitizeStyles`. [mjml: `allowMixedSyntax`]
+    pub allow_mixed_syntax: Option<bool>,
+}
+
+/// One `{ prefix, suffix }` entry of `templateSyntax`.
+#[napi(object)]
+#[derive(Clone)]
+pub struct JsTemplateSyntax {
+    pub prefix: String,
+    pub suffix: String,
 }
 
 /// mjml's `juiceOptions`, restricted to what mjmx's hand-rolled inliner can honour.
@@ -270,6 +290,13 @@ fn to_render_options(
         // two mjml options fold into the single carrier `RenderOptions` holds.
         inline_options: InlineOptions::from(options.juice_options.unwrap_or_default())
             .with_preserve_tags(to_preserve_tags(options.juice_preserve_tags)?),
+        sanitize_styles: options.sanitize_styles.unwrap_or(defaults.sanitize_styles),
+        template_syntax: options
+            .template_syntax
+            .map(|pairs| pairs.into_iter().map(|p| (p.prefix, p.suffix)).collect()),
+        allow_mixed_syntax: options
+            .allow_mixed_syntax
+            .unwrap_or(defaults.allow_mixed_syntax),
     })
 }
 
@@ -716,6 +743,12 @@ mod tests {
                     end: "</#".to_owned(),
                 },
             )])),
+            sanitize_styles: Some(true),
+            template_syntax: Some(vec![JsTemplateSyntax {
+                prefix: "<%".to_owned(),
+                suffix: "%>".to_owned(),
+            }]),
+            allow_mixed_syntax: Some(true),
         }))
         .unwrap();
 
@@ -768,6 +801,12 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["EJS", "HBS", "myTag"]
         );
+        assert!(options.sanitize_styles);
+        assert_eq!(
+            options.template_syntax,
+            Some(vec![("<%".to_owned(), "%>".to_owned())])
+        );
+        assert!(options.allow_mixed_syntax);
     }
 
     #[test]

@@ -29,9 +29,11 @@
 //! this crate's own — byte-parity with mjml's `js-beautify` is a non-goal.
 
 mod css;
+pub mod sanitize;
 mod tag;
 mod tokenizer;
 
+pub use sanitize::{Detect, SanitizeError, Sanitized, Syntax, default_syntaxes};
 use tokenizer::{Token, tokenize};
 
 /// Knobs on [`minify_with`], mirroring mjml's `minifyOptions`.

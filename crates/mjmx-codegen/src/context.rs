@@ -175,6 +175,36 @@ pub struct RenderOptions {
     /// Only consulted when the document has a non-empty inline `<mj-style>` bucket;
     /// otherwise no inlining runs at all.
     pub inline_options: InlineOptions,
+    /// Protect template-engine syntax in CSS from the minify pass. `// mjml default:
+    /// false`.
+    ///
+    /// Matches mjml 5.4.0's `sanitizeStyles`. When a `<style>` body or `style="…"`
+    /// value carries template variables (`color: {{brand}}`, `{{prop}}: red`,
+    /// `{{#if}}…`), the CSS-minify pass would otherwise mangle them — mjmx's parser
+    /// treats `{{brand}}` as garbage (upstream `cssnano` throws). With this set, each
+    /// variable is masked with a parseable placeholder before minification and
+    /// restored after. Honored by the umbrella crate, around the minify pass; a plain
+    /// (non-minifying) render never consults it. Available in **both** compat modes —
+    /// the corruption it guards against exists in both.
+    pub sanitize_styles: bool,
+    /// The template-delimiter pairs [`sanitize_styles`](Self::sanitize_styles)
+    /// recognizes. `// mjml default: [{{ }}, [[ ]]]`.
+    ///
+    /// Matches mjml's `templateSyntax`. `None` uses mjml's default pair set
+    /// (`{{ }}` and `[[ ]]`); `Some(pairs)` replaces it, e.g. `[("<#".into(),
+    /// "#>".into())]`. Each pair is `(prefix, suffix)`, treated as literal strings
+    /// (mjml interpolates them into a regex; mjmx does not, matching the documented
+    /// `"<#"` / `"#>"` examples). Only consulted when
+    /// [`sanitize_styles`](Self::sanitize_styles) is set.
+    pub template_syntax: Option<Vec<(String, String)>>,
+    /// Allow block syntax and value/property syntax to coexist in one document's CSS.
+    /// `// mjml default: false`.
+    ///
+    /// Matches mjml's `allowMixedSyntax`. mjml rejects a document that mixes a
+    /// control block (`{{#if}}`) with a CSS value/property variable (`color: {{x}}`),
+    /// since the two mask differently; this opts out of that guard. Only consulted
+    /// when [`sanitize_styles`](Self::sanitize_styles) is set.
+    pub allow_mixed_syntax: bool,
 }
 
 impl Default for RenderOptions {
@@ -210,6 +240,11 @@ impl Default for RenderOptions {
             // mjml default: `juiceOptions: undefined` / `juicePreserveTags: undefined`,
             // i.e. juice's defaults as mjml configures them.
             inline_options: InlineOptions::default(),
+            // mjml default: sanitizeStyles false, templateSyntax the built-in pairs,
+            // allowMixedSyntax false.
+            sanitize_styles: false,
+            template_syntax: None,
+            allow_mixed_syntax: false,
         }
     }
 }

@@ -105,6 +105,25 @@ export interface RenderOptions {
    * these are per-call: they never leak into a later `render`. Default: `{}`.
    */
   juicePreserveTags?: Record<string, PreserveTag>;
+  /**
+   * Protect template syntax in CSS (`color: {{brand}}`, `{{prop}}: red`, `{{#if}}…`)
+   * from CSS minification, which would otherwise corrupt it. Without this, minifying a
+   * document that carries template syntax in a `<style>` or `style` attribute throws.
+   * Only relevant when CSS is being minified. Matches mjml's `sanitizeStyles`.
+   * Default: false.
+   */
+  sanitizeStyles?: boolean;
+  /**
+   * The template-delimiter pairs `sanitizeStyles` recognizes — mjml's `templateSyntax`.
+   * Replaces the built-in pairs (`{{ }}` and `[[ ]]`). Default: the built-in pairs.
+   */
+  templateSyntax?: Array<{ prefix: string; suffix: string }>;
+  /**
+   * Allow a control block (`{{#if}}`) and a CSS value/property variable
+   * (`color: {{x}}`) to coexist in one document; without this, mixing them throws under
+   * `sanitizeStyles`. Matches mjml's `allowMixedSyntax`. Default: false.
+   */
+  allowMixedSyntax?: boolean;
 
   /**
    * Host-registered **custom components** (Tier 1), keyed by tag name. When rendering

@@ -140,6 +140,25 @@ export interface RenderOptions {
    * these are per-call: nothing leaks into a later `render`. Default: `{}`.
    */
   juicePreserveTags?: Record<string, PreserveTag>;
+  /**
+   * Protect template syntax in CSS (`color: {{brand}}`, `{{prop}}: red`, `{{#if}}…`)
+   * from CSS minification, which would otherwise corrupt it. Without this, minifying a
+   * document that carries template syntax in a `<style>` or `style` attribute throws.
+   * Only relevant when CSS is being minified. Matches mjml's `sanitizeStyles`.
+   * Default: false.
+   */
+  sanitizeStyles?: boolean;
+  /**
+   * The template-delimiter pairs `sanitizeStyles` recognizes — mjml's `templateSyntax`.
+   * Replaces the built-in pairs (`{{ }}` and `[[ ]]`). Default: the built-in pairs.
+   */
+  templateSyntax?: Array<{ prefix: string; suffix: string }>;
+  /**
+   * Allow a control block (`{{#if}}`) and a CSS value/property variable
+   * (`color: {{x}}`) to coexist in one document; without this, mixing them throws under
+   * `sanitizeStyles`. Matches mjml's `allowMixedSyntax`. Default: false.
+   */
+  allowMixedSyntax?: boolean;
 
   /**
    * Host-registered **custom components** (Tier 1), keyed by tag name. When rendering
@@ -333,6 +352,17 @@ struct JsRenderOptions {
     printer_support: Option<bool>,
     juice_options: Option<JsJuiceOptions>,
     juice_preserve_tags: Option<PreserveTagTable>,
+    sanitize_styles: Option<bool>,
+    template_syntax: Option<Vec<JsTemplateSyntax>>,
+    allow_mixed_syntax: Option<bool>,
+}
+
+/// One `{ prefix, suffix }` entry of `templateSyntax`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JsTemplateSyntax {
+    prefix: String,
+    suffix: String,
 }
 
 /// mjml's `juiceOptions` object, restricted to what mjmx's hand-rolled inliner can
@@ -626,6 +656,11 @@ impl JsRenderOptions {
             // `filePath` is already rejected above, so includes never resolve here anyway.
             include_path: Vec::new(),
             printer_support: self.printer_support.unwrap_or(defaults.printer_support),
+            sanitize_styles: self.sanitize_styles.unwrap_or(defaults.sanitize_styles),
+            template_syntax: self
+                .template_syntax
+                .map(|pairs| pairs.into_iter().map(|p| (p.prefix, p.suffix)).collect()),
+            allow_mixed_syntax: self.allow_mixed_syntax.unwrap_or(defaults.allow_mixed_syntax),
         })
     }
 }

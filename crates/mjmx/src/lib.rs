@@ -210,10 +210,9 @@ fn render_source(
     // mjml's order: the cheerio `htmlAttributes` pass runs *before* juice, so an
     // added attribute can be a selector target for the inliner that follows.
     let html = apply_html_attributes(html, &html_attributes);
-    Ok((
-        post_process(inline_css_into(html, &inline_css, options), options),
-        soft,
-    ))
+    let processed = post_process(inline_css_into(html, &inline_css, options), options)
+        .map_err(|d| vec![d])?;
+    Ok((processed, soft))
 }
 
 /// Apply the `<mj-html-attributes>` rules to the rendered HTML, mjml's cheerio pass.
@@ -318,16 +317,73 @@ fn has_errors(diagnostics: &[Diagnostic]) -> bool {
 /// caller sets both, **`minify` wins** (the more destructive, size-oriented
 /// transform is assumed to be the intent). When neither is set the rendered HTML
 /// is returned untouched — the default render path is unchanged.
-fn post_process(html: String, options: &RenderOptions) -> String {
-    if options.minify {
-        // `minify_options` is mjml's `minifyOptions`: consulted only on this branch,
-        // exactly as mjml only spreads it into the html-minifier call when `minify` is
-        // truthy.
-        mjmx_minifier::minify_with(&html, &options.minify_options)
-    } else if options.beautify {
-        mjmx_minifier::beautify(&html)
+///
+/// # Errors
+///
+/// The CSS-minify pass parses stylesheets, and a template variable in CSS
+/// (`color: {{brand}}`) is not parseable — it would be corrupted (upstream mjml's
+/// `cssnano` throws outright). So when CSS minification is on and template syntax is
+/// present:
+///
+/// - with [`sanitize_styles`](RenderOptions::sanitize_styles), the variables are
+///   masked across the pass and restored (mjml's `sanitizeStyles`);
+/// - without it, this returns an error pointing at that flag, rather than emitting
+///   silently corrupted CSS. A [`SanitizeError`](mjmx_minifier::SanitizeError) —
+///   unbalanced delimiters, or mixed block/value syntax without
+///   [`allow_mixed_syntax`](RenderOptions::allow_mixed_syntax) — is also surfaced here.
+fn post_process(html: String, options: &RenderOptions) -> Result<String, Diagnostic> {
+    // Only the CSS-minify pass parses stylesheets and can corrupt template syntax.
+    // `beautify` and a non-CSS `minify` emit every `<style>` body and `style="…"`
+    // value verbatim, so they need no protection — mjml gates its own sanitize on the
+    // same `cssMinifyEnabled` for the minify path.
+    let css_minify = options.minify && options.minify_options.minify_css;
+    if !css_minify {
+        // `minify_options` is mjml's `minifyOptions`: consulted only when `minify` is
+        // truthy, exactly as mjml only spreads it into the html-minifier call then.
+        return Ok(if options.minify {
+            mjmx_minifier::minify_with(&html, &options.minify_options)
+        } else if options.beautify {
+            mjmx_minifier::beautify(&html)
+        } else {
+            html
+        });
+    }
+
+    let syntaxes = template_syntaxes(options);
+    if options.sanitize_styles {
+        let sanitized =
+            mjmx_minifier::sanitize::sanitize(&html, &syntaxes, options.allow_mixed_syntax)
+                .map_err(|e| Diagnostic::error(e.to_string()))?;
+        let minified = mjmx_minifier::minify_with(&sanitized.content, &options.minify_options);
+        Ok(mjmx_minifier::sanitize::restore(
+            &minified, &sanitized, &syntaxes,
+        ))
+    } else if mjmx_minifier::sanitize::detect(&html, &syntaxes).any() {
+        Err(Diagnostic::error(
+            "template variables in CSS would be corrupted by CSS minification",
+        )
+        .with_help(
+            "enable sanitize_styles (CLI: --sanitize-styles) to mask template syntax \
+             across the minify pass and restore it after",
+        ))
     } else {
-        html
+        Ok(mjmx_minifier::minify_with(&html, &options.minify_options))
+    }
+}
+
+/// The [`Syntax`](mjmx_minifier::Syntax) pairs [`post_process`] recognizes: the
+/// caller's [`template_syntax`](RenderOptions::template_syntax) if set, else mjml's
+/// default `{{ }}` / `[[ ]]` pairs.
+fn template_syntaxes(options: &RenderOptions) -> Vec<mjmx_minifier::Syntax> {
+    match &options.template_syntax {
+        Some(pairs) => pairs
+            .iter()
+            .map(|(prefix, suffix)| mjmx_minifier::Syntax {
+                prefix: prefix.clone(),
+                suffix: suffix.clone(),
+            })
+            .collect(),
+        None => mjmx_minifier::default_syntaxes(),
     }
 }
 
