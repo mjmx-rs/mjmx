@@ -1,19 +1,32 @@
 //! Selector parsing, specificity, and matching against a [`Tree`].
 //!
-//! The supported grammar is deliberately the part of Selectors Level 3 that can
-//! be decided from a static document: type, universal, `#id`, `.class` and
-//! attribute simple selectors, joined by the four combinators (descendant, `>`,
-//! `+`, `~`).
+//! The supported grammar is the part of Selectors Level 3/4 that can be decided
+//! from a static document: type, universal, `#id`, `.class` and attribute simple
+//! selectors, joined by the four combinators (descendant, `>`, `+`, `~`), plus the
+//! **structural and functional pseudo-classes** — `:first-child`, `:last-child`,
+//! `:only-child`, `:nth-child`, `:nth-last-child`, the four `-of-type` variants,
+//! `:empty`, `:root`, and `:not`/`:is`/`:where`. These match real juice: an inline
+//! `<mj-style>` rule keyed on `li:nth-child(2)` or `td:not(.skip)` rewrites the same
+//! elements juice would (verified against juice's own output).
 //!
-//! Everything else — every pseudo-class and pseudo-element, functional or not —
-//! makes [`Selector::parse`] return `None`, and a selector that does not parse is
-//! **dropped**: not inlined, not preserved, not re-emitted. That is not a
-//! shortcut, it is the observed behaviour of mjml's pass for the state-dependent
-//! pseudos (`:hover`, `:active`, `:focus`, `:visited`, `:link`) and for
-//! `::before`/`::after`, whose declarations belong to a box that does not exist
-//! in the document and so has no `style` attribute to receive them. The
-//! remaining pseudos (`:nth-child`, `:not`, …) are decidable in principle and are
-//! dropped only because they are not implemented; see the crate docs.
+//! What still makes [`Selector::parse`] return `None` — and so **drops** the rule
+//! (not inlined, not preserved, not re-emitted):
+//!
+//! - the **state-dependent** pseudos (`:hover`, `:active`, `:focus`, `:visited`,
+//!   `:link`, …): their target box exists only in a browser state, so no static
+//!   `style` attribute can carry the declaration — juice drops them too;
+//! - any **unknown** pseudo, so an unrecognised construct is never mis-applied
+//!   (the crate only ever rewrites an element a selector definitely matched);
+//! - `::before`/`::after`, split off earlier by [`strip_pseudo_element`] and handled
+//!   by the pseudo-element pass, not here.
+//!
+//! **Deliberate divergence from the vendored juice**, toward correctness: the
+//! *list* form of `:not`/`:is`/`:where` (`:is(.a, .b)`) matches nothing in the old
+//! css-select juice ships, a bug fixed in later versions; mjmx implements the
+//! standard semantics (`:is`/`:where` match if any argument matches, `:not` if
+//! none does). The single-argument form — the realistic case — matches juice
+//! exactly. **Still unsupported:** CSS Nesting (nested qualified rules), dropped at
+//! the stylesheet level; see [`crate::css`].
 
 use crate::dom::Tree;
 
@@ -94,8 +107,52 @@ struct AttrTest {
     value: String,
 }
 
+/// The `An+B` argument of an `:nth-*` pseudo-class.
+///
+/// `odd` is `2n+1`, `even` is `2n`, a bare integer `B` is `0n+B`. A 1-based position
+/// `p` matches when there is a non-negative integer `k` with `p == a*k + b`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AnB {
+    a: i32,
+    b: i32,
+}
+
+impl AnB {
+    fn matches(self, position: i32) -> bool {
+        if self.a == 0 {
+            return position == self.b;
+        }
+        let diff = position - self.b;
+        diff % self.a == 0 && diff / self.a >= 0
+    }
+}
+
+/// A structural or functional pseudo-class. Everything here is decidable from the
+/// static tree; the state-dependent pseudos never reach this type (they drop the
+/// rule in [`Selector::parse`]).
+#[derive(Debug)]
+enum PseudoClass {
+    FirstChild,
+    LastChild,
+    OnlyChild,
+    NthChild(AnB),
+    NthLastChild(AnB),
+    FirstOfType,
+    LastOfType,
+    OnlyOfType,
+    NthOfType(AnB),
+    NthLastOfType(AnB),
+    Empty,
+    Root,
+    /// `:not(list)` — matches when *no* argument selector matches.
+    Not(Vec<Selector>),
+    /// `:is(list)` / `:where(list)` — matches when *any* argument selector matches.
+    /// The two differ only in specificity, which is folded in at parse time.
+    Is(Vec<Selector>),
+}
+
 /// A sequence of simple selectors with no combinator between them, e.g.
-/// `td.probe[data-x="1"]`.
+/// `td.probe[data-x="1"]:first-child`.
 #[derive(Debug, Default)]
 struct Compound {
     /// The lower-cased type selector; `None` for `*` or an implied universal.
@@ -103,6 +160,7 @@ struct Compound {
     id: Option<String>,
     classes: Vec<String>,
     attrs: Vec<AttrTest>,
+    pseudos: Vec<PseudoClass>,
 }
 
 /// A complete complex selector: `compounds[0] combinators[0] compounds[1] …`.
@@ -248,9 +306,15 @@ impl Selector {
                     compound.attrs.push(test);
                     specificity.1 += 1;
                 }
-                // Every pseudo-class and pseudo-element is unsupported; see the
-                // module docs for why dropping is the right answer here.
-                b':' => return None,
+                // A pseudo-class: structural/functional ones are parsed and matched,
+                // state-dependent and unknown ones drop the whole selector (`None`).
+                b':' => {
+                    let (pseudo, spec) = parse_pseudo(src, &mut i)?;
+                    compound.pseudos.push(pseudo);
+                    specificity.0 += spec.0;
+                    specificity.1 += spec.1;
+                    specificity.2 += spec.2;
+                }
                 b if is_ident_byte(b) => {
                     if compound.tag.is_some() || !compound.classes.is_empty() {
                         return None; // a type selector may only lead a compound
@@ -327,6 +391,37 @@ impl Compound {
             return false;
         }
         self.attrs.iter().all(|test| test.matches(element))
+            && self.pseudos.iter().all(|pseudo| pseudo.matches(tree, index))
+    }
+}
+
+impl PseudoClass {
+    /// Whether the element at `index` satisfies this pseudo-class.
+    fn matches(&self, tree: &Tree<'_>, index: usize) -> bool {
+        let element = &tree.elements[index];
+        let preceding = || tree.preceding_siblings(index).count();
+        let following = || tree.following_siblings(index).count();
+        let same_tag = |&s: &usize| tree.elements[s].tag == element.tag;
+        let preceding_of_type = || tree.preceding_siblings(index).filter(same_tag).count();
+        let following_of_type = || tree.following_siblings(index).filter(same_tag).count();
+        // A 1-based position from a 0-based count of siblings on one side.
+        let position = |count: usize| count as i32 + 1;
+        match self {
+            PseudoClass::FirstChild => preceding() == 0,
+            PseudoClass::LastChild => following() == 0,
+            PseudoClass::OnlyChild => preceding() == 0 && following() == 0,
+            PseudoClass::NthChild(anb) => anb.matches(position(preceding())),
+            PseudoClass::NthLastChild(anb) => anb.matches(position(following())),
+            PseudoClass::FirstOfType => preceding_of_type() == 0,
+            PseudoClass::LastOfType => following_of_type() == 0,
+            PseudoClass::OnlyOfType => preceding_of_type() == 0 && following_of_type() == 0,
+            PseudoClass::NthOfType(anb) => anb.matches(position(preceding_of_type())),
+            PseudoClass::NthLastOfType(anb) => anb.matches(position(following_of_type())),
+            PseudoClass::Empty => !element.has_content,
+            PseudoClass::Root => element.parent.is_none(),
+            PseudoClass::Not(list) => !list.iter().any(|s| s.matches(tree, index)),
+            PseudoClass::Is(list) => list.iter().any(|s| s.matches(tree, index)),
+        }
     }
 }
 
@@ -417,6 +512,146 @@ fn parse_attr_test(src: &str, i: &mut usize) -> Option<AttrTest> {
     Some(AttrTest { name, op, value })
 }
 
+/// Parse one pseudo-class at `*i` (the `:`), advancing past it. Returns the
+/// pseudo-class and its specificity contribution, or `None` to drop the selector —
+/// for a pseudo-element (`::…`), a state-dependent pseudo, an unknown name, or a
+/// wrong-arity spelling (`:nth-child` with no argument, `:first-child(…)`).
+fn parse_pseudo(src: &str, i: &mut usize) -> Option<(PseudoClass, Specificity)> {
+    let bytes = src.as_bytes();
+    debug_assert_eq!(bytes[*i], b':');
+    *i += 1;
+    // A second colon is a pseudo-element; `::before`/`::after` were split off
+    // upstream, and nothing else here has a `style` attribute to receive.
+    if *i < bytes.len() && bytes[*i] == b':' {
+        return None;
+    }
+    let name = read_ident(src, i).to_ascii_lowercase();
+    if name.is_empty() {
+        return None;
+    }
+    let arg = if *i < bytes.len() && bytes[*i] == b'(' {
+        Some(read_paren_arg(src, i)?)
+    } else {
+        None
+    };
+    // A structural pseudo counts as one class in specificity, like css-select.
+    let class_spec = (0, 1, 0);
+    let pseudo = match (name.as_str(), arg) {
+        ("first-child", None) => PseudoClass::FirstChild,
+        ("last-child", None) => PseudoClass::LastChild,
+        ("only-child", None) => PseudoClass::OnlyChild,
+        ("first-of-type", None) => PseudoClass::FirstOfType,
+        ("last-of-type", None) => PseudoClass::LastOfType,
+        ("only-of-type", None) => PseudoClass::OnlyOfType,
+        ("empty", None) => PseudoClass::Empty,
+        ("root", None) => PseudoClass::Root,
+        ("nth-child", Some(a)) => PseudoClass::NthChild(parse_anb(a)?),
+        ("nth-last-child", Some(a)) => PseudoClass::NthLastChild(parse_anb(a)?),
+        ("nth-of-type", Some(a)) => PseudoClass::NthOfType(parse_anb(a)?),
+        ("nth-last-of-type", Some(a)) => PseudoClass::NthLastOfType(parse_anb(a)?),
+        // `:not`/`:is` take the argument list's specificity; `:where` takes none.
+        ("not", Some(a)) => {
+            let (list, spec) = parse_selector_list(a)?;
+            return Some((PseudoClass::Not(list), spec));
+        }
+        ("is", Some(a)) => {
+            let (list, spec) = parse_selector_list(a)?;
+            return Some((PseudoClass::Is(list), spec));
+        }
+        ("where", Some(a)) => {
+            let (list, _) = parse_selector_list(a)?;
+            return Some((PseudoClass::Is(list), (0, 0, 0)));
+        }
+        // `:hover`/`:focus`/… (state-dependent), an unknown name, or wrong arity.
+        _ => return None,
+    };
+    Some((pseudo, class_spec))
+}
+
+/// Read a balanced `(…)` argument at `*i` (the `(`), advancing past the `)`. Commas,
+/// brackets and quotes inside are the argument's own; returns the trimmed inner text,
+/// or `None` if the parentheses are unbalanced.
+fn read_paren_arg<'a>(src: &'a str, i: &mut usize) -> Option<&'a str> {
+    let bytes = src.as_bytes();
+    debug_assert_eq!(bytes[*i], b'(');
+    let start = *i + 1;
+    let mut depth = 1usize;
+    let mut quote: Option<u8> = None;
+    let mut j = start;
+    while j < bytes.len() {
+        let b = bytes[j];
+        match quote {
+            Some(_) if b == b'\\' => j += 1,
+            Some(q) if b == q => quote = None,
+            Some(_) => {}
+            None => match b {
+                b'"' | b'\'' => quote = Some(b),
+                b'(' | b'[' => depth += 1,
+                b')' | b']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            },
+        }
+        j += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    let arg = src[start..j].trim();
+    *i = j + 1; // past the closing ')'
+    Some(arg)
+}
+
+/// Parse an `An+B` argument: `odd`, `even`, a bare integer `B` (`0n+B`), or the full
+/// `An+B` / `An-B` / `n` / `-n+B` forms.
+fn parse_anb(src: &str) -> Option<AnB> {
+    let s = src.trim().to_ascii_lowercase();
+    match s.as_str() {
+        "odd" => return Some(AnB { a: 2, b: 1 }),
+        "even" => return Some(AnB { a: 2, b: 0 }),
+        _ => {}
+    }
+    // No `n`: a plain `B`.
+    let Some((a_part, b_part)) = s.split_once('n') else {
+        return s.parse::<i32>().ok().map(|b| AnB { a: 0, b });
+    };
+    let a = match a_part.trim() {
+        "" | "+" => 1,
+        "-" => -1,
+        other => other.parse::<i32>().ok()?,
+    };
+    let b_part = b_part.trim();
+    let b = if b_part.is_empty() {
+        0
+    } else {
+        // The offset after `n` carries an explicit sign, e.g. `2n + 1` or `2n-1`.
+        let (sign, digits) = b_part
+            .strip_prefix('+')
+            .map(|r| (1, r))
+            .or_else(|| b_part.strip_prefix('-').map(|r| (-1, r)))?;
+        sign * digits.trim().parse::<i32>().ok()?
+    };
+    Some(AnB { a, b })
+}
+
+/// Parse a comma-separated selector list (a `:not`/`:is`/`:where` argument) into its
+/// selectors and their greatest specificity. `None` if any argument fails to parse,
+/// so an unknown inner selector drops the whole rule rather than mis-matching.
+fn parse_selector_list(arg: &str) -> Option<(Vec<Selector>, Specificity)> {
+    let mut selectors = Vec::new();
+    let mut max = (0, 0, 0);
+    for part in split_list(arg) {
+        let selector = Selector::parse(part)?;
+        max = max.max(selector.specificity);
+        selectors.push(selector);
+    }
+    (!selectors.is_empty()).then_some((selectors, max))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,17 +672,143 @@ mod tests {
     #[test]
     fn unsupported_selectors_are_dropped() {
         for src in [
+            // State-dependent pseudos: juice cannot inline these either.
             ".a:hover",
             "a:visited",
+            "a:focus",
+            "input:checked",
+            // A pseudo-element, and an unknown pseudo.
             ".a::before",
-            ".a:before",
-            "li:nth-child(2)",
-            ":not(.a)",
+            "p::first-line",
+            ".a:fictional",
+            // A wrong-arity structural pseudo.
+            ":nth-child",
+            ":first-child(2)",
+            // An unparseable argument drops the rule rather than mis-matching.
+            ":nth-child(banana)",
+            ":not(:hover)",
             "> p",
             "",
         ] {
             assert!(Selector::parse(src).is_none(), "{src} should not parse");
         }
+    }
+
+    #[test]
+    fn structural_and_functional_pseudos_parse() {
+        for src in [
+            "li:first-child",
+            "li:last-child",
+            "li:only-child",
+            "li:nth-child(2n+1)",
+            "li:nth-child(odd)",
+            "li:nth-child(3)",
+            "li:nth-last-child(1)",
+            "p:first-of-type",
+            "p:nth-of-type(2)",
+            "td:empty",
+            ":root",
+            "li:not(.skip)",
+            "li:is(.a)",
+            "li:where(.a)",
+        ] {
+            assert!(Selector::parse(src).is_some(), "{src} should parse");
+        }
+    }
+
+    #[test]
+    fn anb_matches_positions() {
+        let odd = parse_anb("odd").unwrap();
+        assert!(odd.matches(1) && odd.matches(3) && !odd.matches(2));
+        let even = parse_anb("even").unwrap();
+        assert!(even.matches(2) && !even.matches(1));
+        let two_n_plus_one = parse_anb("2n+1").unwrap();
+        assert!(two_n_plus_one.matches(1) && two_n_plus_one.matches(3));
+        let bare = parse_anb("3").unwrap();
+        assert!(bare.matches(3) && !bare.matches(2));
+        let every = parse_anb("n").unwrap();
+        assert!(every.matches(1) && every.matches(9));
+        let minus = parse_anb("-n+2").unwrap();
+        assert!(minus.matches(1) && minus.matches(2) && !minus.matches(3));
+        assert!(parse_anb("banana").is_none());
+    }
+
+    /// Every expectation here was cross-checked against real juice output.
+    #[test]
+    fn pseudo_classes_match_like_juice() {
+        // <ul> with four <li>, the second carrying class="skip".
+        let tree = crate::dom::build(
+            "<ul><li>a</li><li class=\"skip\">b</li><li>c</li><li>d</li></ul>",
+        );
+        let li: Vec<usize> = tree
+            .elements
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.tag == "li")
+            .map(|(i, _)| i)
+            .collect();
+        let m = |src: &str, index: usize| Selector::parse(src).unwrap().matches(&tree, index);
+
+        // :first-child / :last-child / :nth-child / :nth-last-child.
+        assert!(m("li:first-child", li[0]) && !m("li:first-child", li[1]));
+        assert!(m("li:last-child", li[3]) && !m("li:last-child", li[0]));
+        assert!(m("li:nth-child(odd)", li[0]) && m("li:nth-child(odd)", li[2]));
+        assert!(!m("li:nth-child(odd)", li[1]));
+        assert!(m("li:nth-child(3)", li[2]) && !m("li:nth-child(3)", li[1]));
+        assert!(m("li:nth-last-child(1)", li[3]) && !m("li:nth-last-child(1)", li[0]));
+
+        // :not — matches every li without .skip (juice: a, c, d).
+        assert!(m("li:not(.skip)", li[0]) && !m("li:not(.skip)", li[1]));
+        assert!(m("li:not(.skip)", li[2]) && m("li:not(.skip)", li[3]));
+
+        // :is / :where — single-argument form matches like juice.
+        assert!(m("li:is(.skip)", li[1]) && !m("li:is(.skip)", li[0]));
+        assert!(m("li:where(.skip)", li[1]));
+    }
+
+    #[test]
+    fn only_child_and_of_type_and_empty_and_root() {
+        let tree = crate::dom::build(
+            "<div><span>s</span><p>a</p><p>b</p></div><ul><li>solo</li></ul>\
+             <table><tr><td></td><td> </td><td>x</td></tr></table>",
+        );
+        let position = |tag: &str| tree.elements.iter().position(|e| e.tag == tag).unwrap();
+        let m = |src: &str, index: usize| Selector::parse(src).unwrap().matches(&tree, index);
+
+        // :only-child — the lone <li>.
+        assert!(m("li:only-child", position("li")));
+
+        // :first-of-type — the first <p>, with a <span> before it (juice-verified).
+        let first_p = position("p");
+        assert!(m("p:first-of-type", first_p));
+        assert!(!m("span:first-of-type", first_p)); // wrong type
+
+        // :nth-of-type(2) — the second <p>.
+        let second_p = tree
+            .elements
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.tag == "p")
+            .nth(1)
+            .unwrap()
+            .0;
+        assert!(m("p:nth-of-type(2)", second_p));
+
+        // :empty — an empty <td>, but not one holding whitespace or a child.
+        let tds: Vec<usize> = tree
+            .elements
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.tag == "td")
+            .map(|(i, _)| i)
+            .collect();
+        assert!(m("td:empty", tds[0]), "<td></td> is empty");
+        assert!(!m("td:empty", tds[1]), "<td> </td> has whitespace text");
+        assert!(!m("td:empty", tds[2]), "<td>x</td> has text");
+
+        // :root — the top-level element (no parent).
+        assert!(m(":root", position("div")));
+        assert!(!m(":root", first_p));
     }
 
     #[test]

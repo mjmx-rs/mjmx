@@ -128,6 +128,29 @@ mod tests {
     }
 
     #[test]
+    fn structural_pseudo_classes_inline_like_juice() {
+        // Verified against real juice: `li:nth-child(2)` rewrites the 2nd <li> and
+        // `li:not(.skip)` rewrites the others — matching, not dropping, the rules.
+        let out = inline(
+            &document(
+                "<ul><li>a</li><li class=\"skip\">b</li><li>c</li></ul>",
+            ),
+            "li:nth-child(2){color:red}li:not(.skip){font-weight:bold}",
+        );
+        // 2nd <li> (the .skip one) gets color:red; the other two get font-weight.
+        assert!(
+            out.contains(r#"<li class="skip" style="color: red;">b</li>"#),
+            "{out}"
+        );
+        assert_eq!(out.matches("font-weight: bold;").count(), 2, "{out}");
+        // The .skip <li> is excluded from :not, so it has no font-weight.
+        assert!(
+            !out.contains(r#"style="color: red; font-weight"#),
+            "{out}"
+        );
+    }
+
+    #[test]
     fn resolves_css_variables_like_juice() {
         // Verified against mjml 4.18/5.4 output: `--brand` is dropped, `var(--brand)`
         // resolves from the same element, `var(--missing, #00ff00)` takes its fallback,

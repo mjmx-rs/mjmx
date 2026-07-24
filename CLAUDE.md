@@ -206,8 +206,19 @@ runs juice first; the two orders agree only because juice never sees inside `<!-
 recorded offset). The refusal lives in codegen's `sourcemap_refusal`, after semantic
 analysis, because it is a property of the document rather than of the options.
 
-Known gap: functional/structural pseudo-classes (`:nth-child`, `:not`, …) and CSS Nesting
-are dropped rather than mis-applied.
+**Structural/functional pseudo-classes are supported** (2026-07-24): an inline `<mj-style>`
+rule keyed on `:first-child`/`:last-child`/`:only-child`/`:nth-child`/`:nth-last-child`, the
+four `-of-type` variants, `:empty`, `:root`, or `:not`/`:is`/`:where` inlines onto the same
+elements real juice would (verified against juice output; `mjmx-css-inline/src/selector.rs`).
+The `Tree` gained a `has_content` flag (for `:empty`, whitespace counts as content, per
+Level 3) and `following_siblings` (for the `-last-` / `:last-child` family). **Still
+dropped** (parse returns `None`, rule vanishes — never mis-applied): state-dependent pseudos
+(`:hover`/`:active`/`:focus`/`:visited`/`:link`), any unknown pseudo, and `::before`/`::after`
+(handled by the pseudo-element pass). **Deliberate divergence toward correctness:** the
+*list* form `:is(.a, .b)` matches nothing in the old css-select juice ships (a fixed bug);
+mjmx does the standard thing (`:is`/`:where` = any matches, `:not` = none). Single-argument
+`:not`/`:is`/`:where` — the realistic case — matches juice exactly. **Known gap remaining:**
+CSS Nesting (nested qualified rules), dropped at the stylesheet level (`css.rs`).
 
 ## `<mj-html-attributes>` (`mjmx-css-inline::apply_html_attributes`, done)
 

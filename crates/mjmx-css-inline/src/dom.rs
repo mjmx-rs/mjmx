@@ -46,6 +46,11 @@ pub(crate) struct Element<'a> {
     /// spliced. `None` for a void/self-closing element or one never closed (no inner
     /// content to append to).
     pub(crate) content_end: Option<usize>,
+    /// Whether the element has any child content — a child element or any text,
+    /// including a run of whitespace. This is exactly `:empty`'s negation: `<td></td>`
+    /// is empty, but `<td> </td>` and `<td><span></span></td>` are not, matching CSS
+    /// Selectors Level 3 (verified against juice).
+    pub(crate) has_content: bool,
 }
 
 impl<'a> Element<'a> {
@@ -100,6 +105,10 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                 let prev_sibling = frame.1;
                 let index = elements.len();
                 frame.1 = Some(index);
+                // A child element is content for its parent's `:empty` test.
+                if let Some(p) = parent {
+                    elements[p].has_content = true;
+                }
 
                 let tag_lower = tag.to_ascii_lowercase();
                 let inlinable =
@@ -126,6 +135,7 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                     // Inner content starts just past the `>` of the start tag.
                     content_start: span.end,
                     content_end: None,
+                    has_content: false,
                 });
                 if opens_scope {
                     stack.push((Some(index), None));
@@ -145,8 +155,17 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                     stack.truncate(frame);
                 }
             }
-            // Text, comments and the doctype contribute no elements.
-            Event::Text { .. } | Event::Comment { .. } | Event::DocType { .. } => {}
+            // Text is not an element, but any non-empty run counts as content for the
+            // enclosing element's `:empty` test (whitespace included, per Level 3).
+            Event::Text { text, .. } => {
+                if !text.is_empty()
+                    && let Some(open) = stack.last().and_then(|frame| frame.0)
+                {
+                    elements[open].has_content = true;
+                }
+            }
+            // Comments and the doctype contribute no elements and no `:empty` content.
+            Event::Comment { .. } | Event::DocType { .. } => {}
         }
     }
 
@@ -164,6 +183,21 @@ impl<'a> Tree<'a> {
         std::iter::successors(self.elements[index].prev_sibling, |&i| {
             self.elements[i].prev_sibling
         })
+    }
+
+    /// The immediately following element sibling: the element whose `prev_sibling`
+    /// points back here. Only `prev_sibling` is stored, so this is recovered by a
+    /// scan — there is exactly one such element (or none, at the end of the list).
+    fn next_sibling(&self, index: usize) -> Option<usize> {
+        self.elements
+            .iter()
+            .position(|e| e.prev_sibling == Some(index))
+    }
+
+    /// Iterate an element's following element siblings, nearest first. Needed for the
+    /// `:last-child` / `:nth-last-child` family, which count from the end.
+    pub(crate) fn following_siblings(&self, index: usize) -> impl Iterator<Item = usize> + '_ {
+        std::iter::successors(self.next_sibling(index), move |&i| self.next_sibling(i))
     }
 }
 
