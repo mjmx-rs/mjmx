@@ -381,11 +381,17 @@ upstream's shape (each conditional opened *and* closed); `merge_outlook_conditio
   the remaining refusals are structural (`extraCss`/`applyStyleTags`/… — the shape of
   mjmx's split-bucket pass, not settings) or unreachable-in-mjml (`preserveMediaQueries`/…),
   each still erroring with its reason rather than silently ignored.
-- **Known inliner divergence surfaced while implementing `resolveCSSVariables`, not yet
-  fixed:** mjmx mirrors the `TABLE_ATTRIBUTES` set (`background-color`→`bgcolor`, etc.)
-  onto `<table>` **only**, but real juice (`applyAttributesTableElements`) also mirrors them
-  onto `<td>`/`<th>`. No existing fixture exercises an inline rule that sets one of those on
-  a cell, so it never surfaced in the goldens. Orthogonal to var resolution; left as-is.
+- **Inliner table-element mirror divergence — FIXED (2026-07-24).** mjmx used to mirror
+  the `TABLE_ATTRIBUTES` set (`background-color`→`bgcolor`, etc.) onto `<table>` **only**;
+  real juice (`applyAttributesTableElements`) mirrors onto its whole `tableElements` set.
+  `apply.rs` now gates on `is_table_element` (`table`/`th`/`tr`/`td`/`caption`/`colgroup`/
+  `col`/`thead`/`tbody`/`tfoot` — juice's list verbatim) and skips a gradient
+  `background-image` (juice's `/(linear|radial)-gradient\(/i` guard: no attribute spelling,
+  declaration kept in `style`). Verified against real juice output; unit tests
+  `table_attributes_mirror_onto_cells_like_juice` + `gradient_background_is_not_mirrored`.
+  V4 goldens unmoved (no fixture sets one of these on a cell). Dimension mirror
+  (`width`/`height` → `table`/`td`/`th`/`img`) already matched juice's `widthElements`/
+  `heightElements` — no gap there.
 - **Won't port:** `skeleton`, `preprocessors`, `presets` — JS function / `require()` semantics.
   Also `mjmlConfigPath` / `useMjmlConfigOptions` (was Tier 3): their *primary* purpose is
   loading **custom components** from a `.mjmlconfig` via JS `require()`, which a Rust

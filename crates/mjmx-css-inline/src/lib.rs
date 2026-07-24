@@ -320,6 +320,36 @@ mod tests {
     }
 
     #[test]
+    fn table_attributes_mirror_onto_cells_like_juice() {
+        // juice's `applyAttributesTableElements` mirrors onto its whole
+        // `tableElements` set, not `<table>` alone — a `<td>`/`<th>` gets the same
+        // `bgcolor`/`align`/`valign`/`background`. Verified against real juice.
+        let out = inline(
+            &document(
+                "<table><tr><td class=\"c\">c</td><th class=\"c\">h</th></tr></table>",
+            ),
+            ".c{background-color:#00ff00;text-align:center}",
+        );
+        assert_eq!(out.matches(r##"bgcolor="#00ff00""##).count(), 2, "{out}");
+        assert_eq!(out.matches(r#"align="center""#).count(), 2, "{out}");
+    }
+
+    #[test]
+    fn gradient_background_is_not_mirrored() {
+        // A gradient has no `background` attribute spelling: juice keeps the
+        // declaration in `style` but skips the mirror. url() still mirrors.
+        let out = inline(
+            &document(
+                "<table><tr><td class=\"g\">g</td><td class=\"u\">u</td></tr></table>",
+            ),
+            ".g{background-image:linear-gradient(#fff,#000)}.u{background-image:url(a.png)}",
+        );
+        assert!(!out.contains("background=\"linear"), "{out}");
+        assert!(out.contains("background-image: linear-gradient(#fff,#000);"), "{out}");
+        assert!(out.contains(r#"background="a.png""#), "{out}");
+    }
+
+    #[test]
     fn handlebars_holding_markup_is_neither_parsed_nor_rewritten() {
         // Without masking the tokenizer reads a real `<div class="a">` inside the
         // string literal, and the inliner splices a `style` attribute into the

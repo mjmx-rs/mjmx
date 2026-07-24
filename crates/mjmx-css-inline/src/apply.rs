@@ -29,8 +29,8 @@ use crate::dom::{Element, Tree};
 use crate::options::InlineOptions;
 
 /// `style` declarations that also have to be mirrored onto an HTML attribute of
-/// a `<table>`, in the order the attributes are appended. The declaration is
-/// *kept* as well — the mirror is additive.
+/// a table element (see [`is_table_element`]), in the order the attributes are
+/// appended. The declaration is *kept* as well — the mirror is additive.
 const TABLE_ATTRIBUTES: &[(&str, &str)] = &[
     ("background-color", "bgcolor"),
     ("background-image", "background"),
@@ -43,6 +43,24 @@ const TABLE_ATTRIBUTES: &[(&str, &str)] = &[
 /// ignores the CSS.
 fn takes_dimension_attributes(tag: &str) -> bool {
     matches!(tag, "table" | "td" | "th" | "img")
+}
+
+/// The elements juice's `applyAttributesTableElements` mirrors [`TABLE_ATTRIBUTES`]
+/// onto — juice's `tableElements` set, not `<table>` alone. Tags reach here
+/// already lower-cased by the tokenizer, so no fold is needed.
+fn is_table_element(tag: &str) -> bool {
+    matches!(
+        tag,
+        "table" | "th" | "tr" | "td" | "caption" | "colgroup" | "col" | "thead" | "tbody" | "tfoot"
+    )
+}
+
+/// A value juice will not mirror onto a presentational attribute: a CSS gradient
+/// has no attribute spelling, so juice's `/(linear|radial)-gradient\(/i` guard
+/// drops the mirror while keeping the `style` declaration.
+fn is_gradient(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    lower.contains("linear-gradient(") || lower.contains("radial-gradient(")
 }
 
 /// One splice into the document: replace `range` with `text`.
@@ -349,9 +367,14 @@ fn mirrored_attributes(
             }
         }
     }
-    if options.apply_attributes_table_elements && element.tag == "table" {
+    if options.apply_attributes_table_elements && is_table_element(&element.tag) {
         for (property, attribute) in TABLE_ATTRIBUTES {
             if let Some(value) = lookup(property) {
+                // juice refuses a gradient: it has no attribute spelling, so the
+                // mirror is skipped (the declaration is still kept in `style`).
+                if is_gradient(value) {
+                    continue;
+                }
                 out.push((unwrap_url(value).to_owned(), *attribute));
             }
         }
