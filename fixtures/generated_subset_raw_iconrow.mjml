@@ -1,0 +1,24 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body width="600px" background-color="#f4f4f4">
+    <mj-section background-color="#ffffff" padding="16px 16px 16px 16px">
+      <mj-column padding="0px 0px 0px 0px">
+        <mj-text font-size="14px" font-weight="400" line-height="20px" color="#333333" align="center" padding="0px 0px 12px 0px">Follow along</mj-text>
+        <mj-raw><table role="presentation" align="center" cellpadding="0" cellspacing="0" style="padding:0px 0px 8px 0px;"><tr><td style="padding:0 6px;"><a href="https://example.com/a" target="_blank"><img src="images/icon-a.png" width="24" height="24" alt="A" style="display:block;border:0;" /></a></td><td style="padding:0 6px;"><a href="https://example.com/b" target="_blank"><img src="images/icon-b.png" width="24" height="24" alt="B" style="display:block;border:0;" /></a></td><td style="padding:0 6px;"><img src="images/icon-c.png" width="24" height="24" alt="" style="display:block;border:0;" /></td></tr></table></mj-raw>
+        <mj-divider border-color="#e2e2e2" border-width="1px" padding="0px 0px 0px 0px" />
+      </mj-column>
+    </mj-section>
+    <mj-section background-color="#ffffff" padding="0px 16px 16px 16px">
+      <mj-column width="50%" vertical-align="top" padding="0px 0px 0px 0px">
+        <mj-raw><table role="presentation" align="left" cellpadding="0" cellspacing="0"><tr><td style="padding:0 6px;"><img src="images/icon-d.png" width="16" height="16" alt="D" style="display:block;border:0;" /></td></tr></table></mj-raw>
+      </mj-column>
+      <mj-column width="50%" vertical-align="top" padding="0px 0px 0px 0px">
+        <mj-text font-size="12px" font-weight="400" line-height="16px" color="#888888" align="left" padding="0px 0px 0px 0px">Raw table beside a text block.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

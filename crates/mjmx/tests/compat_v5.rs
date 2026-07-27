@@ -297,3 +297,62 @@ fn inline_pseudo_elements_thread_through_render_options() {
         "opt-in synthesizes the pseudo: {on}"
     );
 }
+
+/// A fractional column width, so the ghost cell's pixel value is not a whole number:
+/// 58.33% and 41.67% of a 552px content box are 321.9816px and 230.0184px.
+const FRACTIONAL_WIDTHS: &str = r#"<mjml><mj-body><mj-section padding="24px"><mj-column width="58.33%"><mj-text>a</mj-text></mj-column><mj-column width="41.67%"><mj-text>b</mj-text></mj-column></mj-section></mj-body></mjml>"#;
+
+#[test]
+fn v5_rounds_the_outlook_ghost_width_to_a_whole_pixel() {
+    // mjml 5.4.0 wraps `getWidthAsPixel` in `normalizePxValue` (`Math.round`); 4.18.0
+    // emits the raw quotient. Read off both releases' output.
+    let v5 = render(FRACTIONAL_WIDTHS, MjmlCompat::V5);
+    assert!(v5.contains("width:322px;"), "{v5}");
+    assert!(v5.contains("width:230px;"), "{v5}");
+    assert!(
+        !v5.contains("321.9816"),
+        "no unrounded width survives: {v5}"
+    );
+    assert!(
+        !v5.contains("230.0184"),
+        "no unrounded width survives: {v5}"
+    );
+
+    let v4 = render(FRACTIONAL_WIDTHS, MjmlCompat::V4);
+    assert!(v4.contains("width:321.9816px;"), "{v4}");
+    assert!(v4.contains("width:230.0184px;"), "{v4}");
+}
+
+#[test]
+fn v5_rounds_only_the_emitted_width_not_the_child_container() {
+    // mjml 5.4.0's `getChildContext` recomputes from `parsedWidth` *without*
+    // `normalizePxValue`, so children are laid out against the unrounded width in both
+    // releases — the rounding must not leak past the ghost cell.
+    //
+    // An `mj-image` with no width of its own reports the container width it inherited:
+    // 321.9816 - 50 (its own 10px/25px padding) floors to 271, and 230.0184 - 50 to 180.
+    // Both `mjml@4.18.0` and `mjml@5.4.0` emit exactly those two, despite disagreeing on
+    // the ghost width above.
+    let images = r#"<mjml><mj-body><mj-section padding="24px"><mj-column width="58.33%"><mj-image src="a.png" /></mj-column><mj-column width="41.67%"><mj-image src="b.png" /></mj-column></mj-section></mj-body></mjml>"#;
+    let v5 = render(images, MjmlCompat::V5);
+    let v4 = render(images, MjmlCompat::V4);
+
+    for html in [&v4, &v5] {
+        assert!(
+            html.contains(r#"width="271""#),
+            "child width unrounded: {html}"
+        );
+        assert!(
+            html.contains(r#"width="180""#),
+            "child width unrounded: {html}"
+        );
+    }
+
+    // ...while the ghost cells still differ, which is the whole point.
+    assert!(v5.contains("width:322px;"), "{v5}");
+    assert!(v4.contains("width:321.9816px;"), "{v4}");
+
+    // The rounding must not have reached the column div's own percentage class either.
+    assert!(v5.contains("mj-column-per-58-33"), "{v5}");
+    assert!(v4.contains("mj-column-per-58-33"), "{v4}");
+}

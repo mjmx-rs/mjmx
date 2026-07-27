@@ -27,20 +27,26 @@ fn assert_golden_v5(name: &str, mjml: &str, golden: &str) {
 
 macro_rules! golden_v5 {
     ($test:ident, $name:literal) => {
+        golden_v5!($test, $name, $name);
+    };
+    // Separate source and reference names, for a fixture whose `.mjml` is shared
+    // with the V4 gate: one source, two references (`x.mjml` → `x.html` under V4,
+    // `x_v5.html` here), so the two modes can never drift on a copied source.
+    ($test:ident, $mjml:literal, $html:literal) => {
         #[test]
         fn $test() {
             assert_golden_v5(
-                $name,
+                $mjml,
                 include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/",
-                    $name,
+                    $mjml,
                     ".mjml"
                 )),
                 include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../fixtures/",
-                    $name,
+                    $html,
                     ".html"
                 )),
             );
@@ -56,3 +62,23 @@ golden_v5!(section_gutter_pct, "section_gutter_pct");
 golden_v5!(section_gutter_rtl, "section_gutter_rtl");
 golden_v5!(section_gutter_px_widths, "section_gutter_px_widths");
 golden_v5!(group_gutter, "group_gutter");
+
+// The MJML subset emitted by design-to-email generators: explicit padding on every
+// block (a generator means "no padding", not "use mjml's default"), %-width columns
+// from fill sizing, and `mj-raw` tables for rows mj-column cannot nest. Sources are
+// shared with the V4 gate in `golden.rs`; only the reference differs.
+golden_v5!(
+    generated_subset_doc,
+    "generated_subset_doc",
+    "generated_subset_doc_v5"
+);
+golden_v5!(
+    generated_subset_blocks,
+    "generated_subset_blocks",
+    "generated_subset_blocks_v5"
+);
+golden_v5!(
+    generated_subset_raw_iconrow,
+    "generated_subset_raw_iconrow",
+    "generated_subset_raw_iconrow_v5"
+);

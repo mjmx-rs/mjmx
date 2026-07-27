@@ -120,7 +120,7 @@ impl<'a> Render<'a> for Group<'a> {
             // width resolved against the *group* box.
             let raw = ctx.semantic.attribute(col, "width", None);
             let width = ColumnWidth::resolve(raw, num);
-            let col_px = width.as_pixel(f64::from(group_width));
+            let col_px = width.as_pixel_emitted(f64::from(group_width), ctx.options.compat);
             let va = ctx
                 .semantic
                 .attribute(col, "vertical-align", Some("top"))

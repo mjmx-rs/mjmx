@@ -742,6 +742,41 @@ fn include_matches_mjml_reference() {
     }
 }
 
+// The MJML subset emitted by design-to-email generators (Figma Auto Layout → MJML
+// and friends): machine-written markup rather than hand-written, so it leans on
+// constructs a human rarely writes — explicit `padding` on every block (a generator
+// means "no padding", not "inherit mjml's non-zero default"), fractional %-width
+// columns from fill sizing, and `mj-raw` tables for icon rows, since `mj-column`
+// cannot nest another column. The same `.mjml` sources are pinned under V5 in
+// `golden_v5.rs`.
+
+#[test]
+fn generated_subset_doc_matches_mjml_reference() {
+    assert_golden(
+        "generated_subset_doc",
+        fixture!("generated_subset_doc.mjml"),
+        fixture!("generated_subset_doc.html"),
+    );
+}
+
+#[test]
+fn generated_subset_blocks_matches_mjml_reference() {
+    assert_golden(
+        "generated_subset_blocks",
+        fixture!("generated_subset_blocks.mjml"),
+        fixture!("generated_subset_blocks.html"),
+    );
+}
+
+#[test]
+fn generated_subset_raw_iconrow_matches_mjml_reference() {
+    assert_golden(
+        "generated_subset_raw_iconrow",
+        fixture!("generated_subset_raw_iconrow.mjml"),
+        fixture!("generated_subset_raw_iconrow.html"),
+    );
+}
+
 #[test]
 fn comparator_rejects_tampered_golden() {
     // The real golden must compare equal to itself (sanity), but the comparator

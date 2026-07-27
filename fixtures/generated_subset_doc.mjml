@@ -1,0 +1,24 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body width="600px" background-color="#f4f4f4">
+    <mj-section background-color="#ffffff" padding="24px 24px 16px 24px">
+      <mj-column padding="0px 0px 0px 0px">
+        <mj-image src="images/hero.png" width="552px" alt="Product hero" href="https://example.com/launch" align="center" padding="0px 0px 16px 0px" />
+        <mj-text font-family="Inter, Arial, sans-serif" font-size="28px" font-weight="700" line-height="34px" color="#111111" align="left" padding="0px 0px 8px 0px">Q3 &amp; beyond</mj-text>
+        <mj-text font-family="Inter, Arial, sans-serif" font-size="15px" font-weight="400" line-height="24px" color="#4a4a4a" align="left" padding="0px 0px 0px 0px">Two lines of copy,<br/>split exactly where the design broke them.</mj-text>
+      </mj-column>
+    </mj-section>
+    <mj-section background-color="#ffffff" padding="0px 24px 24px 24px">
+      <mj-column width="58.33%" background-color="#fafafa" vertical-align="top" padding="0px 0px 0px 0px">
+        <mj-text font-family="Inter, Arial, sans-serif" font-size="13px" font-weight="600" line-height="18px" color="#6b6b6b" align="left" padding="12px 12px 12px 12px">A wider column, sized from an Auto Layout fill.</mj-text>
+      </mj-column>
+      <mj-column width="41.67%" vertical-align="middle" padding="0px 0px 0px 0px">
+        <mj-button href="https://example.com/read" background-color="#2b6cb0" color="#ffffff" font-size="15px" font-weight="600" border-radius="6px" align="center" padding="0px 0px 0px 0px" inner-padding="12px 20px 12px 20px">Read the update</mj-button>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

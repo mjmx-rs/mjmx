@@ -67,7 +67,7 @@ Phase 3 — surfaces: M11 wasm + napi · M12 language-server · M13 dev-server.
 All of the above is **complete**, plus css-class, HTTP include loader (opt-in), v3→v4
 migrate, `mjmx lsp`, incremental LSP sync, wasm-opt, CSS inlining, and
 `<mj-html-attributes>` (see below). Rendering parity has **no known divergences** from
-mjml 4.18.0 across 76 fixtures / 78 golden tests — a 2026-07-22 audit found three real
+mjml 4.18.0 across 79 fixtures / 81 golden tests — a 2026-07-22 audit found three real
 divergences (mj-raw dropped/mis-wrapped in scaffolding parents; `<mj-html-attributes>`
 silently unimplemented; a suspected bare-attribute divergence), and all three are now
 fixed or resolved with a real-mjml golden fixture each (`mj_raw_in_{column,group,section,
@@ -80,6 +80,20 @@ a bare attribute as `""` where mjmx stores it as absent, which could only diverg
 attribute whose *value* is echoed verbatim into output under a bare valueless spelling —
 no such construct occurs in real MJML.) **This paragraph describes the V4 path**, which
 is now frozen — see the mjml-version section directly below.
+
+**Generated-MJML fixtures** (`generated_subset_{doc,blocks,raw_iconrow}`, added
+2026-07-27). Every other fixture is hand-written MJML; these reproduce what a
+**design-to-email generator** emits (the `figma-email` plugin's `docToMjml` is the model),
+which leans on constructs a human rarely writes: explicit `padding` on *every* block (a
+generator means "no padding", not "inherit mjml's non-zero default"), fractional %-width
+columns from fill sizing, and `mj-raw` `<table>`s for icon rows since `mj-column` cannot
+nest a column. One `.mjml` source each, two references — `<name>.html` from real
+`mjml@4.18.0` (V4 gate, `golden.rs`) and `<name>_v5.html` from real `mjml@5.4.0` (V5 gate,
+`golden_v5.rs`, via the three-arg `golden_v5!` arm so the source is never copied). They
+paid for themselves on the first run by catching the ghost-width rounding divergence
+recorded below. Regenerate with the pinned bench packages
+(`cd benches/perf && npm install`, then render with `{ beautify: true }`) — **never**
+hand-edit a golden.
 
 ## mjml version compat (`MjmlCompat`) — 5.4.0 default, 4.18.0 opt-in
 
@@ -129,6 +143,17 @@ What V5 changes, by area (each `is_v5()`-gated; V4 unchanged):
   selectors for the new Outlook (`input.mj-accordion-checkbox` →
   `.mj-accordion-checkbox[type="checkbox"]`, `:checked` rules drop `input`; `.moz-text-html`
   fallbacks unchanged), via a `HEAD_CSS_V5` const.
+- **Outlook ghost width rounding** (`components/column.rs`, found 2026-07-27): mjml 5.4.0
+  wraps `getWidthAsPixel` in `normalizePxValue` (`Math.round`), 4.18.0 does not — so
+  `<mj-column width="58.33%">` in a 552px box emits `width:322px` in the ghost `<td>`
+  under V5 and `width:321.9816px` under V4. `ColumnWidth::as_pixel_emitted` (compat-aware)
+  is used at the three emission sites in `section.rs`/`group.rs`; plain `as_pixel` stays
+  **unrounded** because 5.4.0's `getChildContext` recomputes from `parsedWidth` without
+  the rounding — a child is laid out against the unrounded width in *both* releases
+  (verified: an `mj-image` under those columns emits `width="271"`/`"180"` in 4.18.0 and
+  5.4.0 alike). Folding the rounding into `as_pixel` would therefore be wrong. Found by
+  the `generated_subset_*` fixtures below — no prior fixture had a fractional column
+  width, so this diverged silently.
 - **Section `gutter`** (`components/{column,section,group}.rs`): the mjml 5 column-layout
   rework, **shipped** (was deferred). `<mj-section gutter>` threads `gutter` + the
   section's `direction` to each column (mjml's `context.gutter`/`direction`); a column

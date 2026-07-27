@@ -3,7 +3,7 @@
 use mjmx_ast::Element;
 
 use crate::components::css_class::{append_css_class, css_class};
-use crate::context::RenderContext;
+use crate::context::{MjmlCompat, RenderContext};
 use crate::render::{Render, RenderResult, is_raw_element, render_children, render_element};
 
 /// A column's resolved width, mirroring mjml's `widthParser` output (`{parsedWidth,
@@ -68,14 +68,33 @@ impl ColumnWidth {
         format!("width: {v}{u} !important;\n        max-width: {v}{u};")
     }
 
-    /// mjml's `getWidthAsPixel`: the column's width resolved against `container`, in
-    /// pixels. Drives the Outlook ghost cell (`tdOutlook`) and the child context width.
+    /// The column's width resolved against `container`, in pixels — the raw arithmetic,
+    /// unrounded.
+    ///
+    /// This is mjml's `getChildContext` math, which is **unrounded in both 4.18.0 and
+    /// 5.4.0**. For a width mjml *emits*, use [`Self::as_pixel_emitted`] instead: 5.x
+    /// rounds there and only there, so the two cannot share one method.
     #[must_use]
     pub fn as_pixel(self, container: f64) -> f64 {
         match self {
             Self::Pct(v) => container * v / 100.0,
             Self::Px(v) => v,
         }
+    }
+
+    /// mjml's `getWidthAsPixel`: [`Self::as_pixel`] as it reaches the output — the
+    /// Outlook ghost cell (`tdOutlook`) in a section or group.
+    ///
+    /// mjml 5.4.0 wraps the result in `normalizePxValue` (`Math.round`), 4.18.0 does
+    /// not, so `<mj-column width="58.33%">` in a 552px box emits `322px` under V5 and
+    /// `321.9816px` under V4. Deliberately *not* folded into [`Self::as_pixel`]:
+    /// 5.4.0's `getChildContext` recomputes the width from `parsedWidth` without the
+    /// rounding, so a column's children are laid out against the unrounded value in
+    /// both versions.
+    #[must_use]
+    pub fn as_pixel_emitted(self, container: f64, compat: MjmlCompat) -> f64 {
+        let px = self.as_pixel(container);
+        if compat.is_v5() { normalize_px(px) } else { px }
     }
 }
 

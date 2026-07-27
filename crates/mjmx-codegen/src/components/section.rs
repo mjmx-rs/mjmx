@@ -167,7 +167,8 @@ impl<'a> Section<'a> {
             match child.tag {
                 MjmlTag::MjGroup => {
                     let raw = ctx.semantic.attribute(child, "width", None);
-                    let child_px = ColumnWidth::resolve(raw, count).as_pixel(f64::from(box_width));
+                    let child_px = ColumnWidth::resolve(raw, count)
+                        .as_pixel_emitted(f64::from(box_width), ctx.options.compat);
                     // The ghost cell carries the group's vertical-align when it is set.
                     let mut style = String::new();
                     if let Some(va) = ctx.semantic.attribute(child, "vertical-align", None) {
@@ -186,7 +187,7 @@ impl<'a> Section<'a> {
                     // attribute, or its equal share) resolved against the content box.
                     let raw = ctx.semantic.attribute(child, "width", None);
                     let width = ColumnWidth::resolve(raw, count);
-                    let child_px = width.as_pixel(f64::from(box_width));
+                    let child_px = width.as_pixel_emitted(f64::from(box_width), ctx.options.compat);
                     let va = ctx
                         .semantic
                         .attribute(child, "vertical-align", Some("top"))
