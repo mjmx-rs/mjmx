@@ -14,6 +14,12 @@ non-Claude agents find the same context.
   spans and interned `Atom`s. Components are render impls inside `mjmx-codegen`, not crates.
 - **Crates:** hyphen names, grow per-milestone, workspace must always compile.
 - **Tests:** golden `.mjml`→`.html` snapshots compared semantically (HTML/CSS-aware).
-- Build via the Makefile (`make build/test/lint/ci`).
+  Every crate is covered; new code and bug fixes land with tests (`make coverage`).
+- **No CI — `make preflight` before every push.** Full gate: lint, workspace tests, and
+  the napi + wasm smoke tests; the wasm leg is never skipped (`make wasm-tools` reports
+  what to install). Install the hook once with `make hooks`.
+- **No AI co-authorship.** No `Co-Authored-By` / "Generated with" trailers on commits,
+  PRs, or tags. The user is the author.
+- Build via the Makefile (`make build/test/lint/ci/preflight`).
 
 See CLAUDE.md for the full crate map and roadmap.

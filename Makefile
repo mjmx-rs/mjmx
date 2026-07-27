@@ -24,6 +24,10 @@ WASM_LIB := target/$(WASM_TARGET)/release/mjmx_wasm.wasm
 WASM_OUT := $(WASM_DIR)/pkg
 WASM_BG := $(WASM_OUT)/node/mjmx_wasm_bg.wasm $(WASM_OUT)/bundler/mjmx_wasm_bg.wasm $(WASM_OUT)/web/mjmx_wasm_bg.wasm
 
+# Read the pin out of the workspace manifest rather than duplicating it, so the
+# `wasm-tools` check can never drift from the `wasm-bindgen = "=x.y.z"` dependency.
+WASM_BINDGEN_VERSION := $(shell sed -n 's/^wasm-bindgen = "=\(.*\)"$$/\1/p' Cargo.toml)
+
 # `wasm-opt` (binaryen) shrinks the wasm-bindgen output by roughly a third. It is
 # an *optional* tool: `make wasm` runs it when it is on PATH and prints a hint
 # (rather than failing) when it is not, so a plain build never depends on it.
@@ -34,7 +38,7 @@ WASM_OPT_FLAGS ?= -Oz
 
 BENCH_DIR := benches/perf
 
-.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci napi napi-test wasm wasm-opt wasm-release wasm-test lsp lsp-test cli-lsp-test bench bench-write
+.PHONY: help build release run test check fmt fmt-check clippy lint doc clean ci preflight coverage coverage-html hooks napi napi-test wasm wasm-tools wasm-opt wasm-release wasm-test lsp lsp-test cli-lsp-test bench bench-write
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -73,7 +77,26 @@ napi: ## Build the Node addon and stage it as a loadable .node
 napi-test: napi ## Run the Node addon smoke test
 	$(NODE) $(NAPI_DIR)/test/smoke.mjs
 
-wasm: ## Build the WebAssembly package (node + bundler + web; wasm-opt applied when available)
+wasm-tools: ## Verify the wasm toolchain (rustup target + pinned wasm-bindgen CLI)
+	@if command -v rustup >/dev/null 2>&1 && \
+	    ! rustup target list --installed 2>/dev/null | grep -qx '$(WASM_TARGET)'; then \
+	  echo "missing rustup target $(WASM_TARGET) — install with:" >&2; \
+	  echo "  rustup target add $(WASM_TARGET)" >&2; \
+	  exit 1; \
+	fi
+	@command -v wasm-bindgen >/dev/null 2>&1 || { \
+	  echo "wasm-bindgen CLI not found — install the pinned version with:" >&2; \
+	  echo "  cargo install wasm-bindgen-cli --version $(WASM_BINDGEN_VERSION)" >&2; \
+	  exit 1; }
+	@have=$$(wasm-bindgen --version | awk '{ print $$2 }'); \
+	if [ "$$have" != "$(WASM_BINDGEN_VERSION)" ]; then \
+	  echo "wasm-bindgen CLI is $$have but the workspace pins =$(WASM_BINDGEN_VERSION)." >&2; \
+	  echo "The generated glue must match the crate exactly; install with:" >&2; \
+	  echo "  cargo install wasm-bindgen-cli --version $(WASM_BINDGEN_VERSION) --force" >&2; \
+	  exit 1; \
+	fi
+
+wasm: wasm-tools ## Build the WebAssembly package (node + bundler + web; wasm-opt applied when available)
 	$(CARGO) build -p mjmx-wasm --target $(WASM_TARGET) --release
 	wasm-bindgen --target nodejs  --out-dir $(WASM_OUT)/node    --out-name mjmx_wasm $(WASM_LIB)
 	wasm-bindgen --target bundler --out-dir $(WASM_OUT)/bundler --out-name mjmx_wasm $(WASM_LIB)
@@ -129,3 +152,23 @@ bench-write: ## Run the benchmark and splice the table into README.md
 	cd $(BENCH_DIR) && npm install --silent && $(CARGO) run --release -- --write $(ARGS)
 
 ci: lint test ## Run lint and test (CI entrypoint)
+
+# The project has no CI. `preflight` is the pre-push gate: everything `ci` runs,
+# plus the two node smoke tests that live outside `cargo test --workspace`.
+preflight: lint test napi-test wasm-test ## Full local gate — run before every push
+	@echo "preflight: all checks passed"
+
+coverage: ## Per-crate line coverage report (needs `cargo install cargo-llvm-cov`)
+	@$(CARGO) llvm-cov --version >/dev/null 2>&1 || { \
+		echo "cargo-llvm-cov not found — install with: cargo install cargo-llvm-cov"; \
+		exit 1; \
+	}
+	$(CARGO) llvm-cov --workspace --summary-only
+
+coverage-html: ## Same as `coverage`, as a browsable HTML report
+	$(CARGO) llvm-cov --workspace --html
+	@echo "open target/llvm-cov/html/index.html"
+
+hooks: ## Install the git hooks (pre-push runs `make preflight`)
+	@install -m 755 scripts/pre-push .git/hooks/pre-push
+	@echo "installed .git/hooks/pre-push"

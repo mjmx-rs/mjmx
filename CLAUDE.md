@@ -625,6 +625,36 @@ Method reminder: read mjml's actual README/**output** rather than guessing — t
 real bugs every single time, including twice during the 5.x retarget (the upgrade guide was
 wrong about `border-radius` and about body `background-color`).
 
+## Project rules
+
+Non-negotiable. These are enforced locally, not by a service — the repo has **no CI**.
+
+- **No AI co-authorship on commits.** A commit's author and its message are the user's.
+  Never add a `Co-Authored-By: Claude …` trailer, a `🤖 Generated with Claude Code` line,
+  or any other agent attribution — not in commits, not in PR descriptions, not in tags.
+  Write the message as a plain conventional commit describing the change.
+- **Full test suite before every push.** `make preflight` (= `lint test napi-test
+  wasm-test`) must pass. It is the pre-push gate precisely *because* there is no CI: a
+  green `cargo test --workspace` alone is not enough, since the napi and wasm smoke tests
+  live outside it and have gone stale before (see the V5-default flip under "Planned
+  next"). Install the hook once per clone with `make hooks`
+  (`scripts/pre-push` → `.git/hooks/pre-push`; git does not track `.git/hooks`).
+  `git push --no-verify` bypasses it — emergencies only, and say so.
+  The wasm leg is a **hard requirement, never skipped**: `make wasm-tools` checks the
+  rustup target (declared in `rust-toolchain.toml`, so rustup installs it automatically)
+  and that the `wasm-bindgen` CLI matches the workspace's `=0.2.100` pin exactly — the
+  pin is read out of `Cargo.toml` by the Makefile, never duplicated — each failure
+  carrying its install command. One-time per machine:
+  `cargo install wasm-bindgen-cli --version 0.2.100`. (`wasm-opt`/binaryen stays
+  optional: it only shrinks the artifact and already no-ops when absent.)
+- **Cover all the codebase in tests.** Every crate carries tests; every new code path and
+  every fixed bug lands with a test in the same change. `make coverage` (needs
+  `cargo install cargo-llvm-cov`) prints per-crate line coverage, `make coverage-html`
+  the browsable report. There is deliberately **no failing threshold** — the number is
+  there to find gaps, not to gate work — so uncovered code is a review finding, not a
+  build error. Prefer the existing shapes: golden `.mjml`→`.html` fixtures compared
+  semantically for render behaviour, crate-level unit tests for passes.
+
 ## Working agreement
 
 - **Plan → approve → code.** Always show the plan and wait for explicit approval before

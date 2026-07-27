@@ -1,3 +1,7 @@
 [toolchain]
 channel = "stable"
 components = ["rustfmt", "clippy"]
+# `make wasm` (and therefore `make preflight`, the pre-push gate) cross-compiles to
+# wasm32. Declaring it here makes rustup install the std for it automatically, so a
+# fresh clone does not fail with a bare "can't find crate for `std`".
+targets = ["wasm32-unknown-unknown"]

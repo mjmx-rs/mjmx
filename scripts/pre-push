@@ -1,0 +1,36 @@
+#!/bin/sh
+# mjmx pre-push hook — the project has no CI, so the full suite runs here.
+#
+# Install with `make hooks` (git does not track .git/hooks, so a fresh clone
+# needs that one command). Bypass in an emergency with `git push --no-verify`.
+#
+# git feeds pre-push one line per ref on stdin:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# A local sha of all zeros is a branch *deletion* — nothing to test.
+
+set -eu
+
+zero=$(printf '%040d' 0)
+has_work=0
+
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	case "$local_sha" in
+	"$zero" | "") ;;
+	*) has_work=1 ;;
+	esac
+done
+
+if [ "$has_work" -eq 0 ]; then
+	exit 0
+fi
+
+echo "pre-push: running \`make preflight\` (no CI — this is the gate)" >&2
+
+if ! make preflight; then
+	echo >&2
+	echo "pre-push: preflight FAILED — push aborted." >&2
+	echo "          Fix the failures, or bypass with \`git push --no-verify\`." >&2
+	exit 1
+fi
+
+echo "pre-push: preflight passed." >&2
