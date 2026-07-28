@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/mjmx_logo.png" alt="mjmx" width="200">
+  <img src="assets/mjmx_banner.png" alt="mjmx — the modern MJML toolkit, reimagined in Rust">
 </p>
 
 # mjmx
