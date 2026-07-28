@@ -542,7 +542,7 @@ one** (mjml's `htmlAttributes` drops undefined); with none set the cell is
 `<td style="font-size:0px;word-break:break-word;">`. Native and both JS bindings share this
 one path (the wrapping is in codegen, before the binding's `cx.write`).
 
-**Phase 2 — JS bindings.** Both `mjmx-node` and `mjmx-wasm` take a `components:
+**Phase 2 — JS bindings.** Both `@mjmx-rs/node` and `mjmx-wasm` take a `components:
 Record<string, ComponentFn>` render option, `ComponentFn = (cx) => string |
 { html, styles?, fonts? }`. `cx` is a **read-only snapshot** — `attr(name)`, `attrs`,
 `containerWidth`, `breakpoint`, `rawInner` — and head contributions come back through the
@@ -599,32 +599,43 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
 --dry-run`.
 
 1. **Ship as three packages: JS, Rust, Python.**
-   - JS: **the wasm build is PUBLISHED** — shipped once as `mjmx-wasm@0.1.0` (npm,
-     2026-07-28, verified by installing it from the registry into a clean project and
-     rendering), then renamed to plain **`mjmx`** from 0.1.1 on. `mjmx-node` is **not**
-     published — it still needs the CI cross-build, since only the local triple can be
-     built here and an incomplete set breaks installs on every other platform. Both
-     packages dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
-     dual `exports` map. The wasm `exports` map also exposes `"./pkg/*"`, without which
-     the documented deep import (`mjmx/pkg/web/mjmx_wasm.js`, the only way to embed the
-     wasm bytes in a no-network host) fails with `ERR_PACKAGE_PATH_NOT_EXPORTED` — an
-     `exports` field blocks every subpath it does not list. **Names are unscoped, deliberately (2026-07-28):** the packages
-     were `@mjmx/node` / `@mjmx/wasm` until a publish attempt returned `404 Not Found` on
-     `PUT` — **the `@mjmx` scope belongs to someone else.** `@mjmx/core` is a *different*
-     MJML tool ("Write mjml using JSX syntax", mjmx.dev, 2.1.0). Do not read
-     `npm access list packages @mjmx` as proof of ownership: it reported
-     `@mjmx/core: read-write`, which is the package's own access setting, not this
-     account's permission — `npm access list packages` (no scope) is the authoritative
-     list, and `@mjmx/*` is absent from it. The name collision with `@mjmx/core` in the
-     *same* ecosystem is a known, accepted risk.
-     **npm names, final (2026-07-28):** the wasm build is published as plain **`mjmx`**
-     (unscoped `mjmx` turned out to be claimable), and the native addon as `mjmx-node`
-     (+ `mjmx-node-<triple>`). So `npm i mjmx` gets the portable build that runs
-     everywhere and `mjmx-node` is the opt-in native one (~20× mjml vs ~7×). Note the
-     **crate** is still `mjmx-wasm` — only the npm package was renamed; `mjmx-wasm@0.1.0`
-     remains on npm as the old name, since 0.1.0 cannot be unpublished after 72h.
+   - JS: **npm names are `@mjmx-rs/mjmx` (wasm) and `@mjmx-rs/node` (native, +
+     `@mjmx-rs/node-<triple>`)**, under the npm org matching the GitHub org. The wasm
+     build **is published**; the native one is **not** — it still needs the CI
+     cross-build, since only the local triple can be built here and an incomplete set
+     breaks installs on every platform but this one. Both dropped `"private": true` and
+     gained keywords, `homepage`/`bugs`, and a dual `exports` map.
+
+     **How the name landed there — three failed attempts, each with a lesson:**
+     1. `@mjmx/wasm` → `404 Not Found` on `PUT`. **The `@mjmx` scope is someone else's**
+        (`@mjmx/core`, a *different* MJML tool — "Write mjml using JSX syntax", mjmx.dev).
+        Do not read `npm access list packages @mjmx` as proof of ownership: it reports
+        `@mjmx/core: read-write`, which is the *package's* access setting, not this
+        account's permission. `npm access list packages` with **no scope** is the
+        authoritative list; no `@mjmx/*` appears in it.
+     2. Unscoped `mjmx-wasm` → published fine as `0.1.0` (still on npm; npm forbids
+        unpublishing after 72h, so that name simply falls behind).
+     3. Unscoped `mjmx` → `403 Forbidden`, "**Package name too similar to existing
+        packages mjml, mem, mime, mobx**". **`npm view <name>` returning 404 does not
+        mean a name is claimable** — it means nobody published it. npm's typosquatting
+        filter is a separate server-side gate that only fires on the real `PUT`, and
+        there is no way to test it short of publishing. It applies to **unscoped names
+        only**, which is the deciding reason for a scope: every future
+        `@mjmx-rs/*` package is guaranteed publishable, whereas unscoped `mjmx-node`
+        would have been an untested gamble discovered *after* building CI for five
+        platform triples.
+
+     Note the **crates** keep their own names (`mjmx-wasm`, `mjmx-napi`) — only the npm
+     packages are scoped. Scoped packages need `--access public` on first publish, and
+     this account enforces 2FA, so publishing needs `--otp=<code>`.
+
+     The wasm `exports` map also exposes `"./pkg/*"`, without which the documented deep
+     import (`@mjmx-rs/mjmx/pkg/web/mjmx_wasm.js` — the only way to embed the wasm bytes
+     in a host with no network access, e.g. a Figma plugin) fails with
+     `ERR_PACKAGE_PATH_NOT_EXPORTED`: an `exports` field blocks every subpath it does not
+     list.
      - **napi** adopts `@napi-rs/cli`: the binary ships as a per-platform **optional
-       dependency** `mjmx-node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
+       dependency** `@mjmx-rs/node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
        `darwin-x64`, `darwin-arm64`, `win32-x64-msvc`), scaffolded under
        `crates/mjmx-napi/npm/<triple>/` by `napi create-npm-dirs`. The hand-written
        `index.js` loader (kept for its diagnostics enrichment) now `require`s the matching
@@ -642,7 +653,7 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
        the V4 `style=""` skeleton. Fixed by pinning the affected checks to `mjmlVersion: 4`
        or opting in with `ignoreIncludes: false`; `make napi-test` / `make wasm-test` green.
      - **Still open:** a CI release workflow (`@napi-rs/cli`'s GitHub Actions flow) to
-       cross-build every triple and `npm publish` `mjmx-node`. `mjmx-wasm` is published and
+       cross-build every triple and `npm publish` `@mjmx-rs/node`. The wasm package is published and
        needs no cross-build (one portable artifact), which is exactly why it shipped first.
    - Rust: the umbrella's published-quality metadata is **done** (docs.rs metadata,
      crate-level docs, keywords, categories, crate README) but the crate itself is **not on

@@ -1,5 +1,5 @@
 {
-  "name": "mjmx",
+  "name": "@mjmx-rs/mjmx",
   "version": "0.1.1",
   "description": "MJML-to-HTML email compiler for JavaScript — written in Rust, compiled to WebAssembly.",
   "keywords": [

@@ -1,9 +1,9 @@
-// Custom components with mjmx-node (ES modules).
+// Custom components with @mjmx-rs/node (ES modules).
 //
 //   node examples/node-esm/custom-components.mjs
 //
 // Uses the locally built addon via a relative path; with the package installed the
-// import would be `import mjmx from 'mjmx-node'`.
+// import would be `import mjmx from '@mjmx-rs/node'`.
 
 import mjmx from '../../crates/mjmx-napi/index.mjs';
 

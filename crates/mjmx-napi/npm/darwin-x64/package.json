@@ -1,5 +1,5 @@
 {
-  "name": "mjmx-node-darwin-x64",
+  "name": "@mjmx-rs/node-darwin-x64",
   "version": "0.1.1",
   "cpu": [
     "x64"

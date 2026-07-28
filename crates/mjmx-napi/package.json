@@ -1,5 +1,5 @@
 {
-  "name": "mjmx-node",
+  "name": "@mjmx-rs/node",
   "version": "0.1.1",
   "description": "Node.js bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
   "keywords": [
@@ -52,11 +52,11 @@
     ]
   },
   "optionalDependencies": {
-    "mjmx-node-linux-x64-gnu": "0.1.1",
-    "mjmx-node-linux-arm64-gnu": "0.1.1",
-    "mjmx-node-darwin-x64": "0.1.1",
-    "mjmx-node-darwin-arm64": "0.1.1",
-    "mjmx-node-win32-x64-msvc": "0.1.1"
+    "@mjmx-rs/node-linux-x64-gnu": "0.1.1",
+    "@mjmx-rs/node-linux-arm64-gnu": "0.1.1",
+    "@mjmx-rs/node-darwin-x64": "0.1.1",
+    "@mjmx-rs/node-darwin-arm64": "0.1.1",
+    "@mjmx-rs/node-win32-x64-msvc": "0.1.1"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.7.4"

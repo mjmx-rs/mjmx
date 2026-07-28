@@ -1,7 +1,7 @@
 # mjmx-napi (crate)
 
 N-API bindings for [mjmx](https://github.com/mjmx-rs/mjmx), an MJML-to-HTML compiler
-written in Rust. Published to npm as [`mjmx-node`](https://www.npmjs.com/package/mjmx-node).
+written in Rust. Published to npm as [`@mjmx-rs/node`](https://www.npmjs.com/package/@mjmx-rs/node).
 
 > **This is the crate-facing README.** The npm package renders `README.md`, which is
 > written for JavaScript consumers. npm always reads `README.md` and cannot be pointed
@@ -49,7 +49,7 @@ scaffolding.
 `index.js` is hand-written rather than generated, because it enriches errors with the
 diagnostics array. It resolves in two steps:
 
-1. `require('mjmx-node-<triple>')` — the optional dependency npm installed for this host.
+1. `require('@mjmx-rs/node-<triple>')` — the optional dependency npm installed for this host.
 2. Fall back to a locally built `.node` in this directory.
 
 If neither is present it throws naming the triple it looked for, rather than failing
@@ -71,7 +71,7 @@ calls back into JS to resolve an attribute.
 
 Not yet published. It needs a CI release workflow (`@napi-rs/cli`'s GitHub Actions flow)
 to cross-build all five triples — `linux-x64-gnu`, `linux-arm64-gnu`, `darwin-x64`,
-`darwin-arm64`, `win32-x64-msvc` — and publish each `mjmx-node-<triple>` package
+`darwin-arm64`, `win32-x64-msvc` — and publish each `@mjmx-rs/node-<triple>` package
 alongside the main one.
 
 **Publishing from one machine would break installs everywhere else**: npm resolves the

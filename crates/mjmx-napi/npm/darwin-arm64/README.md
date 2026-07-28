@@ -1,3 +1,3 @@
-# `mjmx-node-darwin-arm64`
+# `@mjmx-rs/node-darwin-arm64`
 
-This is the **aarch64-apple-darwin** binary for `mjmx-node`
+This is the **aarch64-apple-darwin** binary for `@mjmx-rs/node`

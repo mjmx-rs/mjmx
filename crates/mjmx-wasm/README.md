@@ -1,4 +1,4 @@
-# mjmx
+# @mjmx-rs/mjmx
 
 **MJML → HTML email compiler for JavaScript.** Written in Rust, compiled to WebAssembly.
 
@@ -6,11 +6,11 @@ A faster, drop-in-shaped alternative to `mjml` / `mjml-browser`. Works in Node, 
 Deno and Bun — no native addon, no postinstall, no build step.
 
 ```sh
-npm install mjmx
+npm install @mjmx-rs/mjmx
 ```
 
 ```js
-import { render } from 'mjmx';
+import { render } from '@mjmx-rs/mjmx';
 
 const html = render(`
   <mjml>
@@ -28,7 +28,7 @@ const html = render(`
 
 ## Why not just use `mjml`?
 
-| | `mjmx` | `mjml` / `mjml-browser` |
+| | `@mjmx-rs/mjmx` | `mjml` / `mjml-browser` |
 | --- | --- | --- |
 | Speed | **~7× faster** | baseline |
 | API | `render()` → `string` | `mjml2html()` → `{ html, errors }` |
@@ -41,7 +41,7 @@ Speed measured in Node over 40 MJML fixtures, 800 renders each, against `mjml@4.
 **~55 µs vs ~377 µs per render**, stable across three runs. Single machine, warm process
 — directional, not paper-grade. Reproduce it yourself; don't take the number on faith.
 
-Need more? The native Node addon (`mjmx-node`) is ~19 µs — about 3× this package and
+Need more? The native Node addon (`@mjmx-rs/node`) is ~19 µs — about 3× this package and
 ~20× mjml — at the cost of a per-platform binary. This package trades that for running
 anywhere.
 
@@ -100,14 +100,14 @@ non-promise, so that call site can stay as-is until you clean it up.
 ### Node (CommonJS)
 
 ```js
-const { render, lint, version } = require('mjmx');
+const { render, lint, version } = require('@mjmx-rs/mjmx');
 console.log(version());
 ```
 
 ### Bundlers and browsers (ESM)
 
 ```js
-import { render } from 'mjmx';
+import { render } from '@mjmx-rs/mjmx';
 ```
 
 Three builds ship behind a conditional `exports` map, so one import resolves correctly
@@ -126,8 +126,8 @@ access (a Figma plugin, for instance), import the `web` flavour directly and boo
 bytes you inline at build time:
 
 ```js
-import { initSync, render } from 'mjmx/pkg/web/mjmx_wasm.js';
-import wasmBytes from 'mjmx/pkg/web/mjmx_wasm_bg.wasm';  // esbuild: loader { '.wasm': 'binary' }
+import { initSync, render } from '@mjmx-rs/mjmx/pkg/web/mjmx_wasm.js';
+import wasmBytes from '@mjmx-rs/mjmx/pkg/web/mjmx_wasm_bg.wasm';  // esbuild: loader { '.wasm': 'binary' }
 
 initSync({ module: wasmBytes });   // once, before the first render
 ```
@@ -212,14 +212,14 @@ WebAssembly has no ambient filesystem, so there is no `renderFile`, and
 `<mj-include path="…">` cannot be resolved — there is no base directory and no loader.
 Passing `filePath` **throws** rather than quietly returning HTML with the includes
 unresolved. Either inline partials into the source string before calling `render`, or use
-the native Node addon (`mjmx-node`) where a filesystem exists.
+the native Node addon (`@mjmx-rs/node`) where a filesystem exists.
 
 ## TypeScript
 
 Types ship with the package — no `@types/…` needed.
 
 ```ts
-import { render, type RenderOptions } from 'mjmx';
+import { render, type RenderOptions } from '@mjmx-rs/mjmx';
 
 const opts: RenderOptions = { mjmlVersion: 4, beautify: true };
 const html: string = render(source, opts);

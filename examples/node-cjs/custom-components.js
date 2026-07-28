@@ -1,9 +1,9 @@
-// Custom components with mjmx-node (CommonJS).
+// Custom components with @mjmx-rs/node (CommonJS).
 //
 //   node examples/node-cjs/custom-components.js
 //
 // Uses the locally built addon via a relative path; with the package installed the
-// require would be `require('mjmx-node')`.
+// require would be `require('@mjmx-rs/node')`.
 'use strict';
 
 const mjmx = require('../../crates/mjmx-napi');

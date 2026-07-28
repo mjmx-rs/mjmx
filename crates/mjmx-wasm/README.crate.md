@@ -2,7 +2,7 @@
 
 WebAssembly bindings for [mjmx](https://github.com/mjmx-rs/mjmx), an MJML-to-HTML
 compiler written in Rust. Compiled to `wasm32-unknown-unknown` and shipped to npm as
-[`mjmx`](https://www.npmjs.com/package/mjmx).
+[`@mjmx-rs/mjmx`](https://www.npmjs.com/package/@mjmx-rs/mjmx).
 
 > **This is the crate-facing README.** The npm package renders `README.md`, which is
 > written for JavaScript consumers. npm always reads `README.md` and cannot be pointed

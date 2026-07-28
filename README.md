@@ -33,19 +33,19 @@ The CLI installs from the same source:
 cargo install --git https://github.com/mjmx-rs/mjmx mjmx-cli
 ```
 
-**JavaScript** — `mjmx` (WebAssembly; runs in Node, bundlers and browsers):
+**JavaScript** — `@mjmx-rs/mjmx` (WebAssembly; runs in Node, bundlers and browsers):
 
 ```sh
-npm install mjmx
+npm install @mjmx-rs/mjmx
 ```
 
 ```js
-import { render } from 'mjmx';
+import { render } from '@mjmx-rs/mjmx';
 
 const html = render('<mjml><mj-body><mj-section><mj-column><mj-text>Hi</mj-text></mj-column></mj-section></mj-body></mjml>');
 ```
 
-`mjmx-node` (native, faster) is not published yet: it needs a CI cross-build for all
+`@mjmx-rs/node` (native, faster) is not published yet: it needs a CI cross-build for all
 five platform triples, so publishing it today would break installs everywhere except
 macOS arm64.
 

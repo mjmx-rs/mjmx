@@ -32,11 +32,11 @@ Return a bare `string` for HTML only, or a `ComponentResult` to also contribute 
 The examples import the locally built packages by relative path (no install needed):
 
 ```sh
-make napi    # builds crates/mjmx-napi (the mjmx-node addon)
+make napi    # builds crates/mjmx-napi (the @mjmx-rs/node addon)
 make wasm    # builds crates/mjmx-wasm/pkg/{node,bundler,web} (the `mjmx` npm package)
 ```
 
-With the packages published, swap the relative import for `mjmx-node` / `mjmx-wasm`.
+With the packages published, swap the relative import for `@mjmx-rs/node` / `mjmx-wasm`.
 
 ## Run
 

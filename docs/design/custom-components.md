@@ -5,7 +5,7 @@ Status: **Phases 1–2 + native Tier 2 implemented 2026-07-23** — native Rust 
 container and Phase 3 (python) remain proposal.
 Author-reviewed 2026-07-22.
 
-The JS surface (`mjmx-node`, `mjmx-wasm`): a `components: Record<string, ComponentFn>`
+The JS surface (`@mjmx-rs/node`, `mjmx-wasm`): a `components: Record<string, ComponentFn>`
 render option, where `ComponentFn = (cx: ComponentCx) => string | ComponentResult`. `cx`
 is a **read-only snapshot** — `attr(name)` / `attrs` (cascade-resolved), `containerWidth`,
 `breakpoint`, `rawInner` — and head contributions come back through the **return channel**
