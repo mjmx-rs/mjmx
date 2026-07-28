@@ -1,6 +1,6 @@
 # @mjmx/node
 
-Node.js bindings for [mjmx](https://github.com/ryeasin03/mjmx) — an MJML-to-HTML
+Node.js bindings for [mjmx](https://github.com/dreygur/mjmx) — an MJML-to-HTML
 compiler written in Rust.
 
 The npm package lives alongside the Rust crate in this directory: `package.json`,

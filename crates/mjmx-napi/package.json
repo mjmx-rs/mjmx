@@ -14,12 +14,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ryeasin03/mjmx.git",
+    "url": "git+https://github.com/dreygur/mjmx.git",
     "directory": "crates/mjmx-napi"
   },
-  "homepage": "https://github.com/ryeasin03/mjmx#readme",
+  "homepage": "https://github.com/dreygur/mjmx#readme",
   "bugs": {
-    "url": "https://github.com/ryeasin03/mjmx/issues"
+    "url": "https://github.com/dreygur/mjmx/issues"
   },
   "main": "index.js",
   "types": "index.d.ts",

@@ -7,6 +7,13 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "MJML-to-HTML compiler toolchain: parse and render MJML into responsive HTML."
+readme = "README.md"
+keywords = ["mjml", "email", "html", "compiler", "renderer"]
+categories = ["email", "template-engine", "web-programming", "compilers"]
+
+# Build docs with every feature on, so `http-loader`-gated items are documented.
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 default = []

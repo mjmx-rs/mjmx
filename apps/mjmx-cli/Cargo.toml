@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Command-line interface for the mjmx MJML-to-HTML compiler."
+keywords = ["mjml", "email", "html", "cli", "compiler"]
+categories = ["email", "command-line-utilities", "template-engine", "compilers"]
 
 [features]
 default = []
