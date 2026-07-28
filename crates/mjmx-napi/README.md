@@ -1,182 +1,245 @@
 # mjmx-node
 
-Node.js bindings for [mjmx](https://github.com/mjmx-rs/mjmx) — an MJML-to-HTML
-compiler written in Rust.
+**MJML → HTML email compiler for Node.js.** Written in Rust, shipped as a native addon.
 
-The npm package lives alongside the Rust crate in this directory: `package.json`,
-`index.js` (CommonJS loader + thin wrapper), `index.mjs` (ESM re-export),
-`index.d.ts` (hand-written types), and `test/smoke.mjs`.
+The fastest way to render MJML from JavaScript: **~20× faster than `mjml`**, with the
+same option names, plus structured diagnostics and real filesystem support for
+`<mj-include>`.
+
+```sh
+npm install mjmx-node
+```
+
+```js
+const { render } = require('mjmx-node');
+
+const html = render(`
+  <mjml>
+    <mj-body>
+      <mj-section background-color="#f4f4f4">
+        <mj-column>
+          <mj-text font-size="20px">Hello</mj-text>
+          <mj-button href="https://example.com">Click me</mj-button>
+        </mj-column>
+      </mj-section>
+    </mj-body>
+  </mjml>
+`);
+```
+
+## Why not just use `mjml`?
+
+| | `mjmx-node` | `mjml` |
+| --- | --- | --- |
+| Speed | **~20× faster** | baseline |
+| API | `render()` → `string` | `mjml2html()` → `{ html, errors }` |
+| Async | synchronous | **`async` since mjml 5** |
+| Errors | throws `MjmxError` with `.diagnostics` | `errors` array |
+| mjml versions | 5.4.0 **and** 4.18.0, selectable | whichever you installed |
+| Install | prebuilt binary per platform | pure JS |
+
+Measured in Node over 40 MJML fixtures, 800 renders each, against `mjml@4.18.0`:
+**~19 µs vs ~377 µs per render**, stable across three runs. Single machine, warm process
+— directional, not paper-grade. Reproduce it yourself rather than taking it on faith.
+
+**Prefer portability?** [`mjmx`](https://www.npmjs.com/package/mjmx) is the same
+compiler as WebAssembly — ~7× mjml instead of ~20×, but one artifact that runs in Node,
+browsers, Deno and Bun with no platform binary. Use this package when you're on Node and
+want the speed; use that one when you need to run anywhere.
 
 ## Install
 
-```sh
-npm i mjmx-node
-```
+The native binary ships as a per-platform **optional dependency**, so npm downloads only
+the one matching your host:
 
-The native binary ships as a per-platform **optional dependency**
-(`mjmx-node-<triple>`, e.g. `mjmx-node-linux-x64-gnu`); npm installs only the one
-matching the host. Prebuilt triples: `linux-x64-gnu`, `linux-arm64-gnu`, `darwin-x64`,
-`darwin-arm64`, `win32-x64-msvc`. The loader (`index.js`) `require`s the matching
-package first, then falls back to a locally built binary — so a bare
-`cargo build -p mjmx-napi` or `make napi` is enough for development.
+| platform | package |
+| --- | --- |
+| Linux x64 (glibc) | `mjmx-node-linux-x64-gnu` |
+| Linux arm64 (glibc) | `mjmx-node-linux-arm64-gnu` |
+| macOS Intel | `mjmx-node-darwin-x64` |
+| macOS Apple Silicon | `mjmx-node-darwin-arm64` |
+| Windows x64 | `mjmx-node-win32-x64-msvc` |
 
-Both module systems resolve:
+No postinstall script, no compiler needed on the install machine. Both module systems
+resolve:
 
 ```js
-const mjmx = require('mjmx-node'); // CommonJS
-import mjmx from 'mjmx-node';      // ESM (named exports too: import { render } …)
+const mjmx = require('mjmx-node');   // CommonJS
+import mjmx from 'mjmx-node';        // ESM — named exports work too
+import { render, renderFile } from 'mjmx-node';
 ```
 
-## Build & test
+If no matching binary is found, the loader raises an error naming the triple it looked
+for, rather than failing somewhere deeper.
 
-```sh
-make napi        # cargo build -p mjmx-napi --release + stage the .node
-make napi-test   # the above, then node crates/mjmx-napi/test/smoke.mjs
+## Migrating from `mjml`
+
+Two things change at the call site.
+
+**1. The return shape.** `mjml2html` returns an object; `render` returns the string and
+throws on failure. A mechanical find-and-replace silently yields `undefined`:
+
+```js
+// before
+const { html, errors } = mjml2html(source);
+
+// after
+let html;
+try {
+  html = render(source);
+} catch (err) {
+  console.error(err.message);
+  for (const d of err.diagnostics ?? []) {
+    console.error(d.severity, d.message, d.labels);
+  }
+}
 ```
+
+The thrown error is an `MjmxError` — a normal `Error` whose `.diagnostics` array carries
+the structured list, each with `severity`, `message`, `labels` (byte offsets) and
+optional `help`. To inspect problems without an exception, call `lint(source)`, which
+never throws.
+
+**2. Pin the mjml version.** mjmx reproduces mjml **5.4.0** by default:
+
+```js
+render(source, { mjmlVersion: 4 });   // reproduce mjml 4.18.0
+render(source);                       // reproduce mjml 5.4.0 (default)
+```
+
+Both are kept because a renderer that silently changes its HTML on upgrade is unusable in
+a pipeline that diffs output. V4 output is frozen and gated by golden fixtures generated
+from real mjml; every V5 behaviour was verified byte-for-byte against real `mjml@5.4.0`.
+
+**Diff before trusting it.** V4 mode reproduces 4.18.0 specifically — if you're on a
+different 4.x, render real templates both ways and compare.
+
+## Rendering a file
+
+Unlike the wasm build, this package has a filesystem, so `<mj-include>` resolves:
+
+```js
+const { renderFile } = require('mjmx-node');
+
+const html = renderFile('./emails/welcome.mjml');
+```
+
+Includes resolve relative to the file's own directory. For a string source, pass
+`filePath` to give includes a base to resolve against:
+
+```js
+render(source, { filePath: './emails/welcome.mjml' });
+```
+
+mjml 5 **disables includes by default** and adds a path sandbox. Under the default
+`mjmlVersion: 5`, `<mj-include>` is ignored unless you opt in:
+
+```js
+render(source, { filePath: 'emails/welcome.mjml', ignoreIncludes: false });
+```
+
+The sandbox denies any include that escapes the base directory — via `../`, an absolute
+or UNC path, a percent-encoded traversal, or a symlink pointing outside — replacing it
+with a non-blocking `<!-- mj-include denied -->` comment. Grant extra roots with
+`includePath: ['./partials', './shared']`.
 
 ## API
 
-```js
-const mjmx = require('mjmx-node');
-
-// Render options use mjml's own `mjml2html` names and defaults; `breakpoint` is the
-// one mjmx extension (mjml hardcodes 480 and only <mj-breakpoint> changes it).
-mjmx.render(source, {
-  breakpoint: 480,              // mjmx extension
-  beautify: false,
-  minify: false,
-  keepComments: true,
-  validationLevel: 'soft',      // 'soft' | 'strict' | 'skip'
-  filePath: './partials',       // base dir for <mj-include>, as in mjml
-  fonts: { Inter: 'https://fonts.example/inter.css' }, // replaces the built-in table
-  minifyOptions: {},            // only consulted when `minify` is true
-  ignoreIncludes: false,        // true drops <mj-include> instead of resolving it
-  printerSupport: false,        // true adds an `@media only print` block
-  juiceOptions: {},             // how to inline <mj-style inline="inline">
-  juicePreserveTags: {},        // extra templating delimiters the inliner skips
-});                                       // -> HTML
-mjmx.renderFile('email.mjml', options);   // resolves <mj-include> relative to the file
-mjmx.lint(source);                        // -> Diagnostic[], never throws
-mjmx.format(source, { indentWidth: 2 });  // -> canonical MJML
-mjmx.version();                           // -> "0.1.0"
+```ts
+render(source: string, options?: RenderOptions): string     // throws MjmxError
+renderFile(path: string, options?: RenderOptions): string   // throws MjmxError
+lint(source: string): Diagnostic[]                          // never throws
+format(source: string, options?: FormatOptions): string     // pretty-print MJML source
+version(): string
 ```
 
-`minifyOptions` carries mjml's four html-minifier switches:
+`RenderOptions` mirrors mjml's own `mjml2html` option names and defaults. Every field is
+documented in the bundled `index.d.ts`, so your editor explains them inline.
+
+| option | default | notes |
+| --- | --- | --- |
+| `mjmlVersion` | `5` | `4` or `5` — which mjml release to reproduce |
+| `breakpoint` | `480` | mjmx extension; upstream only allows `<mj-breakpoint>` |
+| `beautify` / `minify` | `false` | post-processing |
+| `keepComments` | `true` | matches upstream's parser default |
+| `validationLevel` | `'soft'` | `'soft'` \| `'strict'` \| `'skip'` |
+| `filePath` | — | include base for a string source |
+| `fonts` | built-ins | **replaces** the built-in table; key order decides `<link>` order |
+| `minifyOptions` | `{}` | only read when `minify` |
+| `ignoreIncludes` | follows `mjmlVersion` | mjml 5 disables includes by default |
+| `includePath` | `[]` | extra roots the include sandbox will allow |
+| `printerSupport` | `false` | adds an `@media only print` block |
+| `juiceOptions` | juice's | how `<mj-style inline="inline">` is inlined |
+| `juicePreserveTags` | — | extra templating delimiters the inliner must not enter |
+| `sanitizeStyles` | `false` | protects `{{template}}` syntax in CSS from the minifier |
+| `templateSyntax` | `{{ }}`, `[[ ]]` | delimiter pairs for `sanitizeStyles` |
+| `allowMixedSyntax` | `false` | allow mixed block and value template syntax |
+| `components` | — | custom component renderers, see below |
+
+An unsupported `juiceOptions` key is **refused with the reason**, never silently ignored.
+EJS (`<% %>`) and Handlebars (`{{ }}`) are always masked before inlining, so templating
+syntax is never mistaken for markup.
+
+### Templating in your MJML
+
+Template placeholders survive rendering, including inside `<mj-style>`:
 
 ```js
-mjmx.render(source, {
-  minify: true,
-  minifyOptions: {
-    collapseWhitespace: true,     // default true (mjml's own)
-    minifyCSS: false,             // default false; a conservative whitespace/comment
-                                  //   pass, not html-minifier's clean-css optimizer
-    caseSensitive: true,          // default true; false lower-cases attribute names
-    removeEmptyAttributes: false, // default false — mjml passes true, see below
-  },
-});
+render(source, { minify: true, sanitizeStyles: true });
 ```
 
-`removeEmptyAttributes` is the one place mjmx's default differs from mjml's. mjml's own
-output carries `<div … style="" role="article">`, so mjml's `true` *removes an
-attribute* while minifying; mjmx defaults it off to keep `minify` a pure whitespace
-transform. Pass `true` for byte parity with mjml.
+Without `sanitizeStyles`, a `{{brand}}` inside CSS reaches the CSS minifier, which cannot
+parse it. mjmx raises an actionable error rather than silently corrupting the stylesheet.
 
-## Custom components
+### Custom components
 
-Register a renderer for a tag through `options.components`. When rendering reaches a tag
-the parser does not recognize, its callback renders it; an unregistered unknown tag stays
-the usual fatal "not a recognized MJML component" error. This is mjmx's own extension
-point (a small, versioned contract), not mjml's `.mjmlconfig` JS packages.
+Register a renderer for a tag MJML doesn't know:
 
 ```js
-const html = mjmx.render(source, {
+const html = render(source, {
   components: {
-    // Return a string for HTML only…
     'mj-badge': (cx) => `<span>${cx.attr('label') ?? ''}</span>`,
-    // …or an object to also contribute to <head>.
     'mj-card': (cx) => ({
       html: `<div class="card">${cx.rawInner}</div>`,
       styles: ['.card{border:1px solid #ccc}'],
-      fonts: [['Inter', 'https://fonts.example/inter.css']], // emitted if referenced
+      fonts: [['Inter', 'https://fonts.example/inter.css']],
     }),
   },
 });
 ```
 
-The callback receives a read-only `cx`: `attr(name)` and `attrs` (cascade-resolved through
-`mj-attributes` / `mj-class` / defaults), `containerWidth`, `breakpoint`, and `rawInner`
-(the verbatim inner text). A component is a **body leaf** — it does not drive the responsive
-column layout (that is Tier 2, not yet available).
+The callback receives a read-only `cx` (`attr(name)`, `attrs`, `containerWidth`,
+`breakpoint`, `rawInner`) and returns a string of HTML, or `{ html, styles?, fonts? }` to
+also contribute to `<head>`. It is called synchronously during the render. An
+unregistered unknown tag stays a fatal error, as in mjml.
 
-**Return cell *content*, not a cell.** mjmx wraps your fragment in the standard leaf `<td>`
-cell (the one mjml's column emits around every child), so `<mj-badge>` above becomes
-`<tr><td style="font-size:0px;word-break:break-word;"><span>…</span></td></tr>` — valid
-table markup. The cell reads `align`, `css-class`, `container-background-color` and the
-`padding` family from the component's own (cascade-resolved) attributes; set none and the
-cell is the bare default. Runnable examples are in the repo's `examples/` directory.
+You return the cell **content**; mjmx wraps it in the standard leaf `<td>` — reading
+`align`, `css-class`, `container-background-color` and `padding` from the component's own
+attributes — so the table markup stays valid. Components are body leaves; container
+components that lay out their own children are native-Rust only for now.
 
-## CSS inlining: `juiceOptions` and `juicePreserveTags`
+## TypeScript
 
-mjml hands `<mj-style inline="inline">` to [juice]. mjmx has no juice — the inliner is
-hand-rolled — so `juiceOptions` is not a pass-through object. Each juice option was
-classified, and `JuiceOptions` is exactly the set that means something here:
+Types ship with the package — no `@types/…` needed.
 
-```js
-mjmx.render(source, {
-  juiceOptions: {
-    applyWidthAttributes: true,          // width  -> width  attr on table/td/th/img
-    applyHeightAttributes: true,         // height -> height attr on the same
-    applyAttributesTableElements: true,  // background-color -> bgcolor, etc. on <table>
-    preserveImportant: false,            // keep `!important` in the written value
-    styleAttributeName: 'style',
-  },
-});
+```ts
+import { render, type RenderOptions, type MjmxError } from 'mjmx-node';
+
+const opts: RenderOptions = { mjmlVersion: 4, beautify: true };
+const html: string = render(source, opts);
 ```
 
-Everything else juice accepts is **refused** — the TypeScript interface is closed, so
-passing one in an object literal is a compile error. Note the enforcement is
-compile-time only: N-API decodes this object into a typed Rust struct field by field,
-so from plain JS an unknown key is dropped before mjmx sees it rather than throwing
-(the wasm build, which receives the raw object, throws with the reason). Same
-trade-off as `minifyOptions` here. The reasons, in short: `extraCss`,
-`applyStyleTags`, `removeStyleTags` and `insertPreservedExtraCss` describe an
-arrangement mjmx fixes before rendering (it splits `<mj-style>` into an inline bucket
-and a `<style>` bucket, and the inliner only ever sees the first);
-`preserveMediaQueries` / `preserveFontFaces` / `preserveKeyFrames` / `preservePseudos`
-are unreachable under mjml's own configuration; `xmlMode`, `url` and `webResources`
-have no analogue and the inliner does no I/O; and `resolveCSSVariables` and
-`inlinePseudoElements` are real gaps that cannot be faked (mjmx writes `var(--x)`
-through verbatim and drops `::before`/`::after` rules).
+The `RenderOptions` interface is closed: an unknown key is a compile-time error rather
+than being silently dropped.
 
-`juicePreserveTags` registers templating delimiters the inliner must not look inside:
+## Links
 
-```js
-mjmx.render(source, {
-  juicePreserveTags: { myTag: { start: '<#', end: '</#' } },
-});
-```
+- [Repository](https://github.com/mjmx-rs/mjmx) — architecture, and the rest of the
+  toolchain: CLI, linter, formatter, minifier, sourcemap, language server, dev-server
+- [`mjmx`](https://www.npmjs.com/package/mjmx) — the portable WebAssembly build
+- [MJML language reference](https://documentation.mjml.io) — mjmx implements the same
+  components and attributes
 
-These **add** to the built-ins, which are always active whether or not you pass
-anything: EJS (`<% %>`) and Handlebars (`{{ }}`), exactly as in juice. That matters —
-without it, `{{ "<div class='a'>" }}` parses as a real tag and the inliner splices a
-`style` attribute into the middle of your template expression.
+## License
 
-One deliberate divergence from mjml: upstream assigns your tags into juice's
-module-global `codeBlocks` object, so they leak into every later render in the same
-process. mjmx's are per-call.
-
-[juice]: https://github.com/Automattic/juice
-
-`render`, `renderFile` and `format` throw an `Error` whose message aggregates the
-diagnostics (`mjmx: error: <first message> (+N more diagnostics)`). The wrapper in
-`index.js` also attaches the structured list as `err.diagnostics` — the same shape
-`lint()` returns.
-
-## Publishing
-
-The main package and the per-platform packages under `npm/` publish separately. Build
-each platform's binary on that platform (`cargo build -p mjmx-napi --release`), copy the
-cdylib into `npm/<triple>/mjmx.<triple>.node`, then `npm publish` each `npm/<triple>`
-followed by the root package. `npm run napi:version` keeps the platform-package versions
-in lockstep with the root. There is no CI release workflow yet; the `napi` config block
-and the generated `npm/` dirs are ready for one (`@napi-rs/cli`'s GitHub Actions flow).
+MIT

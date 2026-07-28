@@ -1,7 +1,7 @@
 {
-  "name": "mjmx-wasm",
+  "name": "mjmx",
   "version": "0.1.1",
-  "description": "WebAssembly bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
+  "description": "MJML-to-HTML email compiler for JavaScript — written in Rust, compiled to WebAssembly.",
   "keywords": [
     "mjml",
     "mjmx",
@@ -37,7 +37,8 @@
       "import": "./pkg/bundler/mjmx_wasm.js",
       "default": "./pkg/bundler/mjmx_wasm.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./pkg/*": "./pkg/*"
   },
   "engines": {
     "node": ">= 18"

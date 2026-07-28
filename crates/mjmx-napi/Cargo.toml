@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "Node.js (N-API) bindings for the mjmx MJML compiler."
+# npm always renders `README.md` and cannot be pointed elsewhere, so that file is written
+# for JavaScript consumers. Cargo's `readme` field *can* be redirected — point it at the
+# crate-facing one so each registry gets the right audience.
+readme = "README.crate.md"
 
 [lib]
 crate-type = ["cdylib"]

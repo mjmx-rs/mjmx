@@ -33,7 +33,7 @@ The examples import the locally built packages by relative path (no install need
 
 ```sh
 make napi    # builds crates/mjmx-napi (the mjmx-node addon)
-make wasm    # builds crates/mjmx-wasm/pkg/{node,bundler,web} (the mjmx-wasm package)
+make wasm    # builds crates/mjmx-wasm/pkg/{node,bundler,web} (the `mjmx` npm package)
 ```
 
 With the packages published, swap the relative import for `mjmx-node` / `mjmx-wasm`.

@@ -599,21 +599,30 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
 --dry-run`.
 
 1. **Ship as three packages: JS, Rust, Python.**
-   - JS: **`mjmx-wasm@0.1.0` is PUBLISHED** (npm, 2026-07-28, verified by installing it
-     from the registry into a clean project and rendering); `mjmx-node` is **not** —
-     it still needs the CI cross-build, since only the local triple can be built here and
-     an incomplete set breaks installs on every other platform. Both `mjmx-node` (napi) and
-     `mjmx-wasm` dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
-     dual `exports` map. **Names are unscoped, deliberately (2026-07-28):** the packages
+   - JS: **the wasm build is PUBLISHED** — shipped once as `mjmx-wasm@0.1.0` (npm,
+     2026-07-28, verified by installing it from the registry into a clean project and
+     rendering), then renamed to plain **`mjmx`** from 0.1.1 on. `mjmx-node` is **not**
+     published — it still needs the CI cross-build, since only the local triple can be
+     built here and an incomplete set breaks installs on every other platform. Both
+     packages dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
+     dual `exports` map. The wasm `exports` map also exposes `"./pkg/*"`, without which
+     the documented deep import (`mjmx/pkg/web/mjmx_wasm.js`, the only way to embed the
+     wasm bytes in a no-network host) fails with `ERR_PACKAGE_PATH_NOT_EXPORTED` — an
+     `exports` field blocks every subpath it does not list. **Names are unscoped, deliberately (2026-07-28):** the packages
      were `@mjmx/node` / `@mjmx/wasm` until a publish attempt returned `404 Not Found` on
      `PUT` — **the `@mjmx` scope belongs to someone else.** `@mjmx/core` is a *different*
      MJML tool ("Write mjml using JSX syntax", mjmx.dev, 2.1.0). Do not read
      `npm access list packages @mjmx` as proof of ownership: it reported
      `@mjmx/core: read-write`, which is the package's own access setting, not this
      account's permission — `npm access list packages` (no scope) is the authoritative
-     list, and `@mjmx/*` is absent from it. Unscoped `mjmx-wasm` / `mjmx-node` (+
-     `mjmx-node-<triple>`) match the crate names and were free. The name collision with
-     `@mjmx/core` in the *same* ecosystem is a known, accepted risk.
+     list, and `@mjmx/*` is absent from it. The name collision with `@mjmx/core` in the
+     *same* ecosystem is a known, accepted risk.
+     **npm names, final (2026-07-28):** the wasm build is published as plain **`mjmx`**
+     (unscoped `mjmx` turned out to be claimable), and the native addon as `mjmx-node`
+     (+ `mjmx-node-<triple>`). So `npm i mjmx` gets the portable build that runs
+     everywhere and `mjmx-node` is the opt-in native one (~20× mjml vs ~7×). Note the
+     **crate** is still `mjmx-wasm` — only the npm package was renamed; `mjmx-wasm@0.1.0`
+     remains on npm as the old name, since 0.1.0 cannot be unpublished after 72h.
      - **napi** adopts `@napi-rs/cli`: the binary ships as a per-platform **optional
        dependency** `mjmx-node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
        `darwin-x64`, `darwin-arm64`, `win32-x64-msvc`), scaffolded under
