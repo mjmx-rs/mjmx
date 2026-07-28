@@ -1,5 +1,5 @@
 {
-  "name": "@mjmx/wasm",
+  "name": "mjmx-wasm",
   "version": "0.1.0",
   "description": "WebAssembly bindings for mjmx — an MJML-to-HTML compiler written in Rust.",
   "keywords": [

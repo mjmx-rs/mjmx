@@ -2,8 +2,8 @@
 //
 // Two jobs:
 //   1. Locate the compiled `.node` binary. In a published install the binary
-//      arrives as a per-platform optional dependency (`@mjmx/node-<triple>`,
-//      e.g. `@mjmx/node-linux-x64-gnu`), which npm installs only on a matching
+//      arrives as a per-platform optional dependency (`mjmx-node-<triple>`,
+//      e.g. `mjmx-node-linux-x64-gnu`), which npm installs only on a matching
 //      host; we `require` that first. For local development a bare
 //      `cargo build -p mjmx-napi` (or `make napi`, which stages the cdylib next
 //      to this file as `mjmx.<triple>.node`) is enough — the raw cargo target
@@ -42,7 +42,7 @@ function loadNative() {
   // 1. Published install: the per-platform optional dependency. Its `main` is the
   //    `.node`, so `require` returns the native exports directly.
   try {
-    return require(`@mjmx/node-${triple}`);
+    return require(`mjmx-node-${triple}`);
   } catch {
     // fall through to the local development fallbacks
   }
@@ -67,7 +67,7 @@ function loadNative() {
     }
   }
   throw new Error(
-    `mjmx: no native addon found for ${triple}. Install @mjmx/node-${triple}, ` +
+    `mjmx: no native addon found for ${triple}. Install mjmx-node-${triple}, ` +
       `or build from source with \`make napi\`. Looked in:\n  ${candidates.join('\n  ')}`
   );
 }

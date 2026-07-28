@@ -11,7 +11,7 @@
     </style>
   </head>
   <body>
-    <h1>mjmx custom components (@mjmx/wasm, browser)</h1>
+    <h1>mjmx custom components (mjmx-wasm, browser)</h1>
     <p>Renders the MJML below, with a host-registered <code>&lt;mj-badge&gt;</code> and
       <code>&lt;mj-card&gt;</code>, entirely in the browser via WebAssembly.</p>
     <pre id="out">loading…</pre>
@@ -20,7 +20,7 @@
       Served from the repo root so the relative path resolves, e.g.:
         python3 -m http.server
         open http://localhost:8000/examples/browser/custom-components.html
-      With the package installed, import from '@mjmx/wasm' instead.
+      With the package installed, import from 'mjmx-wasm' instead.
     -->
     <script type="module">
       import init, { render } from '../../crates/mjmx-wasm/pkg/web/mjmx_wasm.js';

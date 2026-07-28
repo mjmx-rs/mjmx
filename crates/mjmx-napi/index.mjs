@@ -1,5 +1,5 @@
 // ESM entry point: a thin re-export of the CommonJS loader in `index.js`, so the
-// package resolves under both `require('@mjmx/node')` and `import … from '@mjmx/node'`.
+// package resolves under both `require('mjmx-node')` and `import … from 'mjmx-node'`.
 // The loader, native binary resolution and diagnostics enrichment all live in the CJS
 // module; this file only restates its surface as named ESM exports.
 

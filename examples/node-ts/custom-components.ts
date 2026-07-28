@@ -1,10 +1,10 @@
-// Custom components with @mjmx/node, typed (TypeScript).
+// Custom components with mjmx-node, typed (TypeScript).
 //
 //   npm i -D typescript
 //   npx tsc --project examples/node-ts        # type-check
 //   npx ts-node examples/node-ts/custom-components.ts   # or run it
 //
-// With the package installed the import would be `from '@mjmx/node'`.
+// With the package installed the import would be `from 'mjmx-node'`.
 import { render, type ComponentCx, type ComponentResult } from '../../crates/mjmx-napi';
 
 // The callback signature is fully typed: `cx` is a ComponentCx, the return is

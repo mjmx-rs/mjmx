@@ -1,4 +1,4 @@
-# @mjmx/node
+# mjmx-node
 
 Node.js bindings for [mjmx](https://github.com/dreygur/mjmx) — an MJML-to-HTML
 compiler written in Rust.
@@ -10,11 +10,11 @@ The npm package lives alongside the Rust crate in this directory: `package.json`
 ## Install
 
 ```sh
-npm i @mjmx/node
+npm i mjmx-node
 ```
 
 The native binary ships as a per-platform **optional dependency**
-(`@mjmx/node-<triple>`, e.g. `@mjmx/node-linux-x64-gnu`); npm installs only the one
+(`mjmx-node-<triple>`, e.g. `mjmx-node-linux-x64-gnu`); npm installs only the one
 matching the host. Prebuilt triples: `linux-x64-gnu`, `linux-arm64-gnu`, `darwin-x64`,
 `darwin-arm64`, `win32-x64-msvc`. The loader (`index.js`) `require`s the matching
 package first, then falls back to a locally built binary — so a bare
@@ -23,8 +23,8 @@ package first, then falls back to a locally built binary — so a bare
 Both module systems resolve:
 
 ```js
-const mjmx = require('@mjmx/node'); // CommonJS
-import mjmx from '@mjmx/node';      // ESM (named exports too: import { render } …)
+const mjmx = require('mjmx-node'); // CommonJS
+import mjmx from 'mjmx-node';      // ESM (named exports too: import { render } …)
 ```
 
 ## Build & test
@@ -37,7 +37,7 @@ make napi-test   # the above, then node crates/mjmx-napi/test/smoke.mjs
 ## API
 
 ```js
-const mjmx = require('@mjmx/node');
+const mjmx = require('mjmx-node');
 
 // Render options use mjml's own `mjml2html` names and defaults; `breakpoint` is the
 // one mjmx extension (mjml hardcodes 480 and only <mj-breakpoint> changes it).

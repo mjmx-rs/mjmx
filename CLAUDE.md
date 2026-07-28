@@ -542,7 +542,7 @@ one** (mjml's `htmlAttributes` drops undefined); with none set the cell is
 `<td style="font-size:0px;word-break:break-word;">`. Native and both JS bindings share this
 one path (the wrapping is in codegen, before the binding's `cx.write`).
 
-**Phase 2 — JS bindings.** Both `@mjmx/node` and `@mjmx/wasm` take a `components:
+**Phase 2 — JS bindings.** Both `mjmx-node` and `mjmx-wasm` take a `components:
 Record<string, ComponentFn>` render option, `ComponentFn = (cx) => string |
 { html, styles?, fonts? }`. `cx` is a **read-only snapshot** — `attr(name)`, `attrs`,
 `containerWidth`, `breakpoint`, `rawInner` — and head contributions come back through the
@@ -599,12 +599,20 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
 --dry-run`.
 
 1. **Ship as three packages: JS, Rust, Python.**
-   - JS: **publish-ready (no CI, not yet published).** Both `@mjmx/node` (napi) and
-     `@mjmx/wasm` (note: scoped, matching `@mjmx/node` — the prose used to say
-     `mjmx-wasm`) dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
-     dual `exports` map.
+   - JS: **publish-ready (no CI, not yet published).** Both `mjmx-node` (napi) and
+     `mjmx-wasm` dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
+     dual `exports` map. **Names are unscoped, deliberately (2026-07-28):** the packages
+     were `@mjmx/node` / `@mjmx/wasm` until a publish attempt returned `404 Not Found` on
+     `PUT` — **the `@mjmx` scope belongs to someone else.** `@mjmx/core` is a *different*
+     MJML tool ("Write mjml using JSX syntax", mjmx.dev, 2.1.0). Do not read
+     `npm access list packages @mjmx` as proof of ownership: it reported
+     `@mjmx/core: read-write`, which is the package's own access setting, not this
+     account's permission — `npm access list packages` (no scope) is the authoritative
+     list, and `@mjmx/*` is absent from it. Unscoped `mjmx-wasm` / `mjmx-node` (+
+     `mjmx-node-<triple>`) match the crate names and were free. The name collision with
+     `@mjmx/core` in the *same* ecosystem is a known, accepted risk.
      - **napi** adopts `@napi-rs/cli`: the binary ships as a per-platform **optional
-       dependency** `@mjmx/node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
+       dependency** `mjmx-node-<triple>` (5 triples: `linux-x64-gnu`, `linux-arm64-gnu`,
        `darwin-x64`, `darwin-arm64`, `win32-x64-msvc`), scaffolded under
        `crates/mjmx-napi/npm/<triple>/` by `napi create-npm-dirs`. The hand-written
        `index.js` loader (kept for its diagnostics enrichment) now `require`s the matching

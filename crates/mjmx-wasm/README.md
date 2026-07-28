@@ -1,4 +1,4 @@
-# @mjmx/wasm
+# mjmx-wasm
 
 WebAssembly bindings for **mjmx**, an MJML-to-HTML compiler written in Rust. This is
 the "drop-in for JS mjml" surface: the same compiler the CLI uses, compiled to
@@ -12,7 +12,7 @@ lives here.
 ## Install
 
 ```sh
-npm i @mjmx/wasm
+npm i mjmx-wasm
 ```
 
 The package ships **three wasm-bindgen flavours** behind a conditional `exports` map, so
@@ -25,8 +25,8 @@ one import resolves correctly everywhere:
 | `import` / default | `bundler/` (ESM) | webpack / vite / rollup |
 
 ```js
-const { render } = require('@mjmx/wasm');   // Node (CommonJS)
-import { render } from '@mjmx/wasm';         // bundler / browser (ESM)
+const { render } = require('mjmx-wasm');   // Node (CommonJS)
+import { render } from 'mjmx-wasm';         // bundler / browser (ESM)
 ```
 
 ## Build
@@ -137,7 +137,7 @@ interface Diagnostic {
 ```
 
 ```js
-const { render } = require('@mjmx/wasm'); // or './pkg/node/mjmx_wasm.js' from a local build
+const { render } = require('mjmx-wasm'); // or './pkg/node/mjmx_wasm.js' from a local build
 console.log(render('<mjml><mj-body><mj-section><mj-column><mj-text>Hi</mj-text></mj-column></mj-section></mj-body></mjml>'));
 ```
 
@@ -181,7 +181,7 @@ and include resolution — which need a base directory and a loader — cannot w
 target. Options:
 
 - inline the partials into the source string before calling `render()`, or
-- use `@mjmx/node` (the N-API addon) when a host filesystem is available.
+- use `mjmx-node` (the N-API addon) when a host filesystem is available.
 
 A future revision could accept a caller-supplied `resolve(path) => string` callback to
 run include resolution through JS; that is not implemented today.

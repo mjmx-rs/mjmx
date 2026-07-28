@@ -1,5 +1,5 @@
 {
-  "name": "@mjmx/node-win32-x64-msvc",
+  "name": "mjmx-node-win32-x64-msvc",
   "version": "0.1.0",
   "cpu": [
     "x64"
