@@ -599,7 +599,10 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
 --dry-run`.
 
 1. **Ship as three packages: JS, Rust, Python.**
-   - JS: **publish-ready (no CI, not yet published).** Both `mjmx-node` (napi) and
+   - JS: **`mjmx-wasm@0.1.0` is PUBLISHED** (npm, 2026-07-28, verified by installing it
+     from the registry into a clean project and rendering); `mjmx-node` is **not** —
+     it still needs the CI cross-build, since only the local triple can be built here and
+     an incomplete set breaks installs on every other platform. Both `mjmx-node` (napi) and
      `mjmx-wasm` dropped `"private": true` and gained keywords, `homepage`/`bugs`, and a
      dual `exports` map. **Names are unscoped, deliberately (2026-07-28):** the packages
      were `@mjmx/node` / `@mjmx/wasm` until a publish attempt returned `404 Not Found` on
@@ -630,9 +633,11 @@ categories, umbrella README, docs.rs metadata, and a green `cargo publish --work
        the V4 `style=""` skeleton. Fixed by pinning the affected checks to `mjmlVersion: 4`
        or opting in with `ignoreIncludes: false`; `make napi-test` / `make wasm-test` green.
      - **Still open:** a CI release workflow (`@napi-rs/cli`'s GitHub Actions flow) to
-       cross-build every triple and `npm publish`; nothing is published yet.
-   - Rust: `mjmx` umbrella as a published-quality crate (docs.rs metadata, crate-level docs,
-     examples, keywords).
+       cross-build every triple and `npm publish` `mjmx-node`. `mjmx-wasm` is published and
+       needs no cross-build (one portable artifact), which is exactly why it shipped first.
+   - Rust: the umbrella's published-quality metadata is **done** (docs.rs metadata,
+     crate-level docs, keywords, categories, crate README) but the crate itself is **not on
+     crates.io** — see the distribution decision above; consumed by git dependency.
    - Python: **new binding** (pyo3/maturin). This reverses the earlier "wasm + napi only, no
      python" decision recorded under Prior art.
 2. **CLI parity audit — done for 4.18.0.** Walked mjml 4.18.0's `mjml-cli/src/client.js`

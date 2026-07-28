@@ -33,7 +33,18 @@ The CLI installs from the same source:
 cargo install --git https://github.com/dreygur/mjmx mjmx-cli
 ```
 
-**JavaScript** — `mjmx-wasm` (WebAssembly, works in Node, bundlers and browsers).
+**JavaScript** — `mjmx-wasm` (WebAssembly, works in Node, bundlers and browsers):
+
+```sh
+npm install mjmx-wasm
+```
+
+```js
+import { render } from 'mjmx-wasm';
+
+const html = render('<mjml><mj-body><mj-section><mj-column><mj-text>Hi</mj-text></mj-column></mj-section></mj-body></mjml>');
+```
+
 `mjmx-node` (native, faster) is not published yet: it needs a CI cross-build for all
 five platform triples, so publishing it today would break installs everywhere except
 macOS arm64.
