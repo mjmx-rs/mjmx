@@ -864,7 +864,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -881,14 +881,14 @@ dependencies = [
 
 [[package]]
 name = "mjmx-allocator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bumpalo",
 ]
 
 [[package]]
 name = "mjmx-ast"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-span",
@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "mjmx",
@@ -910,7 +910,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-codegen"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -926,7 +926,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-css-inline"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cssparser",
  "mjmx-html-compare",
@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-dev-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "mjmx",
@@ -949,14 +949,14 @@ dependencies = [
 
 [[package]]
 name = "mjmx-diagnostics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-span",
 ]
 
 [[package]]
 name = "mjmx-formatter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -968,22 +968,22 @@ dependencies = [
 
 [[package]]
 name = "mjmx-html-compare"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-html-tokenizer",
 ]
 
 [[package]]
 name = "mjmx-html-tokenizer"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-index"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-language-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1000,7 +1000,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-linter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-minifier"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cssparser",
  "mjmx-html-compare",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-napi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "indexmap",
  "mjmx",
@@ -1031,7 +1031,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1042,7 +1042,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-semantic"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1054,7 +1054,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-sourcemap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-span",
  "mjmx-syntax",
@@ -1062,15 +1062,15 @@ dependencies = [
 
 [[package]]
 name = "mjmx-span"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-syntax"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-transformer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1084,7 +1084,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-traverse"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "js-sys",
  "mjmx",
