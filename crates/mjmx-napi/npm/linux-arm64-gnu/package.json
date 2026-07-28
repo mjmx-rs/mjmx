@@ -18,18 +18,18 @@
     "napi",
     "rust"
   ],
-  "homepage": "https://github.com/dreygur/mjmx#readme",
+  "homepage": "https://github.com/mjmx-rs/mjmx#readme",
   "license": "MIT",
   "engines": {
     "node": ">= 18"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dreygur/mjmx.git",
+    "url": "git+https://github.com/mjmx-rs/mjmx.git",
     "directory": "crates/mjmx-napi"
   },
   "bugs": {
-    "url": "https://github.com/dreygur/mjmx/issues"
+    "url": "https://github.com/mjmx-rs/mjmx/issues"
   },
   "os": [
     "linux"

@@ -20,7 +20,7 @@ depend on it by git:
 
 ```toml
 [dependencies]
-mjmx = { git = "https://github.com/dreygur/mjmx" }
+mjmx = { git = "https://github.com/mjmx-rs/mjmx" }
 ```
 
 Pin a commit for reproducible builds (`rev = "…"`), since there are no released versions
@@ -30,7 +30,7 @@ dependency — if you need that, open an issue and we'll prioritise the registry
 The CLI installs from the same source:
 
 ```sh
-cargo install --git https://github.com/dreygur/mjmx mjmx-cli
+cargo install --git https://github.com/mjmx-rs/mjmx mjmx-cli
 ```
 
 **JavaScript** — `mjmx-wasm` (WebAssembly, works in Node, bundlers and browsers):

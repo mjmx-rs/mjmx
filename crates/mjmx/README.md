@@ -41,7 +41,7 @@ verified byte-for-byte against real `mjml@5.4.0` output.
 Pre-1.0: the rendering pipeline is complete and parity-tested, but the API may still
 change.
 
-See the [repository](https://github.com/dreygur/mjmx) for architecture, the crate map, and
+See the [repository](https://github.com/mjmx-rs/mjmx) for architecture, the crate map, and
 the rest of the toolchain — linter, formatter, minifier, sourcemap, language server and
 dev-server.
 

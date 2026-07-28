@@ -10,7 +10,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
-repository = "https://github.com/dreygur/mjmx"
+repository = "https://github.com/mjmx-rs/mjmx"
 authors = ["ryeasin03 <ryeasin03@gmail.com>"]
 
 [workspace.dependencies]

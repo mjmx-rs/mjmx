@@ -15,12 +15,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dreygur/mjmx.git",
+    "url": "git+https://github.com/mjmx-rs/mjmx.git",
     "directory": "crates/mjmx-wasm"
   },
-  "homepage": "https://github.com/dreygur/mjmx#readme",
+  "homepage": "https://github.com/mjmx-rs/mjmx#readme",
   "bugs": {
-    "url": "https://github.com/dreygur/mjmx/issues"
+    "url": "https://github.com/mjmx-rs/mjmx/issues"
   },
   "main": "pkg/node/mjmx_wasm.js",
   "module": "pkg/bundler/mjmx_wasm.js",
