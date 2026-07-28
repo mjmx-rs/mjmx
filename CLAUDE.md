@@ -584,6 +584,20 @@ shape + return channel.
 
 ## Planned next
 
+**Distribution decision (2026-07-28): git-first for Rust, npm for the wasm binding.**
+A first `cargo publish --workspace` was attempted and **rolled back**. crates.io throttles
+*new* crates to a burst of 5 then roughly one per 10 minutes, so a 24-crate workspace takes
+~3 hours of retries; 5 leaf crates (`mjmx-allocator`, `mjmx-html-tokenizer`, `mjmx-index`,
+`mjmx-span`, `mjmx-syntax`) went up before the 429 and were **deleted** via crates.io's
+self-serve delete (eligible: 0 downloads, no reverse dependencies, minutes old — note
+`cargo yank` would *not* have worked, it neither deletes nor frees the name). The Rust side
+is therefore consumed by **git dependency**; the known cost is that no crate published on
+crates.io can depend on mjmx, and there is no docs.rs page. Revisit by asking
+`help@crates.io` to raise the new-crate limit for the workspace, which is the normal remedy.
+Publish-readiness work already landed and still stands: correct `repository` URL, keywords,
+categories, umbrella README, docs.rs metadata, and a green `cargo publish --workspace
+--dry-run`.
+
 1. **Ship as three packages: JS, Rust, Python.**
    - JS: **publish-ready (no CI, not yet published).** Both `@mjmx/node` (napi) and
      `@mjmx/wasm` (note: scoped, matching `@mjmx/node` — the prose used to say
@@ -671,7 +685,11 @@ Non-negotiable. These are enforced locally, not by a service — the repo has **
   pin is read out of `Cargo.toml` by the Makefile, never duplicated — each failure
   carrying its install command. One-time per machine:
   `cargo install wasm-bindgen-cli --version 0.2.100`. (`wasm-opt`/binaryen stays
-  optional: it only shrinks the artifact and already no-ops when absent.)
+  optional: it only shrinks the artifact and already no-ops when absent — but note
+  `make wasm-release` *does* require it, and the size report in `make wasm-opt` had a
+  macOS-only bug until 2026-07-28: BSD `wc -c < file` pads its output with leading
+  spaces, so the unquoted `awk -v b=$$before` word-split and awk read `-v` as a filename.
+  It works on Linux, where GNU `wc` does not pad. Quote shell values in recipes.)
 - **Cover all the codebase in tests.** Every crate carries tests; every new code path and
   every fixed bug lands with a test in the same change. `make coverage` (needs
   `cargo install cargo-llvm-cov`) prints per-crate line coverage, `make coverage-html`

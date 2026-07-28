@@ -111,7 +111,7 @@ wasm-opt: ## Shrink the staged wasm with binaryen (no-op if wasm-opt is missing)
 	    before=$$(wc -c < $$f); \
 	    $(WASM_OPT) $(WASM_OPT_FLAGS) $$f -o $$f.opt && mv $$f.opt $$f; \
 	    after=$$(wc -c < $$f); \
-	    awk -v b=$$before -v a=$$after -v n=$$f 'BEGIN { \
+	    awk -v b="$$before" -v a="$$after" -v n="$$f" 'BEGIN { \
 	      printf "wasm-opt $(WASM_OPT_FLAGS): %s %.1f KiB -> %.1f KiB (-%.1f%%)\n", \
 	        n, b/1024, a/1024, (b-a)*100/b }'; \
 	  done; \

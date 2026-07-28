@@ -7,12 +7,38 @@
 Rust port of [MJML](https://github.com/mjmlio/mjml), built as an oxc-style compiler toolchain
 (parse → semantic → codegen → lint), rendering MJML to responsive HTML email.
 
-> ⚠️ **Work in progress.** mjmx is under active development and not yet published to any
-> package registry. The rendering pipeline is complete and parity-tested, but APIs may still
-> change and release packaging (crates.io, npm, PyPI) is not done. Not yet recommended for
+> ⚠️ **Work in progress.** mjmx is under active development. The rendering pipeline is
+> complete and parity-tested, but APIs may still change. Not yet recommended for
 > production use.
 
 See [CLAUDE.md](CLAUDE.md) for architecture and roadmap.
+
+## Install
+
+**Rust** — mjmx is distributed from this repository rather than crates.io for now, so
+depend on it by git:
+
+```toml
+[dependencies]
+mjmx = { git = "https://github.com/dreygur/mjmx" }
+```
+
+Pin a commit for reproducible builds (`rev = "…"`), since there are no released versions
+to resolve against. Note that a crate published *to* crates.io cannot depend on a git
+dependency — if you need that, open an issue and we'll prioritise the registry release.
+
+The CLI installs from the same source:
+
+```sh
+cargo install --git https://github.com/dreygur/mjmx mjmx-cli
+```
+
+**JavaScript** — `@mjmx/wasm` (WebAssembly, works in Node, bundlers and browsers).
+`@mjmx/node` (native, faster) is not published yet: it needs a CI cross-build for all
+five platform triples, so publishing it today would break installs everywhere except
+macOS arm64.
+
+**Python** — planned (pyo3/maturin), not started.
 
 ## mjml compatibility
 
