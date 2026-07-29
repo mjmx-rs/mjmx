@@ -38,11 +38,12 @@ const CONTENT: &[MjmlTag] = &[
 #[must_use]
 pub fn allowed_children(tag: MjmlTag) -> Option<&'static [MjmlTag]> {
     use MjmlTag::{
-        Comment, MjAccordion, MjAccordionElement, MjAccordionText, MjAccordionTitle, MjAttributes,
-        MjBody, MjBreakpoint, MjButton, MjCarousel, MjCarouselImage, MjColumn, MjDivider, MjFont,
-        MjGroup, MjHead, MjHero, MjHtmlAttribute, MjHtmlAttributes, MjImage, MjInclude, MjNavbar,
-        MjNavbarLink, MjPreview, MjRaw, MjSection, MjSelector, MjSocial, MjSocialElement, MjSpacer,
-        MjStyle, MjTable, MjText, MjTitle, MjWrapper, Mjml, Text, Unknown,
+        Comment, MjAccordion, MjAccordionElement, MjAccordionText, MjAccordionTitle, MjAll,
+        MjAttributes, MjBody, MjBreakpoint, MjButton, MjCarousel, MjCarouselImage, MjClass,
+        MjColumn, MjDivider, MjFont, MjGroup, MjHead, MjHero, MjHtmlAttribute, MjHtmlAttributes,
+        MjImage, MjInclude, MjNavbar, MjNavbarLink, MjPreview, MjRaw, MjSection, MjSelector,
+        MjSocial, MjSocialElement, MjSpacer, MjStyle, MjTable, MjText, MjTitle, MjWrapper, Mjml,
+        Text, Unknown,
     };
 
     Some(match tag {
@@ -74,10 +75,10 @@ pub fn allowed_children(tag: MjmlTag) -> Option<&'static [MjmlTag]> {
         MjHtmlAttributes => &[MjSelector],
         MjSelector => &[MjHtmlAttribute],
         // Explicitly unconstrained: leaf/ending components and free-form containers.
-        MjAttributes | MjBreakpoint | MjFont | MjPreview | MjStyle | MjTitle | MjHtmlAttribute
-        | MjRaw | MjText | MjButton | MjImage | MjDivider | MjSpacer | MjTable
-        | MjSocialElement | MjNavbarLink | MjCarouselImage | MjAccordionTitle | MjAccordionText
-        | MjInclude | Comment | Text | Unknown => return None,
+        MjAttributes | MjAll | MjClass | MjBreakpoint | MjFont | MjPreview | MjStyle | MjTitle
+        | MjHtmlAttribute | MjRaw | MjText | MjButton | MjImage | MjDivider | MjSpacer
+        | MjTable | MjSocialElement | MjNavbarLink | MjCarouselImage | MjAccordionTitle
+        | MjAccordionText | MjInclude | Comment | Text | Unknown => return None,
     })
 }
 

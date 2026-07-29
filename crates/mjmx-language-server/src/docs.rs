@@ -34,6 +34,12 @@ pub fn tag_summary(tag: MjmlTag) -> Option<&'static str> {
         MjmlTag::MjAttributes => {
             "Declares default attributes per component or `mj-class`, applied document-wide."
         }
+        MjmlTag::MjAll => {
+            "An `<mj-attributes>` row: sets a default attribute on *every* component."
+        }
+        MjmlTag::MjClass => {
+            "An `<mj-attributes>` row: a named attribute set, applied with `mj-class=\"name\"`."
+        }
         MjmlTag::MjBreakpoint => "Sets the width below which the layout switches to mobile.",
         MjmlTag::MjFont => "Imports a web font by `name` and `href`.",
         MjmlTag::MjPreview => "Preview text shown by mail clients next to the subject line.",

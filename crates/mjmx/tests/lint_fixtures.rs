@@ -108,10 +108,17 @@ fn mj_attributes_rows_are_not_validated_as_elements() {
     );
 }
 
-/// The exemption is scoped to `<mj-attributes>`: the same tags are still unknown
-/// components anywhere else, so the fix cannot be a blanket amnesty for `mj-all`.
+/// The exemption is scoped to `<mj-attributes>`: an attribute row is only meaningful
+/// there, so the same tags are still rejected anywhere else and the fix cannot decay
+/// into a blanket amnesty for `mj-all`.
+///
+/// This is **deliberately stricter than mjml**, which treats `mj-all`/`mj-class` as
+/// "component-less" tags that pass validation in any position and then render to
+/// nothing (it logs `No matching component for tag : mj-all` and drops it). mjmx reports
+/// the misplacement instead, the same way it already does for a misplaced
+/// `<mj-selector>`.
 #[test]
-fn mj_all_outside_mj_attributes_is_still_unknown() {
+fn mj_all_outside_mj_attributes_is_still_rejected() {
     let source = "<mjml><mj-body><mj-section><mj-column>\
                   <mj-all font-family=\"Helvetica\" />\
                   </mj-column></mj-section></mj-body></mjml>";
@@ -120,9 +127,32 @@ fn mj_all_outside_mj_attributes_is_still_unknown() {
     let parsed = mjmx_parser::parse(source, &allocator);
     let diagnostics = mjmx_linter::lint(&parsed.document);
     assert!(
+        diagnostics.iter().any(|d| d.message.contains("mj-all")),
+        "a stray <mj-all> in the body is still a diagnostic: {diagnostics:?}"
+    );
+}
+
+/// An unknown tag inside `<mj-attributes>` is still an unknown component.
+///
+/// The rows are unconstrained *structurally* — any component name is a valid row — but
+/// the name must still exist. mjml agrees: its `validTag` rule runs on every element
+/// regardless of position, so `<mj-foo>` is rejected there exactly as it is in the body
+/// (verified against mjml 4.18.0, which throws `Element mj-foo doesn't exist or is not
+/// registered`).
+#[test]
+fn unknown_row_inside_mj_attributes_is_rejected() {
+    let source = "<mjml><mj-head><mj-attributes>\
+                  <mj-foo color=\"#f00\" />\
+                  </mj-attributes></mj-head><mj-body><mj-section><mj-column>\
+                  <mj-text>x</mj-text></mj-column></mj-section></mj-body></mjml>";
+
+    let allocator = Allocator::new();
+    let parsed = mjmx_parser::parse(source, &allocator);
+    let diagnostics = mjmx_linter::lint(&parsed.document);
+    assert!(
         diagnostics
             .iter()
-            .any(|d| d.message.contains("unknown mjml component") && d.message.contains("mj-all")),
-        "a stray <mj-all> in the body is still an unknown component: {diagnostics:?}"
+            .any(|d| d.message.contains("unknown mjml component") && d.message.contains("mj-foo")),
+        "an unknown row name is still an unknown component: {diagnostics:?}"
     );
 }

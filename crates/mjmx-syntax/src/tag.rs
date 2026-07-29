@@ -22,6 +22,11 @@ pub enum MjmlTag {
     MjBody,
     /// `<mj-attributes>`.
     MjAttributes,
+    /// `<mj-all>` — an `<mj-attributes>` row setting a default on *every* component.
+    MjAll,
+    /// `<mj-class>` — an `<mj-attributes>` row defining a named set, applied by
+    /// `mj-class="name"` on a body element.
+    MjClass,
     /// `<mj-breakpoint>`.
     MjBreakpoint,
     /// `<mj-font>`.
@@ -103,6 +108,8 @@ impl MjmlTag {
             MjmlTag::MjHead => "mj-head",
             MjmlTag::MjBody => "mj-body",
             MjmlTag::MjAttributes => "mj-attributes",
+            MjmlTag::MjAll => "mj-all",
+            MjmlTag::MjClass => "mj-class",
             MjmlTag::MjBreakpoint => "mj-breakpoint",
             MjmlTag::MjFont => "mj-font",
             MjmlTag::MjPreview => "mj-preview",
@@ -154,6 +161,8 @@ impl MjmlTag {
             "mj-head" => MjmlTag::MjHead,
             "mj-body" => MjmlTag::MjBody,
             "mj-attributes" => MjmlTag::MjAttributes,
+            "mj-all" => MjmlTag::MjAll,
+            "mj-class" => MjmlTag::MjClass,
             "mj-breakpoint" => MjmlTag::MjBreakpoint,
             "mj-font" => MjmlTag::MjFont,
             "mj-preview" => MjmlTag::MjPreview,
@@ -196,6 +205,8 @@ impl MjmlTag {
             self,
             MjmlTag::MjHead
                 | MjmlTag::MjAttributes
+                | MjmlTag::MjAll
+                | MjmlTag::MjClass
                 | MjmlTag::MjBreakpoint
                 | MjmlTag::MjFont
                 | MjmlTag::MjPreview

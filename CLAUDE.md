@@ -492,6 +492,42 @@ soft validation. jdrouet/mrml is the lenient outlier: its generic `node` compone
 unknown tags through as literal HTML. For a compiler toolchain with an LSP, strict-with-a-
 good-diagnostic is the right call.
 
+**The four component-less tags** (2026-07-29). mjml's validator carries an explicit
+list — `mjml-validator/lib/rules/validTag.js` — of tags that are valid despite having no
+component behind them:
+
+```js
+const componentLessTags = ['mj-all', 'mj-class', 'mj-selector', 'mj-html-attribute'];
+```
+
+mjmx had only two of the four in `MjmlTag` (`mj-selector`, `mj-html-attribute`, added with
+`<mj-html-attributes>`); `mj-all` and `mj-class` were missing, so **`<mj-attributes>` rows
+were reported as unknown components and `--validation-level strict` refused to render any
+document using them** — 7 of the 85 fixtures. All four are now in the enum.
+
+The rule mjml actually applies, verified against 4.18.0 rather than read off the source:
+`validTag` runs on **every** element regardless of position, and a tag is valid iff it is a
+registered component *or* one of those four. So inside `<mj-attributes>` any real component
+name is a legal row (`mj-carousel-image` included — a row for a component the document never
+uses is fine), and only a genuinely unknown name (`<mj-foo>`) is rejected. The linter now
+does exactly that: it does **not** apply the structural parent/child rules to
+`<mj-attributes>` children — they are attribute *rows* keyed by tag name, not element
+positions — but it does still check that each row name exists.
+
+**One deliberate divergence, toward a better diagnostic.** mjml accepts a *misplaced*
+`mj-all`/`mj-class`/`mj-selector` anywhere (they are component-less, so `validTag` passes)
+and then silently renders nothing, logging `No matching component for tag : mj-all`. mjmx
+reports the misplacement — `<mj-all> is a head-only component but appears in the body` —
+which is what it already did for `<mj-selector>`, and is the strict-with-a-good-diagnostic
+call above.
+
+**Why it survived so long:** the golden tests render under *soft* validation, where a
+diagnostic is reported and then ignored, so nothing asserted the corpus was
+diagnostic-free. Since every fixture is valid MJML by construction, the corpus is a
+standing oracle for the linter, and `crates/mjmx/tests/lint_fixtures.rs` now uses it that
+way — every fixture must lint clean *and* render under `strict`. Found by the playground,
+which lints on every keystroke and so put the false positive on screen.
+
 A 2026-07-22 diagnostics fix (`render::unsupported`, `mjmx-linter::check_unknown`) made this
 consistent: the render error used to read "rendering is not implemented for `<div>` yet …
 unsupported component in this build", framing a nonexistent tag as a pending mjmx feature —

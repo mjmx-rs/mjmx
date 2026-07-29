@@ -100,17 +100,20 @@ fn walk<'a>(
     check_element(el, parent, region, registered, out);
 
     // `<mj-attributes>` children are not elements in a position — they are attribute
-    // *rows*, keyed by tag name. `<mj-all>` sets a default for every component,
+    // *rows*, keyed by tag name. `<mj-all>` sets a default on every component,
     // `<mj-class name="x">` defines a named set, and any other name is the per-tag row
-    // for that component (`AttributesRegistry::ingest` matches on the raw tag string and
-    // accepts anything). So every structural rule is meaningless in here: a row for a
-    // component the document never uses is perfectly valid, and `mj-all`/`mj-class` are
-    // not components at all — they exist only in this context, which is why they are
-    // absent from `MjmlTag` and would otherwise be reported as unknown components.
-    //
-    // Not descending matches mjml, which reads these rows as data and ignores a name it
-    // does not recognize.
+    // for that component (`AttributesRegistry::ingest` matches on the raw tag string).
+    // So the structural rules are meaningless here — a row for a component the document
+    // never uses is perfectly valid, and `mj-body` as a row is not a nested body — but
+    // the tag must still *exist*: mjml's `validTag` runs on every element regardless of
+    // position, so `<mj-foo>` inside `<mj-attributes>` is the usual unknown-component
+    // error there too (verified against mjml 4.18.0).
     if el.tag == MjmlTag::MjAttributes {
+        for row in el.element_children() {
+            if row.tag == MjmlTag::Unknown && !registered.contains(row.raw_tag.as_str()) {
+                check_unknown(row, out);
+            }
+        }
         return;
     }
 
