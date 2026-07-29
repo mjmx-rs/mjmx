@@ -78,7 +78,7 @@ pub fn apply_html_attributes(html: &str, attributes: &[HtmlAttribute<'_>]) -> St
         // Restrict to the body content mjml's cheerio pass sees: everything the
         // inliner would touch, minus the structural document tags that only exist
         // in mjmx's fully-assembled output (mjml's `content` is body-inner).
-        if !element.inlinable || matches!(element.tag.as_str(), "html" | "body") {
+        if !element.inlinable || matches!(element.tag.as_ref(), "html" | "body") {
             continue;
         }
         // Resolve the winning value per attribute name across every matching triple,

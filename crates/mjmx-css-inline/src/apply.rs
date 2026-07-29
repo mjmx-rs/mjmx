@@ -101,7 +101,13 @@ pub(crate) fn apply(
     // final `--*` declarations (matched rules folded into its own `style`), so a
     // lookup can walk ancestors like juice's `findVariableValue`. Built only when
     // resolution is on, and empty for elements a stylesheet cannot touch.
-    let custom_maps: Vec<Vec<(String, String)>> = if options.resolve_css_variables {
+    //
+    // Building it runs the whole cascade a second time per element, so it is skipped
+    // when the document provably has no `var()` to resolve — see [`uses_var`]. That is
+    // an equivalence, not an approximation: with no `var()` anywhere,
+    // [`substitute_vars`] is the identity, so the maps could never be read.
+    let substitute = options.resolve_css_variables && uses_var(html, rules);
+    let custom_maps: Vec<Vec<(String, String)>> = if substitute {
         tree.elements
             .iter()
             .enumerate()
@@ -121,6 +127,7 @@ pub(crate) fn apply(
                 index,
                 element,
                 options,
+                substitute,
                 &custom_maps,
                 &mut edits,
             );
@@ -143,6 +150,7 @@ fn rewrite(
     index: usize,
     element: &Element<'_>,
     options: &InlineOptions,
+    substitute: bool,
     custom_maps: &[Vec<(String, String)>],
     edits: &mut Vec<Edit>,
 ) {
@@ -156,8 +164,14 @@ fn rewrite(
     // (before mirroring, so a resolved colour still reaches `bgcolor`) and drop the
     // `--x` declarations from the output.
     if options.resolve_css_variables {
-        for declaration in &mut merged {
-            declaration.value = substitute_vars(&declaration.value, index, tree, custom_maps, 0);
+        // The substitution itself is skipped when the document has no `var()` at all
+        // (it would be the identity), but the `--x` declarations are still dropped —
+        // juice removes them from the output whether or not anything referenced them.
+        if substitute {
+            for declaration in &mut merged {
+                declaration.value =
+                    substitute_vars(&declaration.value, index, tree, custom_maps, 0);
+            }
         }
         merged.retain(|declaration| !declaration.property.starts_with("--"));
     }
@@ -187,6 +201,21 @@ fn rewrite(
             text: appended,
         });
     }
+}
+
+/// Whether any `var()` reference can reach the output, and so whether the custom-property
+/// cascade is worth building.
+///
+/// Every value the inliner writes comes from either a stylesheet declaration or an
+/// existing `style` attribute in the document, so if neither mentions `var(` then no
+/// merged value can, and [`substitute_vars`] would return each value unchanged. Emails
+/// with custom properties are the exception rather than the rule, and the map costs a
+/// second full cascade over every element to build.
+fn uses_var(html: &str, rules: &[Rule]) -> bool {
+    rules
+        .iter()
+        .any(|rule| rule.declarations.iter().any(|d| d.value.contains("var(")))
+        || html.contains("var(")
 }
 
 /// The declarations that win the cascade for one element, in the order they are

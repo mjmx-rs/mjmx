@@ -16,12 +16,26 @@
 //! tables live inside comments — never sees those elements either. An inliner
 //! that descended into comments would diverge the moment a merge moved one.
 
+use std::borrow::Cow;
+
 use mjmx_html_tokenizer::{Attr, Event, is_void};
+
+/// A tag name lower-cased for comparison, borrowed when it already is.
+///
+/// Tag names in generated markup are lower-case to begin with, and this runs once per
+/// start tag on every element in the document — so the common case should not allocate.
+fn lower_ascii(tag: &str) -> Cow<'_, str> {
+    if tag.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(tag.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(tag)
+    }
+}
 
 /// One element of the document.
 pub(crate) struct Element<'a> {
     /// The lower-cased tag name.
-    pub(crate) tag: String,
+    pub(crate) tag: Cow<'a, str>,
     /// The `id` attribute, if any.
     pub(crate) id: Option<&'a str>,
     /// The whitespace-separated `class` tokens.
@@ -110,7 +124,7 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                     elements[p].has_content = true;
                 }
 
-                let tag_lower = tag.to_ascii_lowercase();
+                let tag_lower = lower_ascii(tag);
                 let inlinable =
                     !is_skipped(&tag_lower) && parent.is_none_or(|p: usize| elements[p].inlinable);
                 let id = attrs
@@ -142,10 +156,11 @@ pub(crate) fn build(html: &str) -> Tree<'_> {
                 }
             }
             Event::Close { tag, span } => {
-                let tag = tag.to_ascii_lowercase();
-                let matching = stack
-                    .iter()
-                    .rposition(|(index, _)| index.is_some_and(|i| elements[i].tag == tag));
+                // Compared case-insensitively rather than lower-casing the close tag:
+                // the stored tag is already lower-case, so this needs no allocation.
+                let matching = stack.iter().rposition(|(index, _)| {
+                    index.is_some_and(|i| elements[i].tag.eq_ignore_ascii_case(tag))
+                });
                 if let Some(frame) = matching {
                     // The element whose scope this close ends: record where its inner
                     // content ends (the `<` of the `</tag>`) for `::after` splicing.
@@ -211,7 +226,7 @@ mod tests {
             "<div><!--[if mso | IE]><table><tr><td><![endif]--><p>x</p>\
              <!--[if mso | IE]></td></tr></table><![endif]--></div>",
         );
-        let tags: Vec<&str> = tree.elements.iter().map(|e| e.tag.as_str()).collect();
+        let tags: Vec<&str> = tree.elements.iter().map(|e| e.tag.as_ref()).collect();
         assert_eq!(tags, ["div", "p"]);
         assert_eq!(tree.elements[1].parent, Some(0));
     }
@@ -237,7 +252,7 @@ mod tests {
     fn head_content_is_never_inlinable() {
         let tree = build("<html><head><title>t</title></head><body><p>x</p></body></html>");
         for element in &tree.elements {
-            let expected = matches!(element.tag.as_str(), "html" | "body" | "p");
+            let expected = matches!(element.tag.as_ref(), "html" | "body" | "p");
             assert_eq!(element.inlinable, expected, "{}", element.tag);
         }
     }
