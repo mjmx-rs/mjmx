@@ -48,7 +48,16 @@ bumpalo = { version = "3", features = ["collections", "boxed"] }
 cssparser = { version = "0.37", default-features = false }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "signal"] }
-axum = { version = "0.8", features = ["ws"] }
+# Default features off: the dev-server serves one HTML route, one JSON route and the
+# hot-reload websocket, so `form`, `matched-path`, `original-uri` and axum's `tracing`
+# integration are dead weight it would otherwise compile on every build.
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "json",
+    "query",
+    "tokio",
+    "ws",
+] }
 notify = "8"
 napi = { version = "3", default-features = false, features = ["napi4"] }
 napi-derive = "3"
