@@ -1,10 +1,11 @@
 //! `<mj-image>` — an `<img>` inside an aligned `<td>` and inner presentation table.
 
 use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, push_decl};
 
 // mjml defaults.
 const ALIGN: &str = "center";
@@ -78,41 +79,52 @@ impl<'a> Render<'a> for Image<'a> {
         };
 
         // Outer <td>: container-background-color prepends a `background:` declaration.
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
-        td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        td_style.push_str("font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";word-break:break-word;");
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{td_style}\">"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
 
         buf.push_str(
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"border-collapse:collapse;border-spacing:0px;\">",
         );
         buf.push_str("<tbody><tr>");
-        buf.push_str(&format!("<td style=\"width:{px}px;\">"));
+        let _ = write!(buf, "<td style=\"width:{px}px;\">");
 
         if let Some(href) = href {
-            buf.push_str(&format!("<a href=\"{href}\" target=\"{target}\">"));
+            buf.push_str("<a href=\"");
+            buf.push_str(href);
+            buf.push_str("\" target=\"");
+            buf.push_str(target);
+            buf.push_str("\">");
         }
 
         // <img> style: border, optional border-radius, then the fixed run.
         let mut img_style = format!("border:{border};");
         if let Some(br) = border_radius {
-            img_style.push_str(&format!("border-radius:{br};"));
+            push_decl(&mut img_style, "border-radius", br);
         }
-        img_style.push_str(&format!(
-            "display:block;outline:none;text-decoration:none;height:{height};width:100%;font-size:{font_size};"
-        ));
-        buf.push_str(&format!(
+        img_style.push_str("display:block;outline:none;text-decoration:none;height:");
+        img_style.push_str(height);
+        img_style.push_str(";width:100%;font-size:");
+        img_style.push_str(font_size);
+        img_style.push(';');
+        let _ = write!(
+            buf,
             "<img alt=\"{alt}\" src=\"{src}\" style=\"{img_style}\" width=\"{px}\" height=\"{height_attr}\" />"
-        ));
+        );
 
         if href.is_some() {
             buf.push_str("</a>");

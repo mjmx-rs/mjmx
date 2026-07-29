@@ -6,6 +6,7 @@
 //! document — doctype, `<html>`, the head built from the accumulated context and head
 //! data, and the body wrapper.
 
+use std::fmt::Write;
 use std::ops::Range;
 
 use mjmx_ast::{Document, Element};
@@ -145,6 +146,31 @@ fn sourcemap_refusal(
     None
 }
 
+/// Bytes reserved for everything the assembly pass writes around the rendered body:
+/// the doctype, the `<html>` tag and the whole `<head>`.
+///
+/// The head is the only part whose size is unknown at that point (the body buffer is
+/// already complete). Across the repository's fixtures a rendered head runs 1.3–5.8 KB,
+/// median ~2 KB, so this covers all but the largest in the initial allocation and costs
+/// one doubling when it does not.
+pub(crate) const HEAD_CAPACITY: usize = 4 * 1024;
+
+/// A starting capacity for the body buffer, estimated from the source length.
+///
+/// Rendered output runs 3.6–33× the MJML source across the fixtures (median 12.7×), the
+/// spread being how much boilerplate a component expands into. Eight is deliberately
+/// below the median: overshooting wastes memory on every render, while undershooting
+/// costs at most a doubling or two on the tail. The point is only to skip the dozen
+/// reallocate-and-copy rounds a buffer growing from zero would otherwise pay.
+///
+/// Clamped at 512 KiB so a pathologically large source cannot reserve tens of megabytes
+/// up front; past that, amortized doubling is cheap enough.
+fn body_capacity(document: &Document<'_>) -> usize {
+    const MAX: usize = 512 * 1024;
+    let source_len = document.span.end.saturating_sub(document.span.start) as usize;
+    source_len.saturating_mul(8).clamp(HEAD_CAPACITY, MAX)
+}
+
 /// The shared body of [`render_document`], [`render_document_with_inline_css`] and
 /// [`render_document_with_sourcemap`].
 ///
@@ -203,7 +229,7 @@ fn render_impl<'a>(
     let title = ctx.semantic.head().title.clone().unwrap_or_default();
 
     // Pass 1: render the body, collecting head requirements into `ctx`.
-    let mut body_buf = String::new();
+    let mut body_buf = String::with_capacity(body_capacity(document));
     if let Some(body) = body_element(root) {
         crate::render::traced(body, &mut ctx, &mut body_buf, |ctx, buf| {
             Body::new(body).render(ctx, buf)
@@ -211,8 +237,9 @@ fn render_impl<'a>(
         .map_err(|d| vec![d])?;
     }
 
-    // Pass 2: assemble the document around the collected context.
-    let mut out = String::new();
+    // Pass 2: assemble the document around the collected context. The body is already
+    // rendered, so the only unknown left is the head, which `HEAD_CAPACITY` covers.
+    let mut out = String::with_capacity(body_buf.len() + HEAD_CAPACITY);
     // mjml's `beforeDoctype`: `<mj-raw position="file-start">` siblings of `<mj-body>`
     // are emitted ahead of the doctype (joined by a newline), for XML prologs and the
     // like.
@@ -222,11 +249,12 @@ fn render_impl<'a>(
         out.push('\n');
     }
     out.push_str("<!doctype html>\n");
-    out.push_str(&format!(
+    let _ = write!(
+        out,
         "<html lang=\"{lang}\" dir=\"{dir}\" xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\">",
         lang = ctx.lang,
         dir = ctx.dir,
-    ));
+    );
     out.push_str(&render_head(&ctx, &title, &body_buf));
     // mjml's `setBackgroundColor` from <mj-body background-color> lands here, appended
     // after the always-present word-spacing declaration.
@@ -248,13 +276,16 @@ fn render_impl<'a>(
             Some(class) => format!("class=\"{class}\" "),
             None => String::new(),
         };
-        out.push_str(&format!(
-            "<body  {id}{class}style=\"word-spacing:normal;{body_background}\">"
-        ));
+        out.push_str("<body  ");
+        out.push_str(&id);
+        out.push_str(&class);
+        out.push_str("style=\"word-spacing:normal;");
+        out.push_str(&body_background);
+        out.push_str("\">");
     } else {
-        out.push_str(&format!(
-            "<body style=\"word-spacing:normal;{body_background}\">"
-        ));
+        out.push_str("<body style=\"word-spacing:normal;");
+        out.push_str(&body_background);
+        out.push_str("\">");
     }
     // Where the body buffer lands in the assembled document: mappings were recorded
     // against `body_buf`, so this is the delta that rebases them.
@@ -276,6 +307,41 @@ fn render_impl<'a>(
     })
 }
 
+/// The end of an Outlook conditional comment.
+const END_MARKER: &str = "<![endif]-->";
+/// The opening of the `[if mso | IE]` conditional [`merge_outlook_conditionals`] fuses.
+const OPEN_MARKER: &str = "<!--[if mso | IE]>";
+
+/// The next [`END_MARKER`] in `html` at or after `from`.
+///
+/// `str::find` with a multi-byte needle builds a fresh two-way searcher on every call,
+/// and mjml-shaped output carries one end marker per section, column and ghost table —
+/// so the setup cost was being paid dozens of times per document, and dominated this
+/// pass. Searching instead for the marker's `[`, a byte that is rare in email HTML,
+/// goes through the single-byte path (a SIMD `memchr` in `core`) and confirms the full
+/// marker only at the handful of candidate positions.
+fn find_endif(html: &str, from: usize) -> Option<usize> {
+    /// Byte offset of `[` within `<![endif]-->`.
+    const BRACKET: usize = 2;
+    let bytes = html.as_bytes();
+    let mut at = from;
+    while let Some(offset) = html[at..].find('[') {
+        let bracket = at + offset;
+        // `[` is one byte, so `bracket + 1` is always a char boundary.
+        at = bracket + 1;
+        // `start >= from` keeps the result at or after where the caller asked to look:
+        // the lookback reaches two bytes behind the `[`, which could otherwise straddle
+        // the boundary and report a marker the caller has already passed.
+        if let Some(start) = bracket.checked_sub(BRACKET)
+            && start >= from
+            && bytes[start..].starts_with(END_MARKER.as_bytes())
+        {
+            return Some(start);
+        }
+    }
+    None
+}
+
 /// Fuse adjacent Outlook conditional comments, mirroring mjml's
 /// `mergeOutlookConditionnals` post-process: every `<![endif]-->` immediately followed
 /// (across only whitespace) by `<!--[if mso | IE]>` is deleted, so two back-to-back
@@ -289,36 +355,110 @@ fn render_impl<'a>(
 /// post-processed HTML. The returned string is exactly what the pass has always produced;
 /// the ranges are pure bookkeeping.
 fn merge_outlook_conditionals(html: &str) -> (String, Vec<Range<usize>>) {
-    const END: &str = "<![endif]-->";
-    const OPEN: &str = "<!--[if mso | IE]>";
     let mut out = String::with_capacity(html.len());
     let mut deletions = Vec::new();
-    let mut rest = html;
-    // Offset of `rest` within `html`, so deletions are reported in input coordinates.
-    let mut base = 0usize;
-    while let Some(pos) = rest.find(END) {
+    // Start of the text not yet copied into `out`, and where to look for the next end
+    // marker. They differ only across a deletion: everything between them is dropped.
+    let mut copied = 0usize;
+    let mut scan = 0usize;
+    while let Some(pos) = find_endif(html, scan) {
         // Look past the `<![endif]-->` and any whitespace for a fused `[if mso | IE]`.
-        let after = &rest[pos + END.len()..];
+        let after = &html[pos + END_MARKER.len()..];
         let trimmed = after.trim_start();
-        if let Some(fused) = trimmed.strip_prefix(OPEN) {
+        if let Some(fused) = trimmed.strip_prefix(OPEN_MARKER) {
             // Drop both the end marker and the following open marker (and the gap).
-            out.push_str(&rest[..pos]);
-            let consumed = rest.len() - fused.len();
-            deletions.push(base + pos..base + consumed);
-            base += consumed;
-            rest = fused;
+            out.push_str(&html[copied..pos]);
+            let resume = html.len() - fused.len();
+            deletions.push(pos..resume);
+            copied = resume;
+            scan = resume;
         } else {
             // Keep this end marker and continue scanning after it.
-            out.push_str(&rest[..pos + END.len()]);
-            base += pos + END.len();
-            rest = after;
+            scan = pos + END_MARKER.len();
         }
     }
-    out.push_str(rest);
+    out.push_str(&html[copied..]);
     (out, deletions)
 }
 
 /// Find the `<mj-body>` child of the `<mjml>` root.
 fn body_element<'a>(root: &'a Element<'a>) -> Option<&'a Element<'a>> {
     root.element_children().find(|el| el.tag == MjmlTag::MjBody)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scan must find a marker wherever it sits, including at offset 0 — where the
+    /// `[` is at index 2 and the `checked_sub` guard is what keeps the lookback in range.
+    #[test]
+    fn find_endif_locates_markers_at_any_offset() {
+        assert_eq!(find_endif("<![endif]-->", 0), Some(0));
+        assert_eq!(find_endif("ab<![endif]-->", 0), Some(2));
+        assert_eq!(find_endif("<![endif]--><![endif]-->", 1), Some(12));
+        assert_eq!(find_endif("<![endif]-->", 1), None);
+    }
+
+    /// A `[` that is not part of a marker must not be mistaken for one — including one in
+    /// the first two bytes, where the lookback would underflow.
+    #[test]
+    fn find_endif_ignores_brackets_that_are_not_markers() {
+        assert_eq!(find_endif("[", 0), None);
+        assert_eq!(find_endif("a[b", 0), None);
+        assert_eq!(find_endif("<!--[if mso | IE]>", 0), None);
+        assert_eq!(find_endif("[![endif]-->", 0), None);
+        assert_eq!(find_endif("text [1] more [2]", 0), None);
+    }
+
+    /// Multi-byte text around a marker must not break the byte-wise lookback: the scan
+    /// only ever indexes at an ASCII `[`, so the slice bounds stay on char boundaries.
+    #[test]
+    fn find_endif_handles_multibyte_text() {
+        assert_eq!(
+            find_endif("héllo — ☃<![endif]-->", 0),
+            Some("héllo — ☃".len())
+        );
+        assert_eq!(find_endif("emoji 🎉 [not a marker]", 0), None);
+    }
+
+    /// Two `[if mso | IE]` blocks separated by only whitespace fuse into one, and the
+    /// deleted range covers exactly the end marker, the gap and the open marker.
+    #[test]
+    fn adjacent_conditionals_fuse() {
+        let html = "<a><!--[if mso | IE]>x<![endif]-->\n  <!--[if mso | IE]>y<![endif]--></a>";
+        let (out, deletions) = merge_outlook_conditionals(html);
+        assert_eq!(out, "<a><!--[if mso | IE]>xy<![endif]--></a>");
+        assert_eq!(deletions.len(), 1);
+        assert_eq!(
+            &html[deletions[0].clone()],
+            "<![endif]-->\n  <!--[if mso | IE]>"
+        );
+    }
+
+    /// A block under any other condition is left alone, as are lone end markers.
+    #[test]
+    fn unrelated_conditionals_are_untouched() {
+        for html in [
+            "<!--[if mso]>x<![endif]--><!--[if mso]>y<![endif]-->",
+            "<!--[if mso | IE]>x<![endif]--><p>text</p><!--[if mso | IE]>y<![endif]-->",
+            "<p>no conditionals at all</p>",
+        ] {
+            let (out, deletions) = merge_outlook_conditionals(html);
+            assert_eq!(out, html);
+            assert!(deletions.is_empty());
+        }
+    }
+
+    /// Three or more back-to-back blocks collapse pairwise into a single block, and every
+    /// reported range is ascending and non-overlapping (the source map relies on that).
+    #[test]
+    fn runs_of_conditionals_collapse_with_ordered_deletions() {
+        let html = "<!--[if mso | IE]>a<![endif]--><!--[if mso | IE]>b<![endif]-->\
+                    <!--[if mso | IE]>c<![endif]-->";
+        let (out, deletions) = merge_outlook_conditionals(html);
+        assert_eq!(out, "<!--[if mso | IE]>abc<![endif]-->");
+        assert_eq!(deletions.len(), 2);
+        assert!(deletions.windows(2).all(|w| w[0].end <= w[1].start));
+    }
 }

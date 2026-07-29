@@ -1,11 +1,12 @@
 //! `<mj-button>` — a link styled as a button: a presentation table wrapping an
 //! `<a>` (with `href`) or a `<p>` (without).
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, inner_text_trimmed, push_decl};
 
 // mjml defaults.
 const BACKGROUND_COLOR: &str = "#414141";
@@ -72,54 +73,55 @@ impl<'a> Render<'a> for Button<'a> {
 
         // Button body is verbatim text; mjml trims it and re-pads with surrounding
         // whitespace inside the anchor.
-        let mut content = String::new();
-        for child in self.element.children() {
-            if let Node::Text(t) = child {
-                content.push_str(t.value.as_str());
-            }
-        }
-        let content = content.trim();
+        let content = inner_text_trimmed(self.element);
 
         // Outer <td>: container-background-color prepends a `background:` declaration.
-        let mut outer_td_style = String::new();
+        let mut outer_td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            outer_td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut outer_td_style, "background", cbg);
         }
-        outer_td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        outer_td_style.push_str("font-size:0px;padding:");
+        outer_td_style.push_str(padding);
+        outer_td_style.push_str(";word-break:break-word;");
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{outer_td_style}\">"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&outer_td_style);
+        buf.push_str("\">");
 
         // Inner presentation table: a fixed width lands here verbatim.
         let mut table_style = String::from("border-collapse:separate;");
         if let Some(w) = width {
-            table_style.push_str(&format!("width:{w};"));
+            push_decl(&mut table_style, "width", w);
         }
         table_style.push_str("line-height:100%;");
-        buf.push_str(&format!(
-            "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{table_style}\">"
-        ));
+        buf.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"");
+        buf.push_str(&table_style);
+        buf.push_str("\">");
         buf.push_str("<tbody><tr>");
 
         // Button cell: align is fixed `center` (independent of the outer `align`).
         let mut cell_style = format!("border:{border};border-radius:{border_radius};cursor:auto;");
         if let Some(fs) = font_style {
-            cell_style.push_str(&format!("font-style:{fs};"));
+            push_decl(&mut cell_style, "font-style", fs);
         }
         if let Some(h) = height {
-            cell_style.push_str(&format!("height:{h};"));
+            push_decl(&mut cell_style, "height", h);
         }
-        cell_style.push_str(&format!(
-            "mso-padding-alt:{inner_padding};background:{background_color};"
-        ));
-        buf.push_str(&format!(
-            "<td align=\"center\" bgcolor=\"{background_color}\" role=\"presentation\" style=\"{cell_style}\" valign=\"{vertical_align}\">"
-        ));
+        push_decl(&mut cell_style, "mso-padding-alt", inner_padding);
+        push_decl(&mut cell_style, "background", background_color);
+        buf.push_str("<td align=\"center\" bgcolor=\"");
+        buf.push_str(background_color);
+        buf.push_str("\" role=\"presentation\" style=\"");
+        buf.push_str(&cell_style);
+        buf.push_str("\" valign=\"");
+        buf.push_str(vertical_align);
+        buf.push_str("\">");
 
         // <a>/<p> width: the button width minus horizontal inner-padding and borders
         // (mjml's calculateAWidth); only for pixel widths.
@@ -130,29 +132,39 @@ impl<'a> Render<'a> for Button<'a> {
 
         let mut a_style = String::from("display:inline-block;");
         if let Some(w) = a_width {
-            a_style.push_str(&format!("width:{w}px;"));
+            let _ = write!(a_style, "width:{w}px;");
         }
-        a_style.push_str(&format!(
-            "background:{background_color};color:{color};font-family:{font_family};font-size:{font_size};"
-        ));
+        push_decl(&mut a_style, "background", background_color);
+        push_decl(&mut a_style, "color", color);
+        push_decl(&mut a_style, "font-family", font_family);
+        push_decl(&mut a_style, "font-size", font_size);
         if let Some(fs) = font_style {
-            a_style.push_str(&format!("font-style:{fs};"));
+            push_decl(&mut a_style, "font-style", fs);
         }
-        a_style.push_str(&format!(
-            "font-weight:{font_weight};line-height:{line_height};"
-        ));
+        push_decl(&mut a_style, "font-weight", font_weight);
+        push_decl(&mut a_style, "line-height", line_height);
         if let Some(ls) = letter_spacing {
-            a_style.push_str(&format!("letter-spacing:{ls};"));
+            push_decl(&mut a_style, "letter-spacing", ls);
         }
-        a_style.push_str(&format!(
+        let _ = write!(
+            a_style,
             "margin:0;text-decoration:{text_decoration};text-transform:{text_transform};padding:{inner_padding};mso-padding-alt:0px;border-radius:{border_radius};"
-        ));
+        );
 
         match href {
-            Some(href) => buf.push_str(&format!(
-                "<a href=\"{href}\" style=\"{a_style}\" target=\"{target}\"> {content} </a>"
-            )),
-            None => buf.push_str(&format!("<p style=\"{a_style}\"> {content} </p>")),
+            Some(href) => {
+                let _ = write!(
+                    buf,
+                    "<a href=\"{href}\" style=\"{a_style}\" target=\"{target}\"> {content} </a>"
+                );
+            }
+            None => {
+                buf.push_str("<p style=\"");
+                buf.push_str(&a_style);
+                buf.push_str("\"> ");
+                buf.push_str(&content);
+                buf.push_str(" </p>");
+            }
         }
 
         buf.push_str("</td></tr></tbody></table></td>");

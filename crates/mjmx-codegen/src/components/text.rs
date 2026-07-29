@@ -1,10 +1,10 @@
 //! `<mj-text>` — a text block; body captured verbatim, renders inside a `<td>`.
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, inner_text, push_decl};
 
 // mjml default: Ubuntu font stack; color #000000. Whether the Ubuntu face is actually
 // imported in the head is decided later by scanning the rendered body for the family
@@ -55,60 +55,64 @@ impl<'a> Render<'a> for Text<'a> {
         let container_background_color = attr("container-background-color", None);
 
         // mj-text is an "ending" tag: its body is a single verbatim text run.
-        let mut content = String::new();
-        for child in self.element.children() {
-            if let Node::Text(t) = child {
-                content.push_str(t.value.as_str());
-            }
-        }
+        let content = inner_text(self.element);
 
         // Inner <div> style, in mjml's declaration order. font-family/size, line-height,
         // text-align and color always appear (component defaults); the rest only when
         // resolved to a value.
         let mut div_style = format!("font-family:{font_family};font-size:{font_size};");
         if let Some(v) = font_style {
-            div_style.push_str(&format!("font-style:{v};"));
+            push_decl(&mut div_style, "font-style", v);
         }
         if let Some(v) = font_weight {
-            div_style.push_str(&format!("font-weight:{v};"));
+            push_decl(&mut div_style, "font-weight", v);
         }
         if let Some(v) = letter_spacing {
-            div_style.push_str(&format!("letter-spacing:{v};"));
+            push_decl(&mut div_style, "letter-spacing", v);
         }
-        div_style.push_str(&format!("line-height:{line_height};text-align:{align};"));
+        push_decl(&mut div_style, "line-height", line_height);
+        push_decl(&mut div_style, "text-align", align);
         if let Some(v) = text_decoration {
-            div_style.push_str(&format!("text-decoration:{v};"));
+            push_decl(&mut div_style, "text-decoration", v);
         }
         if let Some(v) = text_transform {
-            div_style.push_str(&format!("text-transform:{v};"));
+            push_decl(&mut div_style, "text-transform", v);
         }
-        div_style.push_str(&format!("color:{color};"));
+        push_decl(&mut div_style, "color", color);
         if let Some(v) = height {
-            div_style.push_str(&format!("height:{v};"));
+            push_decl(&mut div_style, "height", v);
         }
 
         // Outer <td>: container-background-color prepends a `background:` declaration.
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
-        td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        td_style.push_str("font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";word-break:break-word;");
 
         // mjml's `mj-column` / `mj-hero` wrap each child in `<td align class style>`,
         // taking the class from the *child's* `css-class`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{td_style}\">"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
         // A fixed height wraps the div in an Outlook ghost cell.
         if let Some(h) = height {
-            buf.push_str(&format!(
-                "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr><td height=\"{h}\" style=\"vertical-align:top;height:{h};\"><![endif]-->"
-            ));
+            buf.push_str("<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\"><tr><td height=\"");
+            buf.push_str(h);
+            buf.push_str("\" style=\"vertical-align:top;height:");
+            buf.push_str(h);
+            buf.push_str(";\"><![endif]-->");
         }
-        buf.push_str(&format!("<div style=\"{div_style}\">"));
+        buf.push_str("<div style=\"");
+        buf.push_str(&div_style);
+        buf.push_str("\">");
         buf.push_str(&content);
         buf.push_str("</div>");
         if height.is_some() {

@@ -2,6 +2,7 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::Length;
+use std::fmt::Write;
 
 use crate::context::RenderContext;
 use crate::render::{Render, RenderResult, render_children, render_element};
@@ -44,9 +45,9 @@ impl<'a> Render<'a> for Body<'a> {
         // A <mj-preview> emits a hidden preheader <div> as the first body child,
         // before the email wrapper.
         if let Some(preview) = ctx.semantic.head().preview.clone() {
-            buf.push_str(&format!(
-                "<div style=\"display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;\">{preview}</div>"
-            ));
+            buf.push_str("<div style=\"display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;\">");
+            buf.push_str(&preview);
+            buf.push_str("</div>");
         }
 
         // The body carries the ARIA email wrapper. Attribute order mirrors mjml's
@@ -72,11 +73,12 @@ impl<'a> Render<'a> for Body<'a> {
                 Some(color) => format!("word-spacing:normal;background-color:{color};"),
                 None => "word-spacing:normal;".to_owned(),
             };
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<div {aria_label}aria-roledescription=\"email\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\" style=\"{style}\">",
                 lang = ctx.lang,
                 dir = ctx.dir,
-            ));
+            );
         } else {
             let class = match css_class {
                 Some(class) => format!("class=\"{class}\" "),
@@ -86,11 +88,12 @@ impl<'a> Render<'a> for Body<'a> {
                 Some(color) => format!("background-color:{color};"),
                 None => String::new(),
             };
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<div {aria_label}aria-roledescription=\"email\" {class}style=\"{style}\" role=\"article\" lang=\"{lang}\" dir=\"{dir}\">",
                 lang = ctx.lang,
                 dir = ctx.dir,
-            ));
+            );
         }
 
         // Only element children (sections) and comments render; whitespace text between

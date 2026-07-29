@@ -10,6 +10,7 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use std::borrow::Cow;
 
@@ -93,23 +94,26 @@ impl<'a> Render<'a> for Carousel<'a> {
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"font-size:0px;word-break:break-word;\">"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"font-size:0px;word-break:break-word;\">");
         buf.push_str("<!--[if !mso]><!--><div class=\"mj-carousel\">");
 
         // Radios.
         for i in 0..n {
             let checked = if i == 0 { " checked=\"checked\"" } else { "" };
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<input class=\"mj-carousel-radio mj-carousel-{id}-radio mj-carousel-{id}-radio-{idx}\"{checked} type=\"radio\" name=\"mj-carousel-radio-{id}\" id=\"mj-carousel-{id}-radio-{idx}\" style=\"display:none;mso-hide:all;\" />",
                 idx = i + 1,
-            ));
+            );
         }
 
-        buf.push_str(&format!(
-            "<div class=\"mj-carousel-content mj-carousel-{id}-content\" style=\"display:table;width:100%;table-layout:fixed;text-align:center;font-size:0px;\">"
-        ));
+        buf.push_str("<div class=\"mj-carousel-content mj-carousel-");
+        buf.push_str(&id);
+        buf.push_str("-content\" style=\"display:table;width:100%;table-layout:fixed;text-align:center;font-size:0px;\">");
 
         // Thumbnails (rendered for `visible`/`supported`).
         if matches!(thumbnails, "visible" | "supported") {
@@ -133,9 +137,10 @@ impl<'a> Render<'a> for Carousel<'a> {
                 // suffixed with `-thumbnail`, is appended to the generated classes
                 // (the trailing space is mjml's, present even when unset).
                 let thumb_class = suffix_css_classes(css_class(ctx, img).as_deref(), "thumbnail");
-                buf.push_str(&format!(
+                let _ = write!(
+                    buf,
                     "<a style=\"border:{tb_border};border-radius:{tb_border_radius};display:{disp};overflow:hidden;width:{tb_width}px;\" href=\"#{idx}\" target=\"{target}\" class=\"mj-carousel-thumbnail mj-carousel-{id}-thumbnail mj-carousel-{id}-thumbnail-{idx} {thumb_class}\"><label for=\"mj-carousel-{id}-radio-{idx}\"><img style=\"display:block;width:100%;height:auto;\" src=\"{thumb_src}\" alt=\"{alt}\" width=\"{tb_width}\" /></label></a>"
-                ));
+                );
             }
         }
 
@@ -166,10 +171,11 @@ impl<'a> Render<'a> for Carousel<'a> {
             // mjml's `MjCarouselImage.render`: `mj-carousel-image mj-carousel-image-N `
             // plus the raw `css-class` (empty string when unset).
             let image_class = css_class(ctx, img).unwrap_or(Cow::Borrowed(""));
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<div class=\"mj-carousel-image mj-carousel-image-{idx} {image_class}\" style=\"{div_style}\">{img_html}</div>",
                 img_html = carousel_img_html(img, src, alt, border_radius, container_width),
-            ));
+            );
         }
         buf.push_str("</div></td>");
         render_controls(buf, &id, n, "next", right_icon, icon_width, icon_width_num);
@@ -182,10 +188,11 @@ impl<'a> Render<'a> for Carousel<'a> {
             let src = first.attr("src").unwrap_or("");
             let alt = first.attr("alt").unwrap_or(IMG_ALT);
             let first_class = css_class(ctx, first).unwrap_or(Cow::Borrowed(""));
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<!--[if mso]><div class=\"mj-carousel-image mj-carousel-image-1 {first_class}\" style=\"\" >{img_html}</div><![endif]-->",
                 img_html = carousel_img_html(first, src, alt, border_radius, container_width),
-            ));
+            );
         }
 
         buf.push_str("</td>");
@@ -208,7 +215,9 @@ fn carousel_img_html(
         Some(href) => {
             let mut a = format!("<a href=\"{href}\"");
             if let Some(rel) = img.attr("rel") {
-                a.push_str(&format!(" rel=\"{rel}\""));
+                a.push_str(" rel=\"");
+                a.push_str(rel);
+                a.push('"');
             }
             a.push_str(" target=\"_blank\">");
             format!("{a}{inner}</a>")
@@ -227,14 +236,17 @@ fn render_controls(
     icon_width: &str,
     icon_width_num: u32,
 ) {
-    buf.push_str(&format!(
-        "<td class=\"mj-carousel-{id}-icons-cell\" style=\"font-size:0px;display:none;mso-hide:all;padding:0px;\"><div class=\"mj-carousel-{direction}-icons\" style=\"display:none;mso-hide:all;\">"
-    ));
+    buf.push_str("<td class=\"mj-carousel-");
+    buf.push_str(id);
+    buf.push_str("-icons-cell\" style=\"font-size:0px;display:none;mso-hide:all;padding:0px;\"><div class=\"mj-carousel-");
+    buf.push_str(direction);
+    buf.push_str("-icons\" style=\"display:none;mso-hide:all;\">");
     for i in 0..n {
         let idx = i + 1;
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<label for=\"mj-carousel-{id}-radio-{idx}\" class=\"mj-carousel-{direction} mj-carousel-{direction}-{idx}\"><img src=\"{icon}\" alt=\"{direction}\" style=\"display:block;width:{icon_width};height:auto;\" width=\"{icon_width_num}\" /></label>"
-        ));
+        );
     }
     buf.push_str("</div></td>");
 }
@@ -269,9 +281,10 @@ fn build_head_css(
 ) -> String {
     let mut c = String::new();
     c.push_str("\n    .mj-carousel {\n      -webkit-user-select: none;\n      -moz-user-select: none;\n      user-select: none;\n    }\n\n");
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    .mj-carousel-{id}-icons-cell {{\n      display: table-cell !important;\n      width: {icon_width} !important;\n    }}\n\n"
-    ));
+    );
     c.push_str("    .mj-carousel-radio,\n    .mj-carousel-next,\n    .mj-carousel-previous {\n      display: none !important;\n    }\n\n");
     c.push_str("    .mj-carousel-thumbnail,\n    .mj-carousel-next,\n    .mj-carousel-previous {\n      touch-action: manipulation;\n    }\n\n");
 
@@ -284,10 +297,11 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: none !important;\n    }}\n\n",
         e.join(",\n    ")
-    ));
+    );
 
     // Show the checked slide (reverse combinators).
     let f: Vec<String> = (0..n)
@@ -299,10 +313,11 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: block !important;\n    }}\n\n",
         f.join(",\n    ")
-    ));
+    );
 
     // Arrows: statics + rotated next/previous targets.
     let mut g: Vec<String> = vec![
@@ -325,10 +340,11 @@ fn build_head_css(
             comb = combinator(n - 1 - i)
         ));
     }
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: block !important;\n    }}\n\n",
         g.join(",\n    ")
-    ));
+    );
 
     // Selected thumbnail border color.
     let h: Vec<String> = (0..n)
@@ -340,10 +356,11 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      border-color: {tb_selected} !important;\n    }}\n\n",
         h.join(",\n    ")
-    ));
+    );
 
     // Selected thumbnails become inline-block.
     let ii: Vec<String> = (0..n)
@@ -355,10 +372,11 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: inline-block !important;\n    }}\n\n",
         ii.join(",\n    ")
-    ));
+    );
 
     c.push_str("    .mj-carousel-image img+div,\n    .mj-carousel-thumbnail img+div {\n      display: none !important;\n    }\n\n");
 
@@ -371,14 +389,16 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: none !important;\n    }}\n\n",
         k.join(",\n    ")
-    ));
+    );
 
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    .mj-carousel-thumbnail:hover {{\n      border-color: {tb_hover} !important;\n    }}\n\n"
-    ));
+    );
 
     // Thumbnail-i hover shows slide i.
     let m: Vec<String> = (0..n)
@@ -390,10 +410,11 @@ fn build_head_css(
             )
         })
         .collect();
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "    {} {{\n      display: block !important;\n    }}\n",
         m.join(",\n    ")
-    ));
+    );
 
     // Fallback block.
     c.push_str("\n    .mj-carousel noinput {\n      display: block !important;\n    }\n\n");
@@ -401,13 +422,15 @@ fn build_head_css(
     c.push_str("    .mj-carousel noinput .mj-carousel-arrows,\n    .mj-carousel noinput .mj-carousel-thumbnails {\n      display: none !important;\n    }\n\n");
     c.push_str("    [owa] .mj-carousel-thumbnail {\n      display: none !important;\n    }\n\n");
     c.push_str("    @media screen yahoo {\n\n");
-    c.push_str(&format!(
+    let _ = write!(
+        c,
         "      .mj-carousel-{id}-icons-cell,\n      .mj-carousel-previous-icons,\n      .mj-carousel-next-icons {{\n        display: none !important;\n      }}\n\n"
-    ));
-    c.push_str(&format!(
+    );
+    let _ = write!(
+        c,
         "      .mj-carousel-{id}-radio-1:checked{comb}.mj-carousel-content .mj-carousel-{id}-thumbnail-1 {{\n        border-color: transparent;\n      }}\n    }}\n\n  ",
         comb = combinator(n - 1)
-    ));
+    );
 
     c
 }

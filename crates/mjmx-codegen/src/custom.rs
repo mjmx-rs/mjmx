@@ -18,7 +18,7 @@
 
 use std::collections::BTreeMap;
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
 use mjmx_diagnostics::Diagnostic;
 
 use crate::context::RenderContext;
@@ -245,13 +245,7 @@ impl<'a, 'buf> ComponentCx<'a, 'buf> {
     /// The verbatim source text between the tag's open and close (its raw inner markup).
     #[must_use]
     pub fn raw_inner(&self) -> String {
-        let mut inner = String::new();
-        for child in self.element.children() {
-            if let Node::Text(text) = child {
-                inner.push_str(text.value.as_str());
-            }
-        }
-        inner
+        crate::render::inner_text(self.element)
     }
 
     /// Append `html` to the output buffer.

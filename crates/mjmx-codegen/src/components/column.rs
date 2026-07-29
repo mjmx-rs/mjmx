@@ -4,7 +4,10 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{append_css_class, css_class};
 use crate::context::{MjmlCompat, RenderContext};
-use crate::render::{Render, RenderResult, is_raw_element, render_children, render_element};
+use crate::render::{
+    Render, RenderResult, STYLE_CAPACITY, is_raw_element, push_decl, render_children,
+    render_element,
+};
 
 /// A column's resolved width, mirroring mjml's `widthParser` output (`{parsedWidth,
 /// unit}`) as produced by `MjColumn.getParsedWidth`.
@@ -565,21 +568,27 @@ impl<'a> Render<'a> for Column<'a> {
             .unwrap_or("ltr");
 
         let mobile_width = self.mobile_width(container);
+        buf.push_str("<div class=\"");
+        buf.push_str(&class);
+        buf.push_str("\" style=\"font-size:0px;text-align:left;direction:");
+        buf.push_str(direction);
+        buf.push_str(";display:inline-block;vertical-align:");
+        buf.push_str(vertical_align);
+        buf.push_str(";width:");
+        buf.push_str(&mobile_width);
+        buf.push(';');
         // mjml's `getMobileGutterStyles`: a gutter appends a `padding` after `width` in
         // the div style (vertical mobile spacing for a section column, the horizontal
         // desktop padding for a group column).
-        let div_padding = self
-            .div_gutter_padding(container)
-            .map(|p| format!("padding:{p};"))
-            .unwrap_or_default();
-        buf.push_str(&format!(
-            "<div class=\"{class}\" style=\"font-size:0px;text-align:left;direction:{direction};display:inline-block;vertical-align:{vertical_align};width:{mobile_width};{div_padding}\">"
-        ));
+        if let Some(padding) = self.div_gutter_padding(container) {
+            push_decl(buf, "padding", &padding);
+        }
+        buf.push_str("\">");
 
         // mjml's `tableStyle`: the box declarations shared by the no-gutter table and
         // the gutter cell, in mjml's key order.
         let border_radius = opt("border-radius");
-        let mut box_style = String::new();
+        let mut box_style = String::with_capacity(STYLE_CAPACITY);
         for (prop, value) in [
             ("background-color", opt("background-color")),
             ("border", opt("border")),
@@ -590,10 +599,13 @@ impl<'a> Render<'a> for Column<'a> {
             ("border-top", opt("border-top")),
         ] {
             if let Some(v) = value {
-                box_style.push_str(&format!("{prop}:{v};"));
+                box_style.push_str(prop);
+                box_style.push(':');
+                box_style.push_str(v);
+                box_style.push(';');
             }
         }
-        box_style.push_str(&format!("vertical-align:{vertical_align};"));
+        push_decl(&mut box_style, "vertical-align", vertical_align);
         // `hasBorderRadius` forces separated borders so the radius is honoured.
         if border_radius.is_some() {
             box_style.push_str("border-collapse:separate;");
@@ -615,7 +627,7 @@ impl<'a> Render<'a> for Column<'a> {
         // mjml's inner styles: only meaningful on a gutter column, where they dress the
         // inner content table instead of `tableStyle`.
         let inner_border_radius = opt("inner-border-radius");
-        let mut inner_style = String::new();
+        let mut inner_style = String::with_capacity(STYLE_CAPACITY);
         for (prop, value) in [
             ("background-color", opt("inner-background-color")),
             ("border", opt("inner-border")),
@@ -626,7 +638,10 @@ impl<'a> Render<'a> for Column<'a> {
             ("border-top", opt("inner-border-top")),
         ] {
             if let Some(v) = value {
-                inner_style.push_str(&format!("{prop}:{v};"));
+                inner_style.push_str(prop);
+                inner_style.push(':');
+                inner_style.push_str(v);
+                inner_style.push(';');
             }
         }
         if inner_border_radius.is_some() {
@@ -654,9 +669,9 @@ impl<'a> Render<'a> for Column<'a> {
             } else {
                 ""
             };
-            buf.push_str(&format!(
-                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" width=\"100%\"{outer_style}>"
-            ));
+            buf.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" width=\"100%\"");
+            buf.push_str(outer_style);
+            buf.push('>');
             buf.push_str("<tbody><tr>");
             let mut gutter_style = box_style.clone();
             for (prop, value) in [
@@ -667,13 +682,18 @@ impl<'a> Render<'a> for Column<'a> {
                 ("padding-left", padding_left),
             ] {
                 if let Some(v) = value {
-                    gutter_style.push_str(&format!("{prop}:{v};"));
+                    gutter_style.push_str(prop);
+                    gutter_style.push(':');
+                    gutter_style.push_str(v);
+                    gutter_style.push(';');
                 }
             }
-            buf.push_str(&format!("<td style=\"{gutter_style}\">"));
-            buf.push_str(&format!(
-                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{inner_style}\" width=\"100%\">"
-            ));
+            buf.push_str("<td style=\"");
+            buf.push_str(&gutter_style);
+            buf.push_str("\">");
+            buf.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"");
+            buf.push_str(&inner_style);
+            buf.push_str("\" width=\"100%\">");
             buf.push_str("<tbody>");
             render_children(self.element, ctx, buf, |child, ctx, buf| {
                 // mjml's `renderChildren`: a raw element (mj-raw) renders directly into
@@ -689,9 +709,9 @@ impl<'a> Render<'a> for Column<'a> {
             buf.push_str("</tbody></table></td></tr></tbody></table></div>");
         } else {
             // No gutter: the box styles sit directly on the single content table.
-            buf.push_str(&format!(
-                "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{box_style}\" width=\"100%\">"
-            ));
+            buf.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"");
+            buf.push_str(&box_style);
+            buf.push_str("\" width=\"100%\">");
             buf.push_str("<tbody>");
             render_children(self.element, ctx, buf, |child, ctx, buf| {
                 // mjml's `renderChildren`: a raw element (mj-raw) renders directly into

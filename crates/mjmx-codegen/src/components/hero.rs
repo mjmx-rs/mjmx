@@ -10,10 +10,13 @@
 //! `padding-bottom` reserves the background image's aspect ratio.
 
 use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, is_raw_element, render_children, render_element};
+use crate::render::{
+    Render, RenderResult, is_raw_element, push_decl, render_children, render_element,
+};
 
 // mjml defaults.
 const MODE: &str = "fixed-height";
@@ -73,27 +76,31 @@ impl<'a> Render<'a> for Hero<'a> {
         };
 
         // Outlook ghost table + the VML background image behind it.
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:{container_width}px;\" width=\"{container_width}\" ><tr><td style=\"line-height:0;font-size:0;mso-line-height-rule:exactly;\">"
-        ));
+        );
         buf.push_str("<v:image style=\"border:0;");
         if let Some(h) = background_height {
-            buf.push_str(&format!("height:{h};"));
+            push_decl(buf, "height", h);
         }
-        buf.push_str(&format!(
-            "mso-position-horizontal:center;position:absolute;top:0;width:{image_width};z-index:-3;\""
-        ));
+        buf.push_str("mso-position-horizontal:center;position:absolute;top:0;width:");
+        buf.push_str(&image_width);
+        buf.push_str(";z-index:-3;\"");
         if let Some(url) = background_url {
-            buf.push_str(&format!(" src=\"{url}\""));
+            buf.push_str(" src=\"");
+            buf.push_str(url);
+            buf.push('"');
         }
         buf.push_str(" xmlns:v=\"urn:schemas-microsoft-com:vml\" /><![endif]-->");
 
         // Centered container. mjml's key order is align, class, style — `mj-hero` has
         // no `align` default, so `class` (from `css-class`) leads.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<div {class}style=\"margin:0 auto;max-width:{container_width}px;\">"
-        ));
+        );
         buf.push_str(
             "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"width:100%;\">",
         );
@@ -126,7 +133,9 @@ impl<'a> Render<'a> for Hero<'a> {
         // The background cell.
         buf.push_str("<td");
         if let Some(url) = background_url {
-            buf.push_str(&format!(" background=\"{url}\""));
+            buf.push_str(" background=\"");
+            buf.push_str(url);
+            buf.push('"');
         }
         let sizing = if fluid {
             String::new()
@@ -138,14 +147,16 @@ impl<'a> Render<'a> for Hero<'a> {
         } else {
             format!(" height=\"{cell_height}\"")
         };
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             " style=\"background:{background};background-position:{background_position};background-repeat:no-repeat;padding:{padding};vertical-align:{vertical_align};{sizing}\"{height_attr}>"
-        ));
+        );
 
         // Inner Outlook table sized to the container width.
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:{container_width}px;\" width=\"{container_width}\" ><tr><td style=\"\"><![endif]-->"
-        ));
+        );
 
         // mj-hero-content: the nested content table; each child sits in its own <tr>.
         buf.push_str("<div class=\"mj-hero-content\" style=\"margin:0px auto;\">");

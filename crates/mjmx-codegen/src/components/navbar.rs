@@ -8,11 +8,12 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::components::navbar_link::NavbarLink;
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, push_decl};
 
 // mjml defaults.
 const ALIGN: &str = "center";
@@ -67,11 +68,13 @@ impl<'a> Render<'a> for Navbar<'a> {
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"font-size:0px;"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"font-size:0px;");
         if let Some(p) = padding {
-            buf.push_str(&format!("padding:{p};"));
+            push_decl(buf, "padding", p);
         }
         buf.push_str("word-break:break-word;\">");
 
@@ -88,21 +91,24 @@ impl<'a> Render<'a> for Navbar<'a> {
             let ico_open = self.resolve(ctx, "ico-open", ICO_OPEN);
             let ico_close = self.resolve(ctx, "ico-close", ICO_CLOSE);
 
-            buf.push_str(&format!(
-                "<!--[if !mso]><!--><input type=\"checkbox\" id=\"{id}\" class=\"mj-menu-checkbox\" style=\"display:none !important; max-height:0; visibility:hidden;\" /><!--<![endif]-->"
-            ));
+            buf.push_str("<!--[if !mso]><!--><input type=\"checkbox\" id=\"");
+            buf.push_str(&id);
+            buf.push_str("\" class=\"mj-menu-checkbox\" style=\"display:none !important; max-height:0; visibility:hidden;\" /><!--<![endif]-->");
             buf.push_str(
                 "<div class=\"mj-menu-trigger\" style=\"display:none;max-height:0px;max-width:0px;font-size:0px;overflow:hidden;\">",
             );
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<label for=\"{id}\" class=\"mj-menu-label\" style=\"display:block;cursor:pointer;mso-hide:all;-moz-user-select:none;user-select:none;color:{ico_color};font-size:{ico_font_size};font-family:{ico_font_family};text-transform:{ico_text_transform};text-decoration:{ico_text_decoration};line-height:{ico_line_height};padding:{ico_padding};\" align=\"{ico_align}\">"
-            ));
-            buf.push_str(&format!(
-                "<span class=\"mj-menu-icon-open\" style=\"mso-hide:all;\"> {ico_open} </span>"
-            ));
-            buf.push_str(&format!(
-                "<span class=\"mj-menu-icon-close\" style=\"display:none;mso-hide:all;\"> {ico_close} </span>"
-            ));
+            );
+            buf.push_str("<span class=\"mj-menu-icon-open\" style=\"mso-hide:all;\"> ");
+            buf.push_str(ico_open);
+            buf.push_str(" </span>");
+            buf.push_str(
+                "<span class=\"mj-menu-icon-close\" style=\"display:none;mso-hide:all;\"> ",
+            );
+            buf.push_str(ico_close);
+            buf.push_str(" </span>");
             buf.push_str("</label></div>");
         }
 
@@ -110,17 +116,19 @@ impl<'a> Render<'a> for Navbar<'a> {
         for (i, el) in links.iter().enumerate() {
             let link = NavbarLink::new(el, base_url);
             if i == 0 {
-                buf.push_str(&format!(
+                let _ = write!(
+                    buf,
                     "<!--[if mso | IE]><table role=\"presentation\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" align=\"{align}\"><tr><td style=\"{}\" class=\"{}\" ><![endif]-->",
                     link.td_style(ctx),
                     link.outlook_class(ctx)
-                ));
+                );
             } else {
-                buf.push_str(&format!(
+                let _ = write!(
+                    buf,
                     "<!--[if mso | IE]></td><td style=\"{}\" class=\"{}\" ><![endif]-->",
                     link.td_style(ctx),
                     link.outlook_class(ctx)
-                ));
+                );
             }
             // The mapped range is the link's `<a>` only: its Outlook ghost `<td>` is
             // emitted by the navbar above and belongs to the navbar's own range.

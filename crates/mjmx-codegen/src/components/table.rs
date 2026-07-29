@@ -5,11 +5,12 @@
 //! the table untouched. The default font-family references the Ubuntu stack, so — like
 //! mj-text — referencing it triggers the head font import (see `head.rs`).
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, inner_text, push_decl};
 
 // mjml defaults.
 const ALIGN: &str = "left";
@@ -75,35 +76,39 @@ impl<'a> Render<'a> for Table<'a> {
         };
 
         // The inner rows: captured verbatim as one text run, emitted as-is.
-        let mut content = String::new();
-        for child in self.element.children() {
-            if let Node::Text(t) = child {
-                content.push_str(t.value.as_str());
-            }
-        }
+        let content = inner_text(self.element);
 
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
-        td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        td_style.push_str("font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";word-break:break-word;");
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{td_style}\">"
-        ));
-        buf.push_str(&format!(
-            "<table cellpadding=\"{cellpadding}\" cellspacing=\"{cellspacing}\""
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
+        buf.push_str("<table cellpadding=\"");
+        buf.push_str(cellpadding);
+        buf.push_str("\" cellspacing=\"");
+        buf.push_str(cellspacing);
+        buf.push('"');
         if let Some(role) = role {
-            buf.push_str(&format!(" role=\"{role}\""));
+            buf.push_str(" role=\"");
+            buf.push_str(role);
+            buf.push('"');
         }
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             " width=\"{width}\" border=\"0\" style=\"color:{color};font-family:{font_family};font-size:{font_size};line-height:{line_height};table-layout:{table_layout};width:{width};border:{border};{border_collapse}\">"
-        ));
+        );
         buf.push_str(&content);
         buf.push_str("</table></td>");
         Ok(())

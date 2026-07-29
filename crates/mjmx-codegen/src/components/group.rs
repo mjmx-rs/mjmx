@@ -7,11 +7,12 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use crate::components::css_class::{append_css_class, css_class};
 use crate::components::{Column, ColumnWidth, Gutter};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children, render_element};
+use crate::render::{Render, RenderResult, push_decl, render_children, render_element};
 
 /// Renderer for `<mj-group>`.
 pub struct Group<'a> {
@@ -69,28 +70,30 @@ impl<'a> Render<'a> for Group<'a> {
             "font-size:0;line-height:0;text-align:left;display:inline-block;width:100%;direction:{direction};"
         );
         if let Some(va) = vertical_align {
-            div_style.push_str(&format!("vertical-align:{va};"));
+            push_decl(&mut div_style, "vertical-align", va);
         }
         if let Some(bg) = background_color {
-            div_style.push_str(&format!("background-color:{bg};"));
+            push_decl(&mut div_style, "background-color", bg);
         }
         // mjml's `render`: `${getColumnClass()} mj-outlook-group-fix` + `css-class`.
         let div_class = append_css_class(
             &format!("{class} mj-outlook-group-fix"),
             css_class(ctx, self.element).as_deref(),
         );
-        buf.push_str(&format!(
-            "<div class=\"{div_class}\" style=\"{div_style}\">"
-        ));
+        buf.push_str("<div class=\"");
+        buf.push_str(&div_class);
+        buf.push_str("\" style=\"");
+        buf.push_str(&div_style);
+        buf.push_str("\">");
 
         // The group's own Outlook ghost table holding one cell per column; it carries
         // the group background as a `bgcolor`.
         let mso_bgcolor = background_color
             .map(|bg| format!("bgcolor=\"{bg}\" "))
             .unwrap_or_default();
-        buf.push_str(&format!(
-            "<!--[if mso | IE]><table {mso_bgcolor}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><![endif]-->"
-        ));
+        buf.push_str("<!--[if mso | IE]><table ");
+        buf.push_str(&mso_bgcolor);
+        buf.push_str("border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><![endif]-->");
 
         let columns: Vec<&Element> = self
             .element
@@ -133,9 +136,10 @@ impl<'a> Render<'a> for Group<'a> {
                 index,
                 total: total_children,
             };
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<!--[if mso | IE]><td style=\"vertical-align:{va};width:{col_px}px;\" ><![endif]-->"
-            ));
+            );
             crate::render::traced(col, ctx, buf, |ctx, buf| {
                 Column::new_grouped(col, width, raw, num, gutter).render(ctx, buf)
             })?;

@@ -1,10 +1,11 @@
 //! `<mj-divider>` — a horizontal rule: a `<p>` for clients plus an mso/IE ghost table.
 
 use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, push_decl};
 
 // mjml defaults.
 const BORDER_COLOR: &str = "#000000";
@@ -60,26 +61,35 @@ impl<'a> Render<'a> for Divider<'a> {
         let outlook_width = resolve_width(width, content_width);
 
         // Outer <td>: container-background-color prepends a `background:` declaration.
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
-        td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        td_style.push_str("font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";word-break:break-word;");
 
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{td_style}\">"
-        ));
-        buf.push_str(&format!(
-            "<p style=\"border-top:{border_top};font-size:1px;margin:{margin};width:{width};\"></p>"
-        ));
-        buf.push_str(&format!(
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
+        buf.push_str("<p style=\"border-top:");
+        buf.push_str(&border_top);
+        buf.push_str(";font-size:1px;margin:");
+        buf.push_str(margin);
+        buf.push_str(";width:");
+        buf.push_str(width);
+        buf.push_str(";\"></p>");
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-top:{border_top};font-size:1px;margin:{margin};width:{outlook_width}px;\" role=\"presentation\" width=\"{outlook_width}px\" ><tr><td style=\"height:0;line-height:0;\"> &nbsp;\n</td></tr></table><![endif]-->"
-        ));
+        );
         buf.push_str("</td>");
         Ok(())
     }

@@ -14,12 +14,13 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use crate::components::Section;
 use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, push_decl, render_children};
 
 /// Renderer for `<mj-wrapper>`.
 pub struct Wrapper<'a> {
@@ -84,9 +85,10 @@ impl<'a> Wrapper<'a> {
         } else {
             class_attr(css_class(ctx, self.element).as_deref())
         };
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<div {div_class}style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
-        ));
+        );
         if bg.has_url() {
             buf.push_str("<div style=\"line-height:0;font-size:0;\">");
         }
@@ -95,21 +97,33 @@ impl<'a> Wrapper<'a> {
         } else {
             ""
         };
-        buf.push_str(&format!(
-            "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
-        ));
+        buf.push_str("<table align=\"center\" ");
+        buf.push_str(&bg_attr);
+        buf.push_str(
+            "border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"",
+        );
+        buf.push_str(&bg_prefix);
+        buf.push_str("width:100%;");
+        buf.push_str(table_suffix);
+        buf.push_str("\">");
         buf.push_str("<tbody><tr>");
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(b) = border {
-            td_style.push_str(&format!("border:{b};"));
+            push_decl(&mut td_style, "border", b);
         }
         if let Some(br) = border_radius {
-            td_style.push_str(&format!("border-radius:{br};"));
+            push_decl(&mut td_style, "border-radius", br);
         }
-        td_style.push_str(&format!(
-            "direction:{direction};font-size:0px;padding:{padding};text-align:{text_align};"
-        ));
-        buf.push_str(&format!("<td style=\"{td_style}\">"));
+        td_style.push_str("direction:");
+        td_style.push_str(direction);
+        td_style.push_str(";font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";text-align:");
+        td_style.push_str(text_align);
+        td_style.push(';');
+        buf.push_str("<td style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
 
         // Presentation ghost table wrapping each section child in its own <tr><td>.
         buf.push_str(
@@ -126,9 +140,10 @@ impl<'a> Wrapper<'a> {
             // mjml's `renderWrappedChildren`: the ghost cell carries the *section*
             // child's `css-class`, suffixed with `-outlook`.
             let ghost_class = suffix_css_classes(css_class(ctx, child).as_deref(), "outlook");
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<!--[if mso | IE]><tr><td class=\"{ghost_class}\" width=\"{width}px\" ><![endif]-->"
-            ));
+            );
             crate::render::traced(child, ctx, buf, |ctx, buf| {
                 Section::new(child).render(ctx, buf)
             })?;
@@ -154,9 +169,10 @@ impl<'a> Wrapper<'a> {
             .map(|c| format!("bgcolor=\"{c}\" "))
             .unwrap_or_default();
         let ghost_class = suffix_css_classes(css_class(ctx, self.element).as_deref(), "outlook");
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"{ghost_class}\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
-        ));
+        );
     }
 
     /// mjml's `renderAfter`.
@@ -214,10 +230,11 @@ impl<'a> Render<'a> for Wrapper<'a> {
                 .map(|url| format!("background=\"{url}\" "))
                 .unwrap_or_default();
             let class = class_attr(css_class(ctx, self.element).as_deref());
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<table align=\"center\" {class}{bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
                 bg.css()
-            ));
+            );
             bg.vml_open(buf, true, width);
             self.render_before(ctx, buf, &bg);
             self.render_inner(ctx, buf, &bg, true)?;

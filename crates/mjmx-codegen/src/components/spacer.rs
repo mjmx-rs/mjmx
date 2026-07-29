@@ -4,7 +4,7 @@ use mjmx_ast::Element;
 
 use crate::components::css_class::{class_attr, css_class};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, push_decl};
 
 // mjml default: 20px tall, no padding.
 const HEIGHT: &str = "20px";
@@ -35,21 +35,27 @@ impl<'a> Render<'a> for Spacer<'a> {
             ctx.semantic
                 .attribute(self.element, "container-background-color", None);
 
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
         td_style.push_str("font-size:0px;");
         if let Some(padding) = padding {
-            td_style.push_str(&format!("padding:{padding};"));
+            push_decl(&mut td_style, "padding", padding);
         }
         td_style.push_str("word-break:break-word;");
         // mj-spacer has no `align`, so the wrapping `<td>` is `class` then `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!("<td {class}style=\"{td_style}\">"));
-        buf.push_str(&format!(
-            "<div style=\"height:{height};line-height:{height};\">&#8202;</div>"
-        ));
+        buf.push_str("<td ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
+        buf.push_str("<div style=\"height:");
+        buf.push_str(height);
+        buf.push_str(";line-height:");
+        buf.push_str(height);
+        buf.push_str(";\">&#8202;</div>");
         buf.push_str("</td>");
         Ok(())
     }

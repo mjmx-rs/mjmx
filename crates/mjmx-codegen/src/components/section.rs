@@ -2,12 +2,15 @@
 
 use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use crate::components::background::Background;
 use crate::components::css_class::{class_attr, css_class, suffix_css_classes};
 use crate::components::{Column, ColumnWidth, Group, Gutter};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult, render_children, render_element};
+use crate::render::{
+    Render, RenderResult, STYLE_CAPACITY, push_decl, render_children, render_element,
+};
 
 /// Renderer for `<mj-section>`.
 pub struct Section<'a> {
@@ -89,9 +92,10 @@ impl<'a> Section<'a> {
         } else {
             class_attr(css_class(ctx, self.element).as_deref())
         };
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<div {div_class}style=\"{bg_prefix}margin:0px auto;max-width:{width}px;{radius_div}\">"
-        ));
+        );
         if bg.has_url() {
             buf.push_str("<div style=\"line-height:0;font-size:0;\">");
         }
@@ -100,23 +104,35 @@ impl<'a> Section<'a> {
         } else {
             ""
         };
-        buf.push_str(&format!(
-            "<table align=\"center\" {bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{bg_prefix}width:100%;{table_suffix}\">"
-        ));
+        buf.push_str("<table align=\"center\" ");
+        buf.push_str(&bg_attr);
+        buf.push_str(
+            "border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"",
+        );
+        buf.push_str(&bg_prefix);
+        buf.push_str("width:100%;");
+        buf.push_str(table_suffix);
+        buf.push_str("\">");
         buf.push_str("<tbody><tr>");
         // Section content <td>: border and border-radius only when set; direction,
         // padding and text-align always (component defaults).
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(b) = border {
-            td_style.push_str(&format!("border:{b};"));
+            push_decl(&mut td_style, "border", b);
         }
         if let Some(br) = border_radius {
-            td_style.push_str(&format!("border-radius:{br};"));
+            push_decl(&mut td_style, "border-radius", br);
         }
-        td_style.push_str(&format!(
-            "direction:{direction};font-size:0px;padding:{padding};text-align:{text_align};"
-        ));
-        buf.push_str(&format!("<td style=\"{td_style}\">"));
+        td_style.push_str("direction:");
+        td_style.push_str(direction);
+        td_style.push_str(";font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";text-align:");
+        td_style.push_str(text_align);
+        td_style.push(';');
+        buf.push_str("<td style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
 
         // mjml 5's section `gutter` (v5 only): threaded to each column, which reduces
         // its width and grows padding by its share. `None` under V4 leaves every gutter
@@ -170,13 +186,14 @@ impl<'a> Section<'a> {
                     let child_px = ColumnWidth::resolve(raw, count)
                         .as_pixel_emitted(f64::from(box_width), ctx.options.compat);
                     // The ghost cell carries the group's vertical-align when it is set.
-                    let mut style = String::new();
+                    let mut style = String::with_capacity(STYLE_CAPACITY);
                     if let Some(va) = ctx.semantic.attribute(child, "vertical-align", None) {
-                        style.push_str(&format!("vertical-align:{va};"));
+                        push_decl(&mut style, "vertical-align", va);
                     }
-                    buf.push_str(&format!(
+                    let _ = write!(
+                        buf,
                         "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"{style}width:{child_px}px;\" ><![endif]-->"
-                    ));
+                    );
                     crate::render::traced(child, ctx, buf, |ctx, buf| {
                         Group::new(child, count, section_gutter).render(ctx, buf)
                     })?;
@@ -210,9 +227,10 @@ impl<'a> Section<'a> {
                         .outlook_gutter_padding(f64::from(box_width))
                         .map(|p| format!("padding:{p};"))
                         .unwrap_or_default();
-                    buf.push_str(&format!(
+                    let _ = write!(
+                        buf,
                         "<!--[if mso | IE]><td class=\"{ghost_class}\" style=\"vertical-align:{va};width:{child_px}px;{outlook_padding}\" ><![endif]-->"
-                    ));
+                    );
                     crate::render::traced(child, ctx, buf, |ctx, buf| column.render(ctx, buf))?;
                 }
             }
@@ -241,9 +259,10 @@ impl<'a> Section<'a> {
             .unwrap_or_default();
         // mjml's `renderBefore`: `suffixCssClasses(css-class, 'outlook')`.
         let ghost_class = suffix_css_classes(css_class(ctx, self.element).as_deref(), "outlook");
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><table align=\"center\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" class=\"{ghost_class}\" role=\"presentation\" style=\"width:{width}px;\" width=\"{width}\" {mso_bgcolor}><tr><td style=\"line-height:0px;font-size:0px;mso-line-height-rule:exactly;\"><![endif]-->"
-        ));
+        );
     }
 
     /// mjml's `renderAfter`: closes the ghost table opened by [`Self::render_before`].
@@ -268,10 +287,11 @@ impl<'a> Render<'a> for Section<'a> {
                 .unwrap_or_default();
             // mjml's `renderFullWidth` key order: align, class, background, border, …
             let class = class_attr(css_class(ctx, self.element).as_deref());
-            buf.push_str(&format!(
+            let _ = write!(
+                buf,
                 "<table align=\"center\" {class}{bg_attr}border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"{}width:100%;\"><tbody><tr><td>",
                 bg.css()
-            ));
+            );
             bg.vml_open(buf, true, width);
             self.render_before(ctx, buf, &bg);
             self.render_section(ctx, buf, &bg, true)?;

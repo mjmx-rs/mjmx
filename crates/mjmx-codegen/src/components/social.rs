@@ -12,7 +12,7 @@ use mjmx_syntax::MjmlTag;
 use crate::components::css_class::{class_attr, css_class};
 use crate::components::social_element::{SocialElement, SocialInherited};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, push_decl};
 
 // mjml defaults.
 const ALIGN: &str = "center";
@@ -82,19 +82,23 @@ impl<'a> Render<'a> for Social<'a> {
             .filter(|el| el.tag == MjmlTag::MjSocialElement)
             .collect();
 
-        let mut td_style = String::new();
+        let mut td_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(cbg) = container_background_color {
-            td_style.push_str(&format!("background:{cbg};"));
+            push_decl(&mut td_style, "background", cbg);
         }
-        td_style.push_str(&format!(
-            "font-size:0px;padding:{padding};word-break:break-word;"
-        ));
+        td_style.push_str("font-size:0px;padding:");
+        td_style.push_str(padding);
+        td_style.push_str(";word-break:break-word;");
         // mjml puts the child's `css-class` on the wrapping `<td>` (mj-column /
         // mj-hero `renderChildren`), between `align` and `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td align=\"{align}\" {class}style=\"{td_style}\">"
-        ));
+        buf.push_str("<td align=\"");
+        buf.push_str(align);
+        buf.push_str("\" ");
+        buf.push_str(&class);
+        buf.push_str("style=\"");
+        buf.push_str(&td_style);
+        buf.push_str("\">");
 
         if mode == "vertical" {
             buf.push_str(
@@ -111,16 +115,16 @@ impl<'a> Render<'a> for Social<'a> {
             // Horizontal: mjml merges the adjacent mso conditional comments, so the
             // ghost `<table><tr><td>` opens once, `</td><td>` separates elements, and
             // `</td></tr></table>` closes.
-            buf.push_str(&format!(
-                "<!--[if mso | IE]><table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><td><![endif]-->"
-            ));
+            buf.push_str("<!--[if mso | IE]><table align=\"");
+            buf.push_str(align);
+            buf.push_str("\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" ><tr><td><![endif]-->");
             for (i, el) in elements.iter().enumerate() {
                 if i > 0 {
                     buf.push_str("<!--[if mso | IE]></td><td><![endif]-->");
                 }
-                buf.push_str(&format!(
-                    "<table align=\"{align}\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"float:none;display:inline-table;\">"
-                ));
+                buf.push_str("<table align=\"");
+                buf.push_str(align);
+                buf.push_str("\" border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"float:none;display:inline-table;\">");
                 buf.push_str("<tbody>");
                 crate::render::traced(el, ctx, buf, |ctx, buf| {
                     SocialElement::new(el, inherited).render_row(ctx, buf);

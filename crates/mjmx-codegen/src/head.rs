@@ -7,6 +7,7 @@
 //! verbatim from mjml 4.18.0's standard output.
 
 use crate::context::RenderContext;
+use std::fmt::Write;
 
 // The mjml reset stylesheet, verbatim (leading/trailing whitespace preserved so the
 // whitespace-normalized golden comparison lines up with mjml's own formatting).
@@ -70,9 +71,11 @@ const MSO_GROUP_FIX: &str = r#"<!--[if lte mso 11]>
 /// imported only when its family name is actually referenced, matching mjml's
 /// font-collection behaviour.
 pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
-    let mut h = String::new();
+    let mut h = String::with_capacity(crate::document::HEAD_CAPACITY);
     h.push_str("<head>");
-    h.push_str(&format!("<title>{title}</title>"));
+    h.push_str("<title>");
+    h.push_str(title);
+    h.push_str("</title>");
 
     // X-UA-Compatible, guarded from Outlook.
     h.push_str("<!--[if !mso]><!-->");
@@ -114,15 +117,17 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     if !fonts.is_empty() {
         h.push_str("<!--[if !mso]><!-->");
         for (_, href) in &fonts {
-            h.push_str(&format!(
-                "<link href=\"{href}\" rel=\"stylesheet\" type=\"text/css\">"
-            ));
+            h.push_str("<link href=\"");
+            h.push_str(href);
+            h.push_str("\" rel=\"stylesheet\" type=\"text/css\">");
         }
         h.push_str("<style type=\"text/css\">");
         for (_, href) in &fonts {
             // Leading/trailing whitespace mirrors mjml so the normalized token
             // stream (`> @import ... </style>`) matches.
-            h.push_str(&format!("\n    @import url({href});\n  "));
+            h.push_str("\n    @import url(");
+            h.push_str(href);
+            h.push_str(");\n  ");
         }
         h.push_str("</style>");
         h.push_str("<!--<![endif]-->");
@@ -133,33 +138,37 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
     let media_queries = ctx.media_queries();
     if !media_queries.is_empty() {
         h.push_str("<style type=\"text/css\">");
-        h.push_str(&format!(
+        let _ = write!(
+            h,
             "\n    @media only screen and (min-width:{bp}px) {{\n",
             bp = ctx.breakpoint
-        ));
+        );
         for (i, m) in media_queries.iter().enumerate() {
             if i > 0 {
                 h.push('\n');
             }
-            h.push_str(&format!(
+            let _ = write!(
+                h,
                 "      .{class} {{\n        {body}\n      }}\n",
                 class = m.class,
                 body = m.body,
-            ));
+            );
         }
         h.push_str("    }\n  ");
         h.push_str("</style>");
 
-        h.push_str(&format!(
+        let _ = write!(
+            h,
             "<style media=\"screen and (min-width:{bp}px)\">",
             bp = ctx.breakpoint
-        ));
+        );
         for m in media_queries {
-            h.push_str(&format!(
+            let _ = write!(
+                h,
                 "\n    .moz-text-html .{class} {{\n      {body}\n    }}\n  ",
                 class = m.class,
                 body = m.body,
-            ));
+            );
         }
         h.push_str("</style>");
 
@@ -174,11 +183,12 @@ pub fn render_head(ctx: &RenderContext, title: &str, body: &str) -> String {
                 if i > 0 {
                     h.push('\n');
                 }
-                h.push_str(&format!(
+                let _ = write!(
+                    h,
                     "      .{class} {{\n        {body}\n      }}\n",
                     class = m.class,
                     body = m.body,
-                ));
+                );
             }
             h.push_str("    }\n  ");
             h.push_str("</style>");

@@ -14,8 +14,10 @@
 //!   background images.
 
 use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::context::RenderContext;
+use crate::render::STYLE_CAPACITY;
 
 // mjml defaults for mj-section / mj-wrapper.
 const BACKGROUND_REPEAT: &str = "repeat";
@@ -94,15 +96,16 @@ impl<'a> Background<'a> {
                 .unwrap_or_default();
         };
         // makeBackgroundString: drop the empty parts, join with a space.
-        let mut shorthand = String::new();
+        let mut shorthand = String::with_capacity(STYLE_CAPACITY);
         if let Some(color) = self.color {
             shorthand.push_str(color);
             shorthand.push(' ');
         }
-        shorthand.push_str(&format!(
+        let _ = write!(
+            shorthand,
             "url('{url}') {} {} / {} {}",
             self.pos_x, self.pos_y, self.size, self.repeat
-        ));
+        );
         format!(
             "background:{shorthand};background-position:{} {};background-repeat:{};background-size:{};",
             self.pos_x, self.pos_y, self.repeat, self.size
@@ -119,7 +122,7 @@ impl<'a> Background<'a> {
 
         // cover/contain keep the aspect ratio and fill the shape; an explicit size is
         // passed through (a single length gets `atmost`, reproducing `height: auto`).
-        let mut size_attrs = String::new();
+        let mut size_attrs = String::with_capacity(STYLE_CAPACITY);
         match self.size {
             "cover" => size_attrs.push_str(" size=\"1,1\" aspect=\"atleast\""),
             "contain" => size_attrs.push_str(" size=\"1,1\" aspect=\"atmost\""),
@@ -127,9 +130,11 @@ impl<'a> Background<'a> {
             size => {
                 let parts: Vec<&str> = size.split(' ').collect();
                 if parts.len() == 1 {
-                    size_attrs.push_str(&format!(" size=\"{size}\" aspect=\"atmost\""));
+                    size_attrs.push_str(" size=\"");
+                    size_attrs.push_str(size);
+                    size_attrs.push_str("\" aspect=\"atmost\"");
                 } else {
-                    size_attrs.push_str(&format!(" size=\"{}\"", parts.join(",")));
+                    let _ = write!(size_attrs, " size=\"{}\"", parts.join(","));
                 }
             }
         }
@@ -154,9 +159,10 @@ impl<'a> Background<'a> {
             .map(|c| format!(" color=\"{c}\""))
             .unwrap_or_default();
 
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><v:rect style=\"{rect_style}\" xmlns:v=\"urn:schemas-microsoft-com:vml\" fill=\"true\" stroke=\"false\"><v:fill origin=\"{origin_x}, {origin_y}\" position=\"{pos_x}, {pos_y}\" src=\"{url}\"{color_attr} type=\"{vml_type}\"{size_attrs} /><v:textbox style=\"mso-fit-shape-to-text:true\" inset=\"0,0,0,0\"><![endif]-->"
-        ));
+        );
     }
 
     /// The closing half of the VML background.

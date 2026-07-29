@@ -6,11 +6,12 @@
 //! and outlook class and then for its `<a>`. The dispatch entry point renders a
 //! self-contained link (mso `<td>` + anchor) for a stray standalone element.
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{css_class, suffix_css_classes};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, inner_text_trimmed, push_decl};
 
 // mjml defaults.
 const COLOR: &str = "#000000";
@@ -53,7 +54,10 @@ impl<'a> NavbarLink<'a> {
             ("padding-left", "padding-left"),
         ] {
             if let Some(v) = self.element.attr(name) {
-                s.push_str(&format!("{prop}:{v};"));
+                s.push_str(prop);
+                s.push(':');
+                s.push_str(v);
+                s.push(';');
             }
         }
         s
@@ -99,50 +103,57 @@ impl<'a> NavbarLink<'a> {
             "display:inline-block;color:{color};font-family:{font_family};font-size:{font_size};"
         );
         if let Some(fs) = font_style {
-            style.push_str(&format!("font-style:{fs};"));
+            push_decl(&mut style, "font-style", fs);
         }
-        style.push_str(&format!("font-weight:{font_weight};"));
+        push_decl(&mut style, "font-weight", font_weight);
         if let Some(ls) = letter_spacing {
-            style.push_str(&format!("letter-spacing:{ls};"));
+            push_decl(&mut style, "letter-spacing", ls);
         }
-        style.push_str(&format!(
-            "line-height:{line_height};text-decoration:{text_decoration};text-transform:{text_transform};padding:{padding};"
-        ));
+        push_decl(&mut style, "line-height", line_height);
+        push_decl(&mut style, "text-decoration", text_decoration);
+        push_decl(&mut style, "text-transform", text_transform);
+        push_decl(&mut style, "padding", padding);
 
-        buf.push_str(&format!("<a class=\"{a_class}\" href=\"{link}\""));
+        buf.push_str("<a class=\"");
+        buf.push_str(&a_class);
+        buf.push_str("\" href=\"");
+        buf.push_str(&link);
+        buf.push('"');
         if let Some(rel) = rel {
-            buf.push_str(&format!(" rel=\"{rel}\""));
+            buf.push_str(" rel=\"");
+            buf.push_str(rel);
+            buf.push('"');
         }
-        buf.push_str(&format!(" target=\"{target}\""));
+        buf.push_str(" target=\"");
+        buf.push_str(target);
+        buf.push('"');
         if let Some(name) = name {
-            buf.push_str(&format!(" name=\"{name}\""));
+            buf.push_str(" name=\"");
+            buf.push_str(name);
+            buf.push('"');
         }
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             " style=\"{style}\"> {content} </a>",
             content = self.content()
-        ));
+        );
     }
 
     /// The link's trimmed label text.
     fn content(&self) -> String {
-        let mut s = String::new();
-        for child in self.element.children() {
-            if let Node::Text(t) = child {
-                s.push_str(t.value.as_str());
-            }
-        }
-        s.trim().to_string()
+        inner_text_trimmed(self.element)
     }
 }
 
 impl<'a> Render<'a> for NavbarLink<'a> {
     fn render(&self, ctx: &mut RenderContext<'a>, buf: &mut String) -> RenderResult {
         // Standalone: emit mjml's self-contained mso `<td>` + anchor.
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<!--[if mso | IE]><td style=\"{}\" class=\"{}\" ><![endif]-->",
             self.td_style(ctx),
             self.outlook_class(ctx)
-        ));
+        );
         self.render_anchor(ctx, buf);
         buf.push_str("<!--[if mso | IE]></td><![endif]-->");
         Ok(())

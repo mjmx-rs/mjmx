@@ -8,12 +8,13 @@
 //! and threaded down to the children (mjml passes them as child attributes), so they are
 //! carried here in [`AccordionInherited`].
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
 use mjmx_syntax::MjmlTag;
+use std::fmt::Write;
 
 use crate::components::css_class::{class_attr, css_class, leading_class_attr};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, inner_text_trimmed, push_decl};
 
 // mjml defaults (mj-accordion).
 const BORDER: &str = "2px solid black";
@@ -112,12 +113,16 @@ impl<'a> Render<'a> for Accordion<'a> {
         // mj-accordion has no `align`, so the column's wrapping `<td>` is `class`
         // (from `css-class`) then `style`.
         let class = class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!(
-            "<td {class}style=\"font-size:0px;padding:{padding};word-break:break-word;\">"
-        ));
-        buf.push_str(&format!(
-            "<table cellspacing=\"0\" cellpadding=\"0\" class=\"mj-accordion\" style=\"width:100%;border-collapse:collapse;border:{border};border-bottom:none;font-family:{font_family};\">"
-        ));
+        buf.push_str("<td ");
+        buf.push_str(&class);
+        buf.push_str("style=\"font-size:0px;padding:");
+        buf.push_str(padding);
+        buf.push_str(";word-break:break-word;\">");
+        buf.push_str("<table cellspacing=\"0\" cellpadding=\"0\" class=\"mj-accordion\" style=\"width:100%;border-collapse:collapse;border:");
+        buf.push_str(border);
+        buf.push_str(";border-bottom:none;font-family:");
+        buf.push_str(font_family);
+        buf.push_str(";\">");
         buf.push_str("<tbody>");
         for el in self
             .element
@@ -142,7 +147,9 @@ fn render_element_row<'a>(
 ) {
     // mjml's `MjAccordionElement.render`: `css-class` lands on the element's `<tr>`.
     let class = leading_class_attr(css_class(ctx, element).as_deref());
-    buf.push_str(&format!("<tr{class}><td style=\"padding:0px;\">"));
+    buf.push_str("<tr");
+    buf.push_str(&class);
+    buf.push_str("><td style=\"padding:0px;\">");
     buf.push_str("<label class=\"mj-accordion-element\" style=\"font-size:13px;\">");
     buf.push_str(
         "<!--[if !mso | IE]><!--><input class=\"mj-accordion-checkbox\" type=\"checkbox\" style=\"display:none;\" /><!--<![endif]-->",
@@ -188,23 +195,24 @@ fn render_title<'a>(
     let background_color = opt("background-color");
 
     buf.push_str("<div class=\"mj-accordion-title\">");
-    buf.push_str(&format!(
+    let _ = write!(
+        buf,
         "<table cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;border-bottom:{};\">",
         inh.border
-    ));
+    );
     buf.push_str("<tbody><tr>");
 
     // Title cell: width, [background-color], [color], font-size, font-family, padding.
     let mut title_style = String::from("width:100%;");
     if let Some(bg) = background_color {
-        title_style.push_str(&format!("background-color:{bg};"));
+        push_decl(&mut title_style, "background-color", bg);
     }
     if let Some(c) = color {
-        title_style.push_str(&format!("color:{c};"));
+        push_decl(&mut title_style, "color", c);
     }
-    title_style.push_str(&format!(
-        "font-size:{font_size};font-family:{font_family};padding:{padding};"
-    ));
+    push_decl(&mut title_style, "font-size", font_size);
+    push_decl(&mut title_style, "font-family", font_family);
+    push_decl(&mut title_style, "padding", padding);
     // mjml's `MjAccordionTitle.renderTitle`: `class` then `style` on the title cell.
     let title_class = class_attr(css_class(ctx, element).as_deref());
     let title_td = format!("<td {title_class}style=\"{title_style}\"> {content} </td>");
@@ -212,9 +220,9 @@ fn render_title<'a>(
     // Icon cell carries the title's background-color as a `background:` declaration.
     let mut icon_style = String::from("padding:16px;");
     if let Some(bg) = background_color {
-        icon_style.push_str(&format!("background:{bg};"));
+        push_decl(&mut icon_style, "background", bg);
     }
-    icon_style.push_str(&format!("vertical-align:{};", inh.icon_align));
+    let _ = write!(icon_style, "vertical-align:{};", inh.icon_align);
     let icon_td = format!(
         "<!--[if !mso | IE]><!--><td class=\"mj-accordion-ico\" style=\"{icon_style}\"><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-more\" style=\"display:none;width:{};height:{};\" /><img src=\"{}\" alt=\"{}\" class=\"mj-accordion-less\" style=\"display:none;width:{};height:{};\" /></td><!--<![endif]-->",
         inh.icon_wrapped_url,
@@ -261,38 +269,37 @@ fn render_text<'a>(
     let background_color = opt("background-color");
 
     buf.push_str("<div class=\"mj-accordion-content\">");
-    buf.push_str(&format!(
+    let _ = write!(
+        buf,
         "<table cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;border-bottom:{};\">",
         inh.border
-    ));
+    );
     buf.push_str("<tbody><tr>");
     // Text cell: [background], font-size, font-family, line-height, [color], padding.
-    let mut text_style = String::new();
+    let mut text_style = String::with_capacity(STYLE_CAPACITY);
     if let Some(bg) = background_color {
-        text_style.push_str(&format!("background:{bg};"));
+        push_decl(&mut text_style, "background", bg);
     }
-    text_style.push_str(&format!(
-        "font-size:{font_size};font-family:{font_family};line-height:{line_height};"
-    ));
+    push_decl(&mut text_style, "font-size", font_size);
+    push_decl(&mut text_style, "font-family", font_family);
+    push_decl(&mut text_style, "line-height", line_height);
     if let Some(c) = color {
-        text_style.push_str(&format!("color:{c};"));
+        push_decl(&mut text_style, "color", c);
     }
-    text_style.push_str(&format!("padding:{padding};"));
+    push_decl(&mut text_style, "padding", padding);
     // mjml's `MjAccordionText.renderContent`: `class` then `style` on the text cell.
     let text_class = class_attr(css_class(ctx, element).as_deref());
-    buf.push_str(&format!(
-        "<td {text_class}style=\"{text_style}\"> {content} </td>"
-    ));
+    buf.push_str("<td ");
+    buf.push_str(&text_class);
+    buf.push_str("style=\"");
+    buf.push_str(&text_style);
+    buf.push_str("\"> ");
+    buf.push_str(&content);
+    buf.push_str(" </td>");
     buf.push_str("</tr></tbody></table></div>");
 }
 
 /// The trimmed verbatim content of an ending tag (its text children concatenated).
 fn ending_content(element: &Element<'_>) -> String {
-    let mut s = String::new();
-    for child in element.children() {
-        if let Node::Text(t) = child {
-            s.push_str(t.value.as_str());
-        }
-    }
-    s.trim().to_string()
+    inner_text_trimmed(element)
 }

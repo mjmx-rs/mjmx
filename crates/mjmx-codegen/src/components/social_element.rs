@@ -9,11 +9,12 @@
 //! `name` selects a built-in network carrying a baked icon `src`, `background-color`
 //! and a share-`href` template; any of those is overridable with an explicit attribute.
 
-use mjmx_ast::{Element, Node};
+use mjmx_ast::Element;
+use std::fmt::Write;
 
 use crate::components::css_class::{css_class, leading_class_attr};
 use crate::context::RenderContext;
-use crate::render::{Render, RenderResult};
+use crate::render::{Render, RenderResult, STYLE_CAPACITY, inner_text_trimmed, push_decl};
 
 const IMG_BASE_URL: &str = "https://www.mailjet.com/images/theme/v1/icons/ico-social/";
 
@@ -225,48 +226,65 @@ impl<'a> SocialElement<'a> {
 
         // Icon cell style: padding, [icon-padding as padding], font-size, height,
         // vertical-align, width — matching mjml's key order.
-        let mut icon_style = String::new();
+        let mut icon_style = String::with_capacity(STYLE_CAPACITY);
         if let Some(ip) = icon_padding {
-            icon_style.push_str(&format!("padding:{ip};"));
+            push_decl(&mut icon_style, "padding", ip);
         }
-        icon_style.push_str(&format!(
-            "font-size:0;height:{icon_height};vertical-align:middle;width:{icon_size};"
-        ));
+        icon_style.push_str("font-size:0;height:");
+        icon_style.push_str(icon_height);
+        icon_style.push_str(";vertical-align:middle;width:");
+        icon_style.push_str(icon_size);
+        icon_style.push(';');
 
         // The label's <a>/<span> style: color, font-size, [font-weight], [font-style],
         // font-family, line-height, text-decoration.
         let mut text_style = format!("color:{color};font-size:{font_size};");
         if let Some(w) = font_weight {
-            text_style.push_str(&format!("font-weight:{w};"));
+            push_decl(&mut text_style, "font-weight", w);
         }
         if let Some(s) = font_style {
-            text_style.push_str(&format!("font-style:{s};"));
+            push_decl(&mut text_style, "font-style", s);
         }
-        text_style.push_str(&format!(
-            "font-family:{font_family};line-height:{line_height};text-decoration:{text_decoration};"
-        ));
+        push_decl(&mut text_style, "font-family", font_family);
+        push_decl(&mut text_style, "line-height", line_height);
+        push_decl(&mut text_style, "text-decoration", text_decoration);
 
         let content = self.content();
 
         // mjml puts `css-class` on the element's own `<tr>`.
         let class = leading_class_attr(css_class(ctx, self.element).as_deref());
-        buf.push_str(&format!("<tr{class}>"));
+        buf.push_str("<tr");
+        buf.push_str(&class);
+        buf.push('>');
         // Icon cell.
-        buf.push_str(&format!(
-            "<td style=\"padding:{padding};vertical-align:{vertical_align};\">"
-        ));
-        buf.push_str(&format!(
-            "<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"background:{background};border-radius:{border_radius};width:{icon_size};\">"
-        ));
+        buf.push_str("<td style=\"padding:");
+        buf.push_str(padding);
+        buf.push_str(";vertical-align:");
+        buf.push_str(vertical_align);
+        buf.push_str(";\">");
+        buf.push_str("<table border=\"0\" cellpadding=\"0\" cellspacing=\"0\" role=\"presentation\" style=\"background:");
+        buf.push_str(background);
+        buf.push_str(";border-radius:");
+        buf.push_str(border_radius);
+        buf.push_str(";width:");
+        buf.push_str(icon_size);
+        buf.push_str(";\">");
         buf.push_str("<tbody><tr>");
-        buf.push_str(&format!("<td style=\"{icon_style}\">"));
+        buf.push_str("<td style=\"");
+        buf.push_str(&icon_style);
+        buf.push_str("\">");
         if has_link {
-            buf.push_str(&format!("<a href=\"{href}\" target=\"{target}\">"));
+            buf.push_str("<a href=\"");
+            buf.push_str(&href);
+            buf.push_str("\" target=\"");
+            buf.push_str(target);
+            buf.push_str("\">");
         }
         let border_css = border.map_or(String::new(), |b| format!("border:{b};"));
-        buf.push_str(&format!(
+        let _ = write!(
+            buf,
             "<img alt=\"{alt}\" src=\"{src}\" style=\"{border_css}border-radius:{border_radius};display:block;\" width=\"{icon_px}\" />"
-        ));
+        );
         if has_link {
             buf.push_str("</a>");
         }
@@ -274,15 +292,24 @@ impl<'a> SocialElement<'a> {
 
         // Label cell, only when the element carries content.
         if !content.is_empty() {
-            buf.push_str(&format!(
-                "<td style=\"vertical-align:{vertical_align};padding:{text_padding};text-align:{align};\">"
-            ));
+            buf.push_str("<td style=\"vertical-align:");
+            buf.push_str(vertical_align);
+            buf.push_str(";padding:");
+            buf.push_str(text_padding);
+            buf.push_str(";text-align:");
+            buf.push_str(align);
+            buf.push_str(";\">");
             if has_link {
-                buf.push_str(&format!(
+                let _ = write!(
+                    buf,
                     "<a href=\"{href}\" style=\"{text_style}\" target=\"{target}\"> {content} </a>"
-                ));
+                );
             } else {
-                buf.push_str(&format!("<span style=\"{text_style}\"> {content} </span>"));
+                buf.push_str("<span style=\"");
+                buf.push_str(&text_style);
+                buf.push_str("\"> ");
+                buf.push_str(&content);
+                buf.push_str(" </span>");
             }
             buf.push_str("</td>");
         }
@@ -291,13 +318,7 @@ impl<'a> SocialElement<'a> {
 
     /// The element's trimmed text content (its label).
     fn content(&self) -> String {
-        let mut s = String::new();
-        for child in self.element.children() {
-            if let Node::Text(t) = child {
-                s.push_str(t.value.as_str());
-            }
-        }
-        s.trim().to_string()
+        inner_text_trimmed(self.element)
     }
 }
 
