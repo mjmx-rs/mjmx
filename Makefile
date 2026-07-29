@@ -20,7 +20,10 @@ NAPI_OUT := $(NAPI_DIR)/mjmx.$(if $(NAPI_TRIPLE),$(NAPI_TRIPLE),unknown).node
 # `exports` map. The three `_bg.wasm` differ (per-target glue), so each is optimised.
 WASM_DIR := crates/mjmx-wasm
 WASM_TARGET := wasm32-unknown-unknown
-WASM_LIB := target/$(WASM_TARGET)/release/mjmx_wasm.wasm
+# Built under the size-tuned `release-wasm` profile (see the workspace Cargo.toml), not
+# plain `release` — cargo puts a named profile's output in a directory of that name.
+WASM_PROFILE := release-wasm
+WASM_LIB := target/$(WASM_TARGET)/$(WASM_PROFILE)/mjmx_wasm.wasm
 WASM_OUT := $(WASM_DIR)/pkg
 WASM_BG := $(WASM_OUT)/node/mjmx_wasm_bg.wasm $(WASM_OUT)/bundler/mjmx_wasm_bg.wasm $(WASM_OUT)/web/mjmx_wasm_bg.wasm
 
@@ -97,7 +100,7 @@ wasm-tools: ## Verify the wasm toolchain (rustup target + pinned wasm-bindgen CL
 	fi
 
 wasm: wasm-tools ## Build the WebAssembly package (node + bundler + web; wasm-opt applied when available)
-	$(CARGO) build -p mjmx-wasm --target $(WASM_TARGET) --release
+	$(CARGO) build -p mjmx-wasm --target $(WASM_TARGET) --profile $(WASM_PROFILE)
 	wasm-bindgen --target nodejs  --out-dir $(WASM_OUT)/node    --out-name mjmx_wasm $(WASM_LIB)
 	wasm-bindgen --target bundler --out-dir $(WASM_OUT)/bundler --out-name mjmx_wasm $(WASM_LIB)
 	wasm-bindgen --target web     --out-dir $(WASM_OUT)/web     --out-name mjmx_wasm $(WASM_LIB)

@@ -84,3 +84,16 @@ all = { level = "warn", priority = -1 }
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# The shipped WebAssembly artifact, built by `make wasm`. Separate from `release` because
+# the two want opposite things: a native build optimises for speed, while every byte of
+# the wasm is downloaded by the page that uses it.
+#
+# Measured on this workspace, post `wasm-opt -Oz`: `opt-level = "z"` is 460,277 B against
+# `3`'s 609,711 B — 24.5% smaller — for a 24% slower render (22.3 → 27.5 µs/render in
+# node), which still leaves it an order of magnitude ahead of mjml itself. `panic =
+# "abort"` and `lto = "fat"` were measured too and together saved 724 bytes, so they are
+# not set: not worth losing unwind info and build time over.
+[profile.release-wasm]
+inherits = "release"
+opt-level = "z"
