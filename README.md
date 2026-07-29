@@ -70,13 +70,13 @@ your own machine.
 <!-- BENCH:START -->
 | Engine | Version | Language | µs / render | Renders / sec | Relative |
 | --- | --- | --- | --- | --- | --- |
-| **mjmx** | 5.4.0 / 4.18.0 | Rust | **14.7** | **68,176** | 1.000× |
-| [mrml](https://github.com/jdrouet/mrml) | 6.0.1 | Rust | 20.6 | 48,428 | 0.710× |
-| [mjml](https://github.com/mjmlio/mjml) | 4.18.0 | JS (Node) | 531.5 | 1,881 | 0.028× |
-| [mjml](https://github.com/mjmlio/mjml) | 5.4.0 | JS (Node) | 561.5 | 1,781 | 0.026× |
+| **mjmx** | 5.4.0 / 4.18.0 | Rust | **10.6** | **94,432** | 1.000× |
+| [mrml](https://github.com/jdrouet/mrml) | 6.0.1 | Rust | 17.2 | 58,062 | 0.615× |
+| [mjml](https://github.com/mjmlio/mjml) | 4.18.0 | JS (Node) | 344.0 | 2,907 | 0.031× |
+| [mjml](https://github.com/mjmlio/mjml) | 5.4.0 | JS (Node) | 330.1 | 3,030 | 0.032× |
 
-mjmx renders **~38× faster than mjml 5.4.0** and **~1.4× faster than mrml**. Rust engines
-were timed on the 72 fixtures both render (mrml fails 4); both mjml lines render all 76.
+mjmx renders **~32× faster than mjml 5.4.0** and **~1.6× faster than mrml**. Rust engines
+were timed on the 81 fixtures both render (mrml fails 4); both mjml lines render all 85.
 mjml 5.x is measured through its `Promise`-returning API — 5.0 made `mjml2html` async.
 Single machine, single run — directional, not paper-grade.
 <!-- BENCH:END -->

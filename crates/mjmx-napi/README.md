@@ -2,7 +2,7 @@
 
 **MJML → HTML email compiler for Node.js.** Written in Rust, shipped as a native addon.
 
-The fastest way to render MJML from JavaScript: **~20× faster than `mjml`**, with the
+The fastest way to render MJML from JavaScript: **~31× faster than `mjml`**, with the
 same option names, plus structured diagnostics and real filesystem support for
 `<mj-include>`.
 
@@ -31,19 +31,19 @@ const html = render(`
 
 | | `@mjmx-rs/node` | `mjml` |
 | --- | --- | --- |
-| Speed | **~20× faster** | baseline |
+| Speed | **~31× faster** | baseline |
 | API | `render()` → `string` | `mjml2html()` → `{ html, errors }` |
 | Async | synchronous | **`async` since mjml 5** |
 | Errors | throws `MjmxError` with `.diagnostics` | `errors` array |
 | mjml versions | 5.4.0 **and** 4.18.0, selectable | whichever you installed |
 | Install | prebuilt binary per platform | pure JS |
 
-Measured in Node over 40 MJML fixtures, 800 renders each, against `mjml@4.18.0`:
-**~19 µs vs ~377 µs per render**, stable across three runs. Single machine, warm process
-— directional, not paper-grade. Reproduce it yourself rather than taking it on faith.
+Measured in Node over the repository's 85 MJML fixtures, 100 renders each, against
+`mjml@4.18.0`: **~11 µs vs ~344 µs per render**. Single machine, warm process —
+directional, not paper-grade. Reproduce it yourself rather than taking it on faith.
 
 **Prefer portability?** [`@mjmx-rs/mjmx`](https://www.npmjs.com/package/@mjmx-rs/mjmx) is the same
-compiler as WebAssembly — ~7× mjml instead of ~20×, but one artifact that runs in Node,
+compiler as WebAssembly — ~12× mjml instead of ~31×, but one artifact that runs in Node,
 browsers, Deno and Bun with no platform binary. Use this package when you're on Node and
 want the speed; use that one when you need to run anywhere.
 

@@ -280,7 +280,7 @@ Behaviour is read off mjml 4.18.0 output, not guessed:
 Like the inliner, this pass shifts byte offsets, so `render_with_sourcemap` **refuses** a
 document carrying `<mj-html-attributes>` (codegen's `sourcemap_refusal`, alongside the
 inline-bucket and minify/beautify refusals). No new third-party dep; wasm artifact grew
-+6,498 B (461,001 B).
++6,498 B (461,001 B at the time — see the performance section for the current figure).
 
 ## Options parity (audit done 2026-07-22 against mjml 4.18.0 source)
 
@@ -581,6 +581,79 @@ across the FFI boundary — bindings stay Tier 1 leaf-only); the CLI (no JS-call
 a CLI user renders built-ins + any Rust-registered components only, the documented
 consequence of the same rule); and Phase 3 python (pyo3), which will reuse the same `cx`
 shape + return channel.
+
+## Performance (profiled + optimized 2026-07-29)
+
+**Render throughput improved ~39%, the wasm artifact shrank ~25%.** Measured on an M1,
+warm, over the 85 `fixtures/*.mjml`; every change is byte-identical output (the 81 V4 +
+9 V5 goldens are the gate) and added no dependency.
+
+| | before | after |
+| --- | --- | --- |
+| native render (mean over fixtures) | 14.8 µs | **9.0 µs** |
+| `make bench` (81-fixture mrml intersection) | 16.0 µs | **10.6 µs** |
+| …relative to mrml 6.0.1 | 0.96× | **1.6×** |
+| …relative to mjml 5.4.0 | ~20× | **~32×** |
+| wasm artifact (post `wasm-opt -Oz`) | 610,524 B | **459,101 B** |
+| wasm render (node) | 27.8 µs | **27.5 µs** (at `opt-level="z"`) |
+| clean `cargo build --workspace --release` | 70 s / 269 s CPU | **62 s / 233 s CPU** |
+
+Method: `sample(1)` on a render loop over the fixtures, attributing samples to the
+nearest mjmx frame. Read the profile before changing anything — two of the seven planned
+items were dropped *because* it said they were not worth doing.
+
+What actually paid, in order:
+
+- **`merge_outlook_conditionals` was 13.2% of total runtime** — a single `str::find`.
+  `find` with a multi-byte needle builds a fresh two-way searcher **per call**, and
+  mjml-shaped output has one `<![endif]-->` per section/column/ghost table, so the setup
+  was paid dozens of times per document. Now scans for the marker's `[` (a rare byte, so
+  `core`'s SIMD `memchr` path) and confirms the marker at candidate positions —
+  `find_endif` in `document.rs`. It also copies in chunks between deletions instead of
+  once per marker. **−12.7%.**
+- **`push_str(&format!(…))`, 191 sites** — each allocated a temporary `String`, formatted
+  into it, copied it into the buffer and freed it. All 191 became `write!` straight into
+  the buffer (**−16.4%**), and the hot ones then became plain `push_str` chains
+  (**−4.1%**). Two shared helpers came out of it: `push_decl` (`property:value;`, 52
+  sites) and `inner_text`/`inner_text_trimmed`, which replaced **seven** copies of the
+  same "concatenate the text children" loop — three of which allocated twice.
+- **Buffer growth was 23% inclusive** (`RawVecInner::finish_grow`): 44 style accumulators
+  growing from zero, plus `body_buf`/`out` with no capacity hint, in a crate with exactly
+  one `with_capacity`. Now `body_capacity()` (source length × 8, clamped), `HEAD_CAPACITY`
+  and `STYLE_CAPACITY` — each sized from a measurement, not a guess. **−6.5%.**
+- **The CSS inliner ran the whole cascade twice per element.** `custom_properties` calls
+  `winners` + `merge` for every element just to collect `--x` declarations, and
+  `resolveCSSVariables` is on by default — so every inlining document paid double. Now
+  gated on `uses_var()`: with no `var(` in the CSS or the HTML, `substitute_vars` is
+  provably the identity, so the map cannot be read. The `--x` declarations are still
+  dropped, which is a separate juice behaviour. Also, `dom::build` lower-cased every tag
+  into a fresh `String`; `Element::tag` is a `Cow` now and borrows when the tag is already
+  lower-case (it always is, in generated markup). **−9.4%** overall, ~4.6 µs per document
+  that actually inlines.
+
+**Deliberately not done, with the measurement that says why:**
+
+- **The head's per-font body scan** (`head.rs`, 3.6% before the other work). Stubbing the
+  check out entirely — while making the render do *more* emission — bought only 1.8%. A
+  byte-wise multi-pattern scan would very likely be **slower**: `str::contains` skips
+  roughly a needle-length per step, where a scan-every-byte loop cannot.
+- **`[profile.dev] debug = "line-tables-only"`.** Clean `cargo test --no-run` went 26.5 s
+  → 25.5 s (inside the noise) for 1.3 GB → 1.1 GB of `target`. Not worth losing a
+  debugger's variable inspection; the first measurement of this even came out *slower*,
+  which is why it is quoted from the second pair of runs.
+
+**`[profile.release-wasm]`** (`opt-level = "z"`, inherited from `release`) exists because
+native and wasm want opposite things. On the current code it is 460,277 B vs `3`'s
+609,711 B — 24.5% smaller — for a 24% slower wasm render. Net against where this started,
+the artifact is 25% smaller *and* marginally faster, because the codegen work more than
+paid for the size mode. `panic = "abort"` + fat LTO were measured too: **724 bytes**
+together, so they are not set. `make wasm` builds `--profile release-wasm`.
+
+**Build time**: `axum` lost its default features (the dev-server uses only `http1`,
+`json`, `query`, `tokio`, `ws` — `form`, `matched-path`, `original-uri` and the `tracing`
+integration were dead weight). The remaining clean-build cost is dominated by
+`mjmx-language-server` (~40 s) and its `tower-lsp → lsp-types → url → idna → icu` chain,
+which cannot shrink without dropping `tower-lsp`.
 
 ## Planned next
 

@@ -30,22 +30,22 @@ const html = render(`
 
 | | `@mjmx-rs/mjmx` | `mjml` / `mjml-browser` |
 | --- | --- | --- |
-| Speed | **~7× faster** | baseline |
+| Speed | **~12× faster** | baseline |
 | API | `render()` → `string` | `mjml2html()` → `{ html, errors }` |
 | Async | synchronous | **`async` since mjml 5** |
-| Bundle impact | ~620 KB (one flavour) | ~1.1 MB (`mjml-browser`) |
+| Bundle impact | ~460 KB (one flavour) | ~1.1 MB (`mjml-browser`) |
 | mjml versions | 5.4.0 **and** 4.18.0, selectable | whichever you installed |
 | Errors | throws, or `lint()` for a list | `errors` array |
 
-Speed measured in Node over 40 MJML fixtures, 800 renders each, against `mjml@4.18.0`:
-**~55 µs vs ~377 µs per render**, stable across three runs. Single machine, warm process
-— directional, not paper-grade. Reproduce it yourself; don't take the number on faith.
+Speed measured in Node over the repository's 85 MJML fixtures, 100 renders each, against
+`mjml@4.18.0`: **~28 µs vs ~344 µs per render**. Single machine, warm process —
+directional, not paper-grade. Reproduce it yourself; don't take the number on faith.
 
-Need more? The native Node addon (`@mjmx-rs/node`) is ~19 µs — about 3× this package and
-~20× mjml — at the cost of a per-platform binary. This package trades that for running
-anywhere.
+Need more? The native Node addon (`@mjmx-rs/node`) is ~11 µs — about 2.5× this package
+and ~31× mjml — at the cost of a per-platform binary. This package trades that for
+running anywhere.
 
-The package **unpacks to ~1.9 MB** because it ships three wasm flavours (Node, bundler,
+The package **unpacks to ~1.4 MB** because it ships three wasm flavours (Node, bundler,
 browser). Your bundle only ever includes one of them.
 
 ## Migrating from `mjml` / `mjml-browser`

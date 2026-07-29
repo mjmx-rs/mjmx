@@ -123,7 +123,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mjmx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -139,14 +139,14 @@ dependencies = [
 
 [[package]]
 name = "mjmx-allocator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bumpalo",
 ]
 
 [[package]]
 name = "mjmx-ast"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-span",
@@ -155,7 +155,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-codegen"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-ast",
  "mjmx-css-inline",
@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-css-inline"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cssparser",
  "mjmx-html-tokenizer",
@@ -177,14 +177,14 @@ dependencies = [
 
 [[package]]
 name = "mjmx-diagnostics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-span",
 ]
 
 [[package]]
 name = "mjmx-formatter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-ast",
  "mjmx-span",
@@ -193,11 +193,11 @@ dependencies = [
 
 [[package]]
 name = "mjmx-html-tokenizer"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-linter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-ast",
  "mjmx-diagnostics",
@@ -207,14 +207,14 @@ dependencies = [
 
 [[package]]
 name = "mjmx-minifier"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cssparser",
 ]
 
 [[package]]
 name = "mjmx-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-semantic"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-ast",
  "mjmx-diagnostics",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-sourcemap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-span",
  "mjmx-syntax",
@@ -252,15 +252,15 @@ dependencies = [
 
 [[package]]
 name = "mjmx-span"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-syntax"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "mjmx-transformer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-allocator",
  "mjmx-ast",
@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "mjmx-traverse"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mjmx-ast",
  "mjmx-span",
